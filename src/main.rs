@@ -1,18 +1,14 @@
-use life::Country;
-use life::Height;
-use life::Outlook;
-use life::Person;
-use life::Weight;
+#![allow(dead_code)]
+
+mod person;
+use life::generate;
 
 fn main() {
-    let person1 = Person::new(
-        String::from("Sabien Nguyen"),
-        Height::Tall,
-        Country::Usa,
-        Weight::Normal,
-        Outlook::Optimistic,
-        true,
-    );
 
-    println!("{:#?}", person1);
+    let mut rng = rand::thread_rng();
+    for _ in 0..10 {
+        let curr = generate(&mut rng);
+
+        println!("{:?}", curr);
+    }
 }
