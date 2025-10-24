@@ -25,20 +25,51 @@ pub enum Country {
 }
 
 #[derive(Debug)]
+pub enum Outlook {
+    Optimistic,
+    Pessimistic,
+    Realist,
+}
+
+#[derive(Debug)]
+pub struct PhysicalAttrs {
+    pub weight: Weight,
+    pub height: Height,
+}
+
+#[derive(Debug)]
+pub struct Personality {
+    pub outlook: Outlook,
+    pub confident: bool,
+}
+
+#[derive(Debug)]
 pub struct Person {
     pub name: String,
-    pub height: Height,
     pub country: Country,
-    pub weight: Weight,
+    pub physical: PhysicalAttrs,
+    pub personality: Personality,
+}
+
+impl PhysicalAttrs {
+    pub fn new(weight: Weight, height: Height) -> PhysicalAttrs {
+        PhysicalAttrs {weight, height}
+    }
+}
+
+impl Personality {
+    pub fn new(outlook: Outlook, confident: bool) -> Personality {
+        Personality {outlook, confident}
+    }
 }
 
 impl Person {
-    pub fn new(name: String, height: Height, country: Country, weight: Weight) -> Person {
+    pub fn new(name: String, height: Height, country: Country, weight: Weight, outlook: Outlook, confident: bool) -> Person {
         Person {
             name,
-            height,
             country,
-            weight,
+            physical : PhysicalAttrs::new(weight, height),
+            personality : Personality::new(outlook, confident),
         }
     }
 }
