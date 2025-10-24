@@ -1,3 +1,5 @@
+use std::fmt::{self};
+
 #[derive(Debug)]
 pub enum Height {
     Short,
@@ -22,6 +24,21 @@ pub enum Country {
     Chn,
     Jpn,
     Vnm,
+}
+
+impl fmt::Display for Country {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Country::Can => write!(f, "Canada"),
+            Country::Chn => write!(f, "China"),
+            Country::Deu => write!(f, "Germany"),
+            Country::Fra => write!(f, "France"),
+            Country::Gbr => write!(f, "United Kingdoms"),
+            Country::Jpn => write!(f, "Japan"),
+            Country::Usa => write!(f, "United States"),
+            Country::Vnm => write!(f, "Vietnam"),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -78,6 +95,13 @@ impl Person {
             physical: PhysicalAttrs::new(weight, height),
             personality: Personality::new(outlook, confident),
         }
+    }
+
+    pub fn introduction(&self) {
+        println!(
+            "Hi! My name is {} and I am from {}",
+            self.name, self.country
+        );
     }
 
     pub fn says(&self, words: &str) {
