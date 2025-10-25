@@ -1,6 +1,7 @@
 use std::fmt::{self}; 
 use rand::distributions::{Distribution, Standard};
 use faker_rand::en_us::names::FullName;
+use planet::Planet;
 
 #[derive(Debug)]
 pub enum Height {
@@ -49,7 +50,7 @@ pub enum Country {
 }
 
 impl fmt::Display for Country {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&'_ self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Country::Can => write!(f, "Canada"),
             Country::Chn => write!(f, "China"),
@@ -83,9 +84,10 @@ pub struct Personality {
 }
 
 #[derive(Debug)]
-pub struct Person {
+pub struct Person<'a> {
     pub name: String,
     pub country: Country,
+    pub planet: &'a Planet,
     pub physical: PhysicalAttrs,
     pub personality: Personality,
 }
@@ -102,7 +104,7 @@ impl Personality {
     }
 }
 
-impl Person {
+impl<'a> Person<'a> {
     pub fn new(
         name: String,
         height: Height,
@@ -110,19 +112,21 @@ impl Person {
         weight: Weight,
         outlook: Outlook,
         confident: bool,
-    ) -> Person {
+        planet: &'_ Planet,
+    ) -> Person<'_> {
         Person {
             name,
             country,
             physical: PhysicalAttrs::new(weight, height),
             personality: Personality::new(outlook, confident),
+            planet,
         }
     }
 
-    pub fn introduction(&self, ) {
+    pub fn introduction(&'_ self) {
         println!(
-            "Hi! My name is {} and I am from {}",
-            self.name, self.country
+            "Hi! My name is {} and I am from {} and live on the planet {}",
+            self.name, self.country, self.planet.name,
         );
     }
 
@@ -180,11 +184,12 @@ impl Distribution<Outlook> for Standard {
     }
 }
 
-pub fn generate<T: rand::Rng>(mut r_thread: T) -> Person {
+pub fn generate<T: rand::Rng>(mut r_thread: T, planet: &'_ Planet) -> Person<'_> {
     Person {
         name: rand::random::<FullName>().to_string(),
         country: rand::random(),
         physical: PhysicalAttrs::new(rand::random(), rand::random()),
         personality: Personality::new(rand::random(), r_thread.gen_bool(0.5)),
+        planet: &planet,
     }
 }
