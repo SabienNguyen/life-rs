@@ -1,10 +1,30 @@
-use std::fmt::{self};
+use std::fmt::{self}; 
 
 #[derive(Debug)]
 pub enum Height {
     Short,
     Average,
     Tall,
+}
+
+#[derive(Debug)]
+pub enum Ethnicity {
+    Hispanic,
+    African,
+    Asian,
+    White,
+    PacificIslander,
+    Indigenous,
+}
+
+#[derive(Debug)]
+pub enum HairColor {
+    Black,
+    White,
+    Brown,
+    Blonde,
+    Silver,
+    Red,
 }
 
 #[derive(Debug)]
@@ -97,7 +117,7 @@ impl Person {
         }
     }
 
-    pub fn introduction(&self) {
+    pub fn introduction(&self, ) {
         println!(
             "Hi! My name is {} and I am from {}",
             self.name, self.country
