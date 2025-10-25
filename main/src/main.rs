@@ -3,7 +3,6 @@
 use person::generate;
 use planet::{Moon, Planet};
 
-
 fn main() {
     let earth = Planet::new(
         String::from("Earth"),

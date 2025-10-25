@@ -5,6 +5,10 @@ version = 4
 [[package]]
 name = "animal"
 version = "0.1.0"
+dependencies = [
+ "planet",
+ "rand",
+]
 
 [[package]]
 name = "cfg-if"

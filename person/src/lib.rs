@@ -1,7 +1,7 @@
-use std::fmt::{self}; 
-use rand::distributions::{Distribution, Standard};
 use faker_rand::en_us::names::FullName;
 use planet::Planet;
+use rand::distributions::{Distribution, Standard};
+use std::fmt::{self};
 
 #[derive(Debug)]
 pub enum Height {
