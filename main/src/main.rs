@@ -1,10 +1,8 @@
 #![allow(dead_code)]
 
-mod animal;
-mod person;
-mod planet;
-use life::generate;
+use person::generate;
 use planet::{Moon, Planet};
+
 
 fn main() {
     let earth = Planet::new(

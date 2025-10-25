@@ -1,8 +1,12 @@
-[package]
-name = "life"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+members = [
+    "main",
+    "person",
+    "planet",
+    "animal",
+]
 
-[dependencies]
-faker_rand = "0.1.1"
+
+[workspace.dependencies]
 rand = "0.8.5"
+faker_rand = "0.1.1"
