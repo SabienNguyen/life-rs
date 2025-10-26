@@ -1,10 +1,13 @@
 #![allow(dead_code)]
 
 use person::generate;
-use planet::{Moon, Planet};
+use planet::{Moon, Planet, State};
+use std::thread;
+use std::time::Duration;
 
 fn main() {
-    let earth = Planet::new(
+    let mut earth = Planet::new(
+        State::Start,
         String::from("Earth"),
         planet::Size::Normal,
         true,
@@ -12,9 +15,12 @@ fn main() {
         vec![Moon::new(String::from("Moon"))],
     );
 
-    let mut rng = rand::thread_rng();
-    for _ in 0..10 {
-        let curr = generate(&mut rng, &earth);
-        curr.introduction();
+    let rng = rand::thread_rng();
+    let mut person = generate(rng);
+
+    loop {
+        person.choose_action(&earth);
+        earth.choose_state();
+        thread::sleep(Duration::from_secs(3));
     }
 }

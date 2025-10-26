@@ -84,10 +84,10 @@ pub struct Personality {
 }
 
 #[derive(Debug)]
-pub struct Person<'a> {
+pub struct Person {
+    state: State,
     pub name: String,
     pub country: Country,
-    pub planet: &'a Planet,
     pub physical: PhysicalAttrs,
     pub personality: Personality,
 }
@@ -104,34 +104,75 @@ impl Personality {
     }
 }
 
-impl<'a> Person<'a> {
+impl Person {
     pub fn new(
+        state: State,
         name: String,
         height: Height,
         country: Country,
         weight: Weight,
         outlook: Outlook,
         confident: bool,
-        planet: &'_ Planet,
-    ) -> Person<'_> {
+    ) -> Person {
         Person {
+            state,
             name,
             country,
             physical: PhysicalAttrs::new(weight, height),
             personality: Personality::new(outlook, confident),
-            planet,
         }
     }
 
-    pub fn introduction(&'_ self) {
+    pub fn introduction(&self) {
         println!(
-            "Hi! My name is {} and I am from {} and live on the planet {}",
-            self.name, self.country, self.planet.name,
+            "Hi! My name is {} and I am from {}.",
+            self.name, self.country,
         );
     }
 
     pub fn says(&self, words: &str) {
         println!("{} says \"{}\"", self.name, words);
+    }
+
+    pub fn choose_action(&mut self, planet: &Planet) {
+        match self.state {
+            State::Start => self.do_start_event(),
+            State::Idle => self.do_idle_event(&planet),
+            State::Eat => self.do_eat_event(),
+            State::Sleep => self.do_sleep_event(),
+            State::DrinkWater => self.do_drinkwater_event(),
+        }
+    }
+
+    fn do_start_event(&mut self) {
+        self.introduction();
+        self.state = State::Idle;
+    }
+    fn do_idle_event(&mut self, planet: &Planet) {
+        match planet.get_state() {
+            planet::State::Start => unreachable!(),
+            planet::State::Morning => {
+                self.says(&String::from("Good morning! I am bored now..."));
+            }
+            planet::State::Afternoon => {
+                self.says(&String::from("It is the afternoon now, I will eat lunch!"));
+                // self.state = State::Eat;
+            }
+            planet::State::Evening => {
+                self.says(&String::from("It is the evening now, I will eat dinner!"));
+                // self.state = State::Eat;
+            }
+            planet::State::Night => {
+                self.says(&String::from("It is nighttime now... Good night."));
+            }
+        }
+    }
+    fn do_eat_event(&self) {}
+    fn do_sleep_event(&self) {
+        todo!()
+    }
+    fn do_drinkwater_event(&self) {
+        todo!()
     }
 }
 
@@ -184,12 +225,21 @@ impl Distribution<Outlook> for Standard {
     }
 }
 
-pub fn generate<T: rand::Rng>(mut r_thread: T, planet: &'_ Planet) -> Person<'_> {
+pub fn generate<T: rand::Rng>(mut r_thread: T) -> Person {
     Person {
+        state: State::Start,
         name: rand::random::<FullName>().to_string(),
         country: rand::random(),
         physical: PhysicalAttrs::new(rand::random(), rand::random()),
         personality: Personality::new(rand::random(), r_thread.gen_bool(0.5)),
-        planet: &planet,
     }
+}
+
+#[derive(Debug)]
+pub enum State {
+    Start,
+    Idle,
+    Eat,
+    Sleep,
+    DrinkWater,
 }

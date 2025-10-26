@@ -6,6 +6,5 @@ edition = "2024"
 [dependencies]
 planet = { path = "../planet" }
 person = { path = "../person" }
-animal = { path = "../animal" }
 rand = { workspace = true }
 faker_rand = { workspace = true }

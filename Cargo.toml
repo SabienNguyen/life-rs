@@ -3,9 +3,8 @@ members = [
     "main",
     "person",
     "planet",
-    "animal",
 ]
-
+resolver = "3"
 
 [workspace.dependencies]
 rand = "0.8.5"
