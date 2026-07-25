@@ -15,6 +15,27 @@ pub const SOLAR_CONSTANT: f64 = 1361.0;
 /// Earth's obliquity, in degrees.
 pub const EARTH_OBLIQUITY: f64 = 23.44;
 
+/// How far the tilt wanders either side of its mean, in degrees, and how long a cycle
+/// takes, in megayears.
+///
+/// Earth's runs between about 22.1° and 24.5° on a 41,000-year period. Two and a half
+/// degrees sounds like nothing and is not: it is tens of watts per square metre at the
+/// latitudes where ice sheets live, and it is the pacemaker of the glacial cycles.
+const TILT_SWING_DEG: f64 = 1.2;
+const TILT_PERIOD_MYR: f64 = 0.041;
+
+/// The tilt at a given moment, given the mean it wanders about.
+///
+/// At megayear steps this is aliased into nonsense — forty-one thousand years is a
+/// fortieth of a step — and that is the honest situation rather than a bug: a model that
+/// strides across a cycle cannot resolve it. Callers stepping in megayears should pass
+/// the mean and get the mean. It is here for the kiloyear stepping that glacial cycles
+/// need, and so that the machinery exists before anything asks for it.
+pub fn obliquity_at(age_gyr: f64, mean_deg: f64) -> f64 {
+    let turns = age_gyr * 1000.0 / TILT_PERIOD_MYR;
+    mean_deg + TILT_SWING_DEG * (turns * std::f64::consts::TAU).sin()
+}
+
 /// How bright the sun is at a given age of the system, relative to today.
 ///
 /// The standard main-sequence brightening: a star fusing hydrogen leaves behind a
@@ -149,6 +170,36 @@ mod tests {
         // because the sun never sets.
         let summer = daily_mean(PI / 2.0, EARTH_OBLIQUITY.to_radians(), EARTH);
         assert!(summer > 500.0, "polar midsummer was {summer:.0}");
+    }
+
+    #[test]
+    fn the_tilt_wanders_but_averages_out() {
+        // The Milankovitch pacemaker. Over a full cycle the mean is the mean; within one,
+        // it is worth a couple of degrees, which is worth tens of watts where the ice is.
+        let mean = EARTH_OBLIQUITY;
+        let samples: Vec<f64> = (0..200)
+            .map(|i| obliquity_at(i as f64 * TILT_PERIOD_MYR / 1000.0 / 200.0 * 4.0, mean))
+            .collect();
+        let low = samples.iter().copied().fold(f64::MAX, f64::min);
+        let high = samples.iter().copied().fold(f64::MIN, f64::max);
+        assert!(
+            (high - low) > 2.0 && (high - low) < 3.0,
+            "the tilt swung {:.2}°",
+            high - low
+        );
+        let average = samples.iter().sum::<f64>() / samples.len() as f64;
+        assert!((average - mean).abs() < 0.2, "it averaged {average:.2}°");
+
+        // And a couple of degrees is worth a few watts a square metre at sixty degrees of
+        // latitude, which is where the ice sheets live. Small, and enough: the whole
+        // Milankovitch argument is that a few watts, applied for twenty thousand years to
+        // the summer that has to melt last winter's snow, decides whether the ice grows.
+        let at = |tilt| annual_mean(60f64.to_radians(), tilt, EARTH);
+        let worth = at(high) - at(low);
+        assert!(
+            (2.0..8.0).contains(&worth),
+            "the tilt swing was worth {worth:.1} W/m² at 60°"
+        );
     }
 
     #[test]

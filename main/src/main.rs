@@ -227,6 +227,39 @@ fn print_dossier(world: &mut World) {
     for line in render::reasoning(world, id) {
         println!("{line}");
     }
+
+    // What was never on the table, which a list of scores cannot tell you.
+    if let Some(reasoning) = observer::why(world, id)
+        && !reasoning.gated.is_empty()
+    {
+        let names: Vec<&str> = reasoning.gated.iter().map(|d| d.label()).collect();
+        println!("  (not on offer here: {})", names.join(", "));
+    }
+
+    // The counterfactual. Free, because the contributions were never merged.
+    if let Some(file) = observer::dossier(world, id) {
+        println!("\nhad they grown up somewhere much better off:");
+        for (i, share) in file.origins.iter().enumerate() {
+            let elsewhere = share.if_raised(1.5, i);
+            let shift = elsewhere - share.value;
+            if shift.abs() > 0.05 {
+                println!(
+                    "  {:<18} {:+.2} → {:+.2}  ({:+.2})",
+                    share.factor, share.value, elsewhere, shift
+                );
+            }
+        }
+    }
+
+    println!("\ntheir life, as the world remembers it:");
+    let mut lines = 0;
+    for record in observer::life(world, id, Salience::Pivotal) {
+        println!("  {}", render::line(world, record));
+        lines += 1;
+    }
+    if lines == 0 {
+        println!("  (nothing that rose above the recording floor)");
+    }
     println!();
 }
 
@@ -272,7 +305,8 @@ fn run_globe(options: &Options, myr: f64) -> String {
     for _ in 0..5 {
         fauna.step_myr(&planet, &life, &climate, 1.0, &mut rng);
     }
-    let mut frames = vec![globe::sample(&planet, &climate, &life, &fauna)];
+    let mut tree = evolution::Evolution::beginning(&fauna);
+    let mut frames = vec![globe::sample(&planet, &climate, &life, &fauna, &tree)];
     let per_frame = myr / (FRAMES - 1) as f64;
     for _ in 1..FRAMES {
         let mut done = 0.0;
@@ -284,9 +318,10 @@ fn run_globe(options: &Options, myr: f64) -> String {
             planet.set_runoff(&runoff);
             life = biome::Biosphere::read(&planet, &climate);
             fauna.step_myr(&planet, &life, &climate, step, &mut rng);
+            tree.step_myr(&planet, &life, &climate, &mut fauna, step, &mut rng);
             done += step as f64;
         }
-        frames.push(globe::sample(&planet, &climate, &life, &fauna));
+        frames.push(globe::sample(&planet, &climate, &life, &fauna, &tree));
     }
 
     globe::page(GLOBE, &options.seed.to_string(), options.grid, &frames)

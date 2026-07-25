@@ -532,6 +532,23 @@ impl Person {
     }
 
     /// Decide what to do next and commit to it.
+    /// Price every option without choosing one, or changing anything.
+    ///
+    /// What the observer asks when somebody wants to know *why*. Deliberately `&self`:
+    /// looking at a person must not alter them, and a `why` that ran the decision again
+    /// would consume randomness and change what they went on to do.
+    pub fn weigh(&self, now: Time, situation: &Situation) -> [f32; Deed::COUNT] {
+        deeds::score_all(
+            &Mind {
+                personality: &self.personality,
+                values: &self.values,
+                needs: &self.needs,
+                age_years: self.age(now).years(),
+            },
+            situation,
+        )
+    }
+
     pub fn decide(&mut self, now: Time, situation: &Situation, rng: &mut Rng) -> Choice {
         let choice = deeds::choose(
             &Mind {

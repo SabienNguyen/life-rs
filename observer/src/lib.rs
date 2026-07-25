@@ -5,5 +5,11 @@
 //! lets any query be run at any moment without perturbing the run being observed.
 
 pub mod balance;
+pub mod dossier;
+#[cfg(test)]
+mod dossier_tests;
 
 pub use balance::{Balance, Shares, measure};
+pub use dossier::{
+    Attribution, Dossier, Kin, Reasoning, Whereabouts, ancestry, descendants, dossier, life, why,
+};

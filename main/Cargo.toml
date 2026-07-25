@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+evolution = { path = "../evolution" }
 ecology = { path = "../ecology" }
 biome = { path = "../biome" }
 climate = { path = "../climate" }

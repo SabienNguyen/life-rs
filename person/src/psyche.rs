@@ -141,7 +141,8 @@ pub struct Origins {
 }
 
 /// The five personality factors, in the order `Origins` stores them.
-const FACTORS: [Trait; 5] = [
+/// The five factors, in the order everything here holds them.
+pub const FACTORS: [Trait; 5] = [
     Trait::Openness,
     Trait::Conscientiousness,
     Trait::Extraversion,

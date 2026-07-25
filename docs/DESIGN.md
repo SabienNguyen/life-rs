@@ -2,15 +2,16 @@
 
 > Big-picture architecture — the plan we implement against.
 >
-> **Phases 0–8, 10, and the §15 balance harness are implemented** — foundations
+> **Phases 0–9, 11, and 10 are implemented**, along with the §15 balance harness — foundations
 > (`sim-core`, `sim`), person depth (`life`, `person`), genetics with families
 > (`genetics`, `society`), neighbourhoods with the four behaviour channels, the solid
 > planet (`geo`: geodesic grid, plates, isostasy, erosion, eustatic sea level), the
 > climate on top of it (`climate`: insolation, energy balance, moisture, and the
 > carbon–silicate thermostat), the biosphere read off it (`biome`: Whittaker
 > classification and the Miami productivity model), the animals on it (`ecology`:
-> demes, tolerances, the trophic pyramid), a chronicle that indexes and forgets, and
-> level-of-detail (§6, pulled forward from phase 10 because everyone acting whether
+> demes, tolerances, the trophic pyramid), evolution over it (`evolution`: adaptation,
+> allopatric speciation, phylogeny), a chronicle that indexes and forgets, the omniscient
+> view (`observer`: dossiers, biographies, why, counterfactuals), and level-of-detail (§6, pulled forward from phase 10 because everyone acting whether
 > watched or not was making every later phase more expensive to build and test).
 > §20 marks progress. Everything beyond that is still a plan.
 >
@@ -1047,6 +1048,26 @@ abstract and acquire a grid cell in Phase 4; nothing about §14 depends on where
 neighbourhood physically sits. Doing it the other way round would mean a planet with a
 climate and no one whose life it changes.
 
+**Phases 9 and 11, in the event.** The observer is the thing the project was started for
+and it turned out to need one change elsewhere: `why` has to be answered in the situation
+the person is *actually* in, which only the world knows. Asked in a neutral situation it
+reports that a child ranked work poorly, when the truth is that work was never on offer —
+and those are different facts about a life. So the world hands over the situation and the
+observer reads it. `why` is `&self` throughout, and there is a test that a run with every
+person interrogated at every step comes out identical to one where nobody was asked.
+
+Evolution needed three goes at balance. Speciation on a planet with real geography is a
+fountain — ranges are dotted with islands and mountain valleys, and treating each as a
+founding population split every species several times within a hundred megayears. Raising
+the founder threshold and the isolation time helped; making extinction risk depend on
+*range size* rather than only on abundance helped more, since range size is the best
+single predictor there is. What actually balanced it was diversity-dependent
+diversification: the fuller the world, the harder it is for a new lineage to establish,
+because there is less unoccupied opportunity to establish into. With that the count
+settles near its niche ceiling and turnover goes on underneath — seven hundred and
+eighty-six originations against two hundred and ninety-nine extinctions over a gigayear,
+with lineages four deep.
+
 **Phase 7, in the event.** The trophic pyramid, the latitudinal diversity gradient, and
 ranges that track their climate all came out of the arithmetic rather than being aimed
 at. Two things had to be got right for them to. Capacity has to be shared among
@@ -1117,22 +1138,35 @@ only after the fact; all three were found by drawing the planet and looking at i
 | Phase | Deliverable |
 | --- | --- |
 | **8** ◑ | `chronicle`: unified event log, indices, salience, compaction. Per-person *memory* — a bounded set of remembered events that feeds back into behaviour — is left with the observer phase that reads it |
-| **9** | `observer` + TUI: random person, dossier, family tree, why, nature/nurture, counterfactual |
+| **9** ◑ | `observer`: random person, dossier, family tree, why, nature/nurture, counterfactual — all present and tested. The TUI is not: the HTML viewer turned out to be a better instrument than a terminal one and took its place |
 | **10** ◑ | Spatial LOD: tiers, promotion/demotion, aggregate invariants — **done early**. Backfill of never-simulated history is the remaining part |
 
 ### M4 — A world with history (deep time)
 | Phase | Deliverable |
 | --- | --- |
-| **11** | `evolution`: selection, drift, gene flow, speciation, extinction, phylogeny |
-| **12** | Deep-time integration: adaptive stepping, orbital forcing, supercontinent cycle, mass extinctions, keyframing |
-| **13** | Globe + phylogeny rendering (`wgpu`), timeline scrubbing, continuous zoom |
-| **14** | Economy, culture, technology; `cosmos`; save/load; determinism goldens; profiling |
+| **11** ◑ | `evolution`: adaptation with a tracking speed limit, allopatric speciation, diversity-dependent diversification, extinction, phylogeny. Gene flow and molecular drift are not modelled — species traits move by a rule rather than by inheritance from individuals |
+| **12** ◑ | Deep-time integration: adaptive stepping ✓ (the lithosphere subdivides its own step so no plate ever jumps a cell), supercontinent cycle ✓, orbital forcing ✓ as machinery — obliquity varies on its 41 kyr cycle, which megayear steps cannot resolve and honestly return the mean of. Keyframing and a named mass-extinction mechanism are not built; extinction pulses do emerge from climate shocks |
+| **13** ✗ | Globe + phylogeny rendering (`wgpu`), timeline scrubbing, continuous zoom. **Superseded.** The self-contained HTML viewer does the job better in every way that matters here — five layers, a time scrubber, hover readout, and a file anybody can open — and it is what actually found four of the modelling bugs in Phase 4. A `wgpu` client would be a second renderer for the same data |
+| **14** | Economy, culture, technology; `cosmos`; save/load; profiling. Determinism goldens exist in the form that survives: every subsystem tests that the same seed produces the same result, self-comparing rather than pinned to a constant, so a legitimate change does not require re-blessing a hash |
 
 **Sequencing note.** Deep time is what you most want and it lands last, for a real
 reason: there's nothing to evolve until there's a planet and a biosphere to evolve on,
 and watching biomes shift requires biomes. The mitigation is that the *architecture*
 for it — the scale ladder, backfill, the unified chronicle, deme-based genetics — is
 in from Phase 0, so M4 is integration rather than invention.
+
+**Where it stands.** The stack runs end to end: plates → climate → biomes → animals →
+evolution, a gigayear at a time, and each layer reads the one below it and nothing else.
+The one wire that runs *back down* is rainfall into erosion, and it had to exist —
+without it the continents wear away, the carbon thermostat loses the rock it regulates
+with, and the planet cooks.
+
+**What is still missing is the join.** People live in abstract neighbourhoods and the
+planet has no people on it. Giving a place a grid cell is the remaining piece of Phase 12
+and it is a small change to make and a large one to get right: the two halves run at
+scales eleven rungs apart, and connecting them means deciding what a person is when the
+clock is striding a megayear at a time. The level-of-detail machinery in §6 exists for
+exactly that and has not yet been asked to do it.
 
 **Recommended tactic:** after M1, build one deliberately crude vertical slice through
 every scale — a blobby planet, three PFTs, two animal species, a million years — before

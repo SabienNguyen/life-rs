@@ -599,6 +599,31 @@ impl World {
         }
     }
 
+    /// The situation one person is actually in, right now.
+    ///
+    /// Exactly what the simulation hands them when they decide, built the same way from
+    /// the same places — so an observer asking "why is she doing that" is answering about
+    /// the world she is in rather than about a hypothetical neutral one. The four
+    /// channels are in it, and the first of them is a *gate*: without this, an observer
+    /// constructing its own plain situation would report that a child had merely ranked
+    /// work poorly, when in fact work was never on offer.
+    pub fn situation_for(&self, id: PersonId) -> Option<Situation> {
+        let at = self.now();
+        let person = self.people.get(id)?;
+        let planet = self.planets.get(person.home)?;
+        let phase = planet.phase_at(at);
+        let dependent = person.stage(at).is_dependent();
+
+        let mut env = self
+            .society
+            .place_of(id)
+            .and_then(|p| self.places.get(p))
+            .map(|place| place.env.surroundings(dependent))
+            .unwrap_or_else(person::Surroundings::neutral);
+        env.stress = (env.stress + person.needs().total_pressure()).clamp(0.0, 1.0);
+        Some(Situation { phase, env })
+    }
+
     fn person_acts(&mut self, at: Time, id: PersonId) {
         // A person whose handle no longer resolves, or whose world is gone, simply
         // stops being scheduled. The lookup failing is the mechanism.

@@ -60,6 +60,15 @@ const PRESENCE_T_PER_KM2: f32 = 0.05;
 /// and a barren one. A fixed figure was tried first and was simply never reached: every
 /// species on a productive world holds millions of tonnes, and nothing ever died.
 const FRAGILE_SHARE: f32 = 0.16;
+/// A range smaller than this many cells is a range one bad megayear can finish.
+///
+/// Range size is the best single predictor of extinction risk there is, better than
+/// abundance and far better than body size, and it is what balances a fauna: more species
+/// means smaller ranges each, which means more of them die, which is what stops
+/// origination running away to a ceiling. Without it a planet whose geography splits
+/// ranges readily accumulates species without limit.
+const SAFE_RANGE_CELLS: f32 = 24.0;
+
 /// The chance a fragile species is gone within a megayear, at its most fragile.
 ///
 /// Demographic stochasticity: a small population can be finished by a bad century that a
@@ -259,6 +268,42 @@ impl Ecology {
             .count()
     }
 
+    /// Move a species' whole tolerance band, keeping its width.
+    ///
+    /// The one thing outside this crate is allowed to change about a species, and it is
+    /// what adaptation is: the band follows the conditions the population is actually
+    /// living in, and it follows slowly.
+    pub fn shift_tolerance(&mut self, id: SpeciesId, by: f32) {
+        let species = &mut self.species[id as usize];
+        species.coldest_c += by;
+        species.warmest_c += by;
+    }
+
+    /// Take part of a species' range away and make it a species of its own.
+    ///
+    /// Allopatry. The cells named become the daughter's whole range and cease to be the
+    /// parent's — one population has become two, and neither is where the other is.
+    pub fn split_off(
+        &mut self,
+        cells: &[CellId],
+        from: SpeciesId,
+        daughter: Species,
+        life: &Biosphere,
+        climate: &climate::Climate,
+    ) -> SpeciesId {
+        let mut row = vec![0.0f32; self.area_km2.len()];
+        for cell in cells {
+            row[*cell as usize] = self.biomass[from as usize][*cell as usize];
+            self.biomass[from as usize][*cell as usize] = 0.0;
+        }
+        let _ = (life, climate);
+        self.species.push(daughter);
+        self.biomass.push(row);
+        self.extinct.push(None);
+        self.gained += 1;
+        (self.species.len() - 1) as SpeciesId
+    }
+
     // ---- running it ------------------------------------------------------------
 
     /// Advance every population by a span of megayears.
@@ -377,7 +422,12 @@ impl Ecology {
             // extinction rather than a slow thinning.
             let total: f32 = self.biomass[id as usize].iter().sum();
             let doomed = total < EXTINCTION_FLOOR || {
-                let exposure = (1.0 - total / fragile_below).clamp(0.0, 1.0) as f64;
+                let by_rarity = (1.0 - total / fragile_below).clamp(0.0, 1.0);
+                let by_range = (1.0 - self.range_of(id) as f32 / SAFE_RANGE_CELLS).clamp(0.0, 1.0);
+                // Whichever is worse. A species can be doomed by being scarce everywhere
+                // or by being abundant nowhere in particular, and they are different
+                // ways to go.
+                let exposure = by_rarity.max(by_range) as f64;
                 let odds = 1.0 - (1.0 - CHANCE_OF_LOSS * exposure).powf(dt as f64);
                 rng.chance(odds)
             };

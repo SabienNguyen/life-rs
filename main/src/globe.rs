@@ -15,6 +15,7 @@ use std::fmt::Write as _;
 use biome::Biosphere;
 use climate::Climate;
 use ecology::Ecology;
+use evolution::Evolution;
 use geo::{Boundary, CellId, Lithosphere};
 
 /// Pixels across the map. Equirectangular, so half as many down.
@@ -62,6 +63,8 @@ pub struct Frame {
     pub species: usize,
     pub animal_mt: f32,
     pub extinctions: usize,
+    pub speciations: usize,
+    pub deepest_lineage: usize,
 }
 
 /// Sample the planet onto an equirectangular grid.
@@ -70,7 +73,13 @@ pub struct Frame {
 /// as its starting point. Neighbouring pixels are neighbouring places, so the search
 /// almost always finishes in a hop or two — which is what makes sampling a hundred
 /// thousand points per frame cost nothing worth measuring.
-pub fn sample(planet: &Lithosphere, climate: &Climate, life: &Biosphere, fauna: &Ecology) -> Frame {
+pub fn sample(
+    planet: &Lithosphere,
+    climate: &Climate,
+    life: &Biosphere,
+    fauna: &Ecology,
+    tree: &Evolution,
+) -> Frame {
     let mut height = Vec::with_capacity(WIDE * TALL);
     let mut tenure = Vec::with_capacity(WIDE * TALL);
     let mut temperature = Vec::with_capacity(WIDE * TALL);
@@ -128,6 +137,8 @@ pub fn sample(planet: &Lithosphere, climate: &Climate, life: &Biosphere, fauna: 
         species: fauna.richness(),
         animal_mt: fauna.total_biomass_mt(),
         extinctions: fauna.lost,
+        speciations: tree.speciations,
+        deepest_lineage: fauna.living().map(|id| tree.depth(id)).max().unwrap_or(0),
     }
 }
 
@@ -158,7 +169,7 @@ fn data(seed: &str, level: u8, frames: &[Frame]) -> String {
              \"plates\":{},\"biggest\":{:.3},\"peak\":{:.0},\"temp\":{:.2},\
              \"co2\":{:.0},\"ice\":{:.4},\"temperate\":{:.4},\"rainfall\":{:.0},\
              \"forest\":{:.4},\"arid\":{:.4},\"biomass\":{:.1},\
-             \"species\":{},\"animals\":{:.1},\"extinct\":{},\
+             \"species\":{},\"animals\":{:.1},\"extinct\":{},\"arose\":{},\"lineage\":{},\
              \"height\":\"{}\",\"tenure\":\"{}\",\"warmth\":\"{}\",\"wet\":\"{}\",\"kinds\":\"{}\"}}",
             frame.myr,
             frame.sea_level_m,
@@ -178,6 +189,8 @@ fn data(seed: &str, level: u8, frames: &[Frame]) -> String {
             frame.species,
             frame.animal_mt,
             frame.extinctions,
+            frame.speciations,
+            frame.deepest_lineage,
             base64(&as_bytes(&frame.height)),
             base64(&frame.tenure),
             base64(&frame.temperature),
@@ -231,7 +244,7 @@ mod tests {
     use super::*;
     use sim_core::{Domain, WorldSeed};
 
-    fn a_world() -> (Lithosphere, Climate, Biosphere, Ecology) {
+    fn a_world() -> (Lithosphere, Climate, Biosphere, Ecology, Evolution) {
         let seed = WorldSeed::from_u128(0x5eed);
         let mut rng = seed.stream(Domain::Terrain, 0, 0);
         let mut planet = Lithosphere::genesis(4, 9, 0.42, &mut rng);
@@ -242,7 +255,8 @@ mod tests {
         for _ in 0..4 {
             fauna.step_myr(&planet, &life, &climate, 1.0, &mut rng);
         }
-        (planet, climate, life, fauna)
+        let tree = Evolution::beginning(&fauna);
+        (planet, climate, life, fauna, tree)
     }
 
     #[test]
@@ -271,8 +285,8 @@ mod tests {
 
     #[test]
     fn a_frame_covers_the_whole_map() {
-        let (planet, climate, life, fauna) = a_world();
-        let frame = sample(&planet, &climate, &life, &fauna);
+        let (planet, climate, life, fauna, tree) = a_world();
+        let frame = sample(&planet, &climate, &life, &fauna, &tree);
         assert_eq!(frame.height.len(), WIDE * TALL);
         assert_eq!(frame.tenure.len(), WIDE * TALL);
         assert_eq!(frame.temperature.len(), WIDE * TALL);
@@ -304,8 +318,8 @@ mod tests {
     fn the_map_wraps_and_the_poles_are_poles() {
         // An equirectangular map is a cylinder: the last column has to be the same
         // place as the first. A seam here means every pixel is offset by half a cell.
-        let (planet, climate, life, fauna) = a_world();
-        let frame = sample(&planet, &climate, &life, &fauna);
+        let (planet, climate, life, fauna, tree) = a_world();
+        let frame = sample(&planet, &climate, &life, &fauna, &tree);
         let row = TALL / 2;
         let west = frame.height[row * WIDE];
         let east = frame.height[row * WIDE + WIDE - 1];
@@ -322,8 +336,8 @@ mod tests {
 
     #[test]
     fn the_page_has_no_placeholders_left() {
-        let (planet, climate, life, fauna) = a_world();
-        let frame = sample(&planet, &climate, &life, &fauna);
+        let (planet, climate, life, fauna, tree) = a_world();
+        let frame = sample(&planet, &climate, &life, &fauna, &tree);
         let filled = page(
             "<b>__GLOBE_DATA__</b> __GLOBE_WIDE__x__GLOBE_TALL__",
             "0x1",
