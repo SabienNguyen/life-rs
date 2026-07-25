@@ -2,6 +2,7 @@
 members = [
     "biome",
     "climate",
+    "ecology",
     "genetics",
     "geo",
     "life",

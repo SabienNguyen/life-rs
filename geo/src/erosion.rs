@@ -94,6 +94,9 @@ impl Erosion {
         dt_myr: f32,
         radius_km: f64,
         surface_per_rock: f32,
+        // `runoff`: rainfall at each cell relative to the reference planet's mean, or
+        // `None` for a world that has no climate yet and is rained on evenly.
+        runoff: Option<&[f32]>,
         stripped_m: &mut [f32],
         deposited_m: &mut [f32],
     ) {
@@ -117,7 +120,13 @@ impl Erosion {
         });
 
         for (cell, area) in areas_km2.iter().enumerate().take(n) {
-            self.discharge[cell] = *area;
+            // Discharge, not drainage area. A square kilometre of rainforest delivers a
+            // river and a square kilometre of Sahara delivers nothing, and weighting the
+            // accumulation by how much actually falls is what makes a desert erode
+            // slowly. Without it the model wears its continents down at the same rate
+            // everywhere, which drowns them: land falls away, weathering loses the rock
+            // it works on, and the carbon cycle has nothing left to regulate with.
+            self.discharge[cell] = *area * runoff.map_or(1.0, |r| r[cell].max(0.02) as f64);
             self.receiver[cell] = cell as CellId;
         }
 
@@ -235,6 +244,7 @@ mod tests {
             1.0,
             6371.0,
             1.0,
+            None,
             &mut stripped,
             &mut deposited,
         );
@@ -287,6 +297,7 @@ mod tests {
             1.0,
             6371.0,
             1.0,
+            None,
             &mut stripped,
             &mut deposited,
         );
@@ -325,6 +336,7 @@ mod tests {
             1.0,
             6371.0,
             1.0,
+            None,
             &mut stripped,
             &mut deposited,
         );
@@ -364,6 +376,7 @@ mod tests {
                 10.0,
                 6371.0,
                 1.0,
+                None,
                 &mut stripped,
                 &mut deposited,
             );
@@ -429,6 +442,7 @@ mod tests {
             3.0,
             6371.0,
             crate::crust::BUOYANCY,
+            None,
             &mut stripped,
             &mut deposited,
         );
@@ -458,6 +472,7 @@ mod tests {
                 6371.0,
                 // Rock removed becomes height lost through isostasy, at about a sixth.
                 crate::crust::BUOYANCY,
+                None,
                 &mut stripped,
                 &mut deposited,
             );
@@ -517,6 +532,7 @@ mod tests {
             1.0,
             6371.0,
             1.0,
+            None,
             &mut stripped,
             &mut deposited,
         );
@@ -552,6 +568,7 @@ mod tests {
             1.0,
             6371.0,
             1.0,
+            None,
             &mut stripped,
             &mut deposited,
         );
@@ -587,6 +604,7 @@ mod tests {
                 1.0,
                 6371.0,
                 1.0,
+                None,
                 &mut stripped,
                 &mut deposited,
             );

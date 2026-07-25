@@ -216,6 +216,32 @@ pub enum Happening {
 }
 
 impl Happening {
+    /// Who and what this is about, so the chronicle can file it under them.
+    ///
+    /// A biography is the log filtered by participant, and this is the filter. Note that
+    /// a birth is about three people: without the parents in the list, a life's record
+    /// would not mention its own children.
+    pub fn subjects(&self) -> Vec<sim_core::chronicle::Subject> {
+        match self {
+            Happening::WorldBegins { planet } => vec![planet.to_bits()],
+            Happening::PhaseBegins { planet, .. } => vec![planet.to_bits()],
+            Happening::PersonArrives { person }
+            | Happening::PersonDoes { person, .. }
+            | Happening::PersonDies { person, .. }
+            | Happening::PersonMentored { person } => vec![person.to_bits()],
+            Happening::PersonPairs { person, with } => vec![person.to_bits(), with.to_bits()],
+            Happening::PersonBorn {
+                child,
+                mother,
+                father,
+            } => vec![child.to_bits(), mother.to_bits(), father.to_bits()],
+            Happening::PersonMoves { person, to } => vec![person.to_bits(), to.to_bits()],
+            Happening::PlaceChanges { place, .. } => vec![place.to_bits()],
+        }
+    }
+}
+
+impl Happening {
     /// Who this concerns, if anyone. A biography is the log filtered by this.
     pub fn subject(&self) -> Option<PersonId> {
         match self {
@@ -558,7 +584,7 @@ impl World {
                 };
                 let phase = planet.phase_at(at);
                 let next = planet.next_phase_change(at);
-                self.chronicle.record(
+                self.remember(
                     at,
                     Salience::Routine,
                     Happening::PhaseBegins { planet: id, phase },
@@ -642,7 +668,7 @@ impl World {
         }
 
         if first {
-            self.chronicle.record(
+            self.remember(
                 at,
                 Salience::Pivotal,
                 Happening::PersonArrives { person: id },
@@ -655,7 +681,7 @@ impl World {
                     let counts = self.deeds_done.entry(place).or_insert([0; Deed::COUNT]);
                     counts[choice.deed as usize] += 1;
                 }
-                self.chronicle.record(
+                self.remember(
                     at,
                     Salience::Routine,
                     Happening::PersonDoes {
@@ -733,6 +759,26 @@ impl World {
         }
     }
 
+    /// Put something in the chronicle, filed under everyone it concerns.
+    fn remember(&mut self, at: Time, salience: Salience, kind: Happening) {
+        let about = kind.subjects();
+        self.chronicle.record_about(at, salience, kind, &about);
+    }
+
+    /// Forget enough of the small and old to stay inside the budget.
+    ///
+    /// Called on the caller's schedule rather than automatically, because compaction
+    /// moves every record and therefore has to rebuild the index — which is cheap
+    /// occasionally and ruinous every step.
+    pub fn compact_chronicle(&mut self, budget: usize) -> usize {
+        self.chronicle.compact(budget, Salience::Pivotal)
+    }
+
+    /// Everything the chronicle holds about one person — their life, as recorded.
+    pub fn life_of(&self, person: PersonId) -> impl Iterator<Item = &sim_core::Record<Happening>> {
+        self.chronicle.about(person.to_bits())
+    }
+
     /// Detach someone from the living: no partner, no household.
     ///
     /// Idempotent, and deliberately separate from recording the death. There is more
@@ -748,7 +794,7 @@ impl World {
     /// Everything that has to happen when someone dies.
     fn record_death(&mut self, at: Time, id: PersonId, cause: Cause) {
         self.release(id);
-        self.chronicle.record(
+        self.remember(
             at,
             Salience::Pivotal,
             Happening::PersonDies { person: id, cause },
@@ -842,7 +888,7 @@ impl World {
             .get_mut(id)
             .is_some_and(|p| p.take_patron(PATRONAGE))
         {
-            self.chronicle.record(
+            self.remember(
                 at,
                 Salience::Pivotal,
                 Happening::PersonMentored { person: id },
@@ -917,7 +963,7 @@ impl World {
         }
         self.society.dissolve_empty();
 
-        self.chronicle.record(
+        self.remember(
             at,
             Salience::Pivotal,
             Happening::PersonPairs {
@@ -1016,7 +1062,7 @@ impl World {
                 place.observe(&census);
                 let after = place.archetype();
                 if self.was.insert(id, after) == Some(before) && before != after {
-                    self.chronicle.record(
+                    self.remember(
                         at,
                         Salience::Historic,
                         Happening::PlaceChanges {
@@ -1181,7 +1227,7 @@ impl World {
                     // up in the largest single influence on how they turn out, so
                     // changing it is one of the more consequential things that can
                     // happen to a family.
-                    self.chronicle.record(
+                    self.remember(
                         at,
                         Salience::Pivotal,
                         Happening::PersonMoves {
@@ -1242,7 +1288,7 @@ impl World {
             self.society.move_in(child_id, home);
         }
 
-        self.chronicle.record(
+        self.remember(
             at,
             Salience::Pivotal,
             Happening::PersonBorn {
@@ -2054,6 +2100,85 @@ mod tests {
         );
         // But they are still alive, still ageing, still having children.
         assert!(coarse.living() > 20, "the world should still be running");
+    }
+
+    #[test]
+    fn a_life_can_be_read_off_the_chronicle_directly() {
+        // The point of the index: a biography is a lookup rather than a scan of the whole
+        // log, and it contains that person's events and nobody else's.
+        let world = lineages();
+        let mut checked = 0;
+        for (id, person) in world.people.iter() {
+            let mine: Vec<&Happening> = world.life_of(id).map(|r| &r.kind).collect();
+            if mine.is_empty() {
+                continue;
+            }
+            checked += 1;
+            for happening in mine {
+                assert!(
+                    happening.subjects().contains(&id.to_bits()),
+                    "{}'s life contains something that is not about them",
+                    person.name
+                );
+            }
+        }
+        assert!(checked > 10, "only {checked} people had any history at all");
+    }
+
+    #[test]
+    fn a_birth_appears_in_three_lives() {
+        let world = lineages();
+        let born = world
+            .chronicle
+            .iter()
+            .find_map(|r| match r.kind {
+                Happening::PersonBorn {
+                    child,
+                    mother,
+                    father,
+                } => Some((child, mother, father)),
+                _ => None,
+            })
+            .expect("nobody was born");
+
+        for who in [born.0, born.1, born.2] {
+            assert!(
+                world.life_of(who).any(|r| matches!(
+                    r.kind,
+                    Happening::PersonBorn { child, .. } if child == born.0
+                )),
+                "the birth is missing from one of the three lives it is about"
+            );
+        }
+    }
+
+    #[test]
+    fn compacting_keeps_the_pivotal_and_the_index_honest() {
+        let mut world = World::genesis(WorldSeed::from_u128(0x33), 24);
+        world.run_for(Duration::from_years(6));
+        let pivotal = world.chronicle.at_least(Salience::Pivotal).count();
+        assert!(pivotal > 5, "not enough happened to test on");
+        assert!(
+            world.chronicle.len() > 2000,
+            "not enough routine to compact"
+        );
+
+        let budget = pivotal + 100;
+        world.compact_chronicle(budget);
+        assert!(world.chronicle.len() <= budget.max(pivotal));
+        assert_eq!(
+            world.chronicle.at_least(Salience::Pivotal).count(),
+            pivotal,
+            "compaction dropped something that mattered"
+        );
+        assert!(world.chronicle.forgotten_total() > 0);
+
+        // And every life still reads as that person's.
+        for (id, _) in world.people.iter() {
+            for record in world.life_of(id) {
+                assert!(record.kind.subjects().contains(&id.to_bits()));
+            }
+        }
     }
 
     #[test]

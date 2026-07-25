@@ -27,18 +27,15 @@
 //! Because every cell ends each step holding exactly one parcel, the state stays a set
 //! of flat per-cell arrays with no allocation, no free lists, and no drift in the count.
 //!
-//! ## What this does not yet get right
+//! ## Where the rain comes in
 //!
-//! A planet run for a billion years settles at somewhere around a seventh of its surface
-//! above water, where Earth manages a little under a third. The continental crust itself
-//! is stable — arc magmatism replaces what collision and erosion take — but rather more
-//! of it ends up submerged than should.
-//!
-//! The likeliest reason is that **erosion here is blind to climate**. Every square
-//! kilometre of land is rained on identically, where on the real planet a third of it is
-//! arid and barely erodes at all. Precipitation arrives with the climate phase, and the
-//! honest thing is to wait for it rather than to bend the erosion constant — which is a
-//! measured quantity — until the land fraction comes out right.
+//! Erosion needs to know how hard it is raining, and this crate has no idea — it sits
+//! below the climate and always will. So [`Lithosphere::set_runoff`] is the one thing
+//! anything outside reaches in to set, and a caller that has a climate is expected to
+//! keep it current. A planet with no climate is rained on evenly, which is what the first
+//! version of this did everywhere and is a worse error than it sounds: a desert then
+//! wears down as fast as a rainforest, the continents plane away, and the carbon
+//! thermostat downstream loses the rock it needs in order to regulate anything.
 
 pub mod crust;
 pub mod erosion;
@@ -176,6 +173,8 @@ pub struct Lithosphere {
     area_km2: Vec<f64>,
 
     sea_level_m: f32,
+    /// Rainfall relative to the reference planet, if a climate has told us any.
+    runoff: Option<Vec<f32>>,
 
     // ---- scratch, held to keep a megayear allocation-free --------------------------
     erosion: Erosion,
@@ -312,6 +311,7 @@ impl Lithosphere {
             boundary: vec![Boundary::Interior; n],
             area_km2,
             sea_level_m: 0.0,
+            runoff: None,
             erosion: Erosion::new(n),
             stripped_m: vec![0.0; n],
             deposited_m: vec![0.0; n],
@@ -387,6 +387,21 @@ impl Lithosphere {
 
     pub fn boundary(&self, cell: CellId) -> Boundary {
         self.boundary[cell as usize]
+    }
+
+    /// Tell the planet how hard it is being rained on, cell by cell, relative to the
+    /// reference planet's mean.
+    ///
+    /// The one place anything outside this crate reaches in. Erosion without it is
+    /// climate-blind and wears a desert down as fast as a rainforest — which is not a
+    /// small error, because it is the land area that the carbon thermostat needs in order
+    /// to work at all.
+    pub fn set_runoff(&mut self, runoff: &[f32]) {
+        debug_assert_eq!(runoff.len(), self.grid.len());
+        match &mut self.runoff {
+            Some(held) => held.copy_from_slice(runoff),
+            none => *none = Some(runoff.to_vec()),
+        }
     }
 
     /// What the last step's grid rounding had to shuffle. See [`Churn`].
@@ -942,6 +957,7 @@ impl Lithosphere {
             dt,
             self.radius_km,
             crust::BUOYANCY,
+            self.runoff.as_deref(),
             &mut self.stripped_m,
             &mut self.deposited_m,
         );

@@ -5,9 +5,20 @@
 //! is the log filtered by participant, a geological history is the same log filtered by
 //! salience.
 //!
-//! Phase 0 keeps this deliberately plain: append and scan. Per-participant indices and
-//! the compaction that makes megayears affordable arrive with the chronicle phase
-//! proper; the shape is fixed now so that systems can start emitting into it.
+//! Two things make that affordable rather than merely tidy.
+//!
+//! **An index.** A biography is the log filtered by participant, and filtering a log of
+//! ten million records to find the two hundred about one person is not something to do by
+//! scanning. Records are filed under whoever they are about as they arrive, so a life is
+//! a lookup.
+//!
+//! **Forgetting.** A few hundred people living a few decades is tens of millions of
+//! records, and deep time is worse without limit. So the log forgets, and it forgets the
+//! way memory does: the small things first, and the older the sooner. What it will not do
+//! is forget silently — every record dropped is counted, so the chronicle can say how many
+//! ordinary days it no longer holds rather than implying there were none.
+
+use std::collections::BTreeMap;
 
 use crate::time::Time;
 
@@ -37,17 +48,34 @@ pub struct Record<K> {
     pub kind: K,
 }
 
-/// An append-only log of records.
+/// Whatever a record is about — a person, a place, a plate, a species.
+///
+/// A bare integer rather than a typed handle, because the chronicle sits below everything
+/// that has handles and must not know what any of them are. Callers hand over
+/// `id.to_bits()` and get the same number back.
+pub type Subject = u64;
+
+/// How many salience levels there are, for the forgetting tally.
+const LEVELS: usize = 5;
+
+/// A log of records, indexed by who they are about, which forgets the small and old.
 pub struct Chronicle<K> {
     records: Vec<Record<K>>,
+    /// Which records each subject appears in. Indices into `records`, so compaction has
+    /// to rebuild it — which is why compaction is a deliberate act and not a side effect.
+    index: BTreeMap<Subject, Vec<u32>>,
     floor: Salience,
+    /// How many records have been dropped, by how much they mattered.
+    forgotten: [u64; LEVELS],
 }
 
 impl<K> Chronicle<K> {
     pub fn new() -> Self {
         Chronicle {
             records: Vec::new(),
+            index: BTreeMap::new(),
             floor: Salience::Routine,
+            forgotten: [0; LEVELS],
         }
     }
 
@@ -76,14 +104,114 @@ impl<K> Chronicle<K> {
     }
 
     pub fn record(&mut self, at: Time, salience: Salience, kind: K) {
+        self.record_about(at, salience, kind, &[]);
+    }
+
+    /// Record something, filed under everyone it concerns.
+    ///
+    /// A record may name several subjects — a marriage is about two people, a war about
+    /// two nations — and appears in each of their histories.
+    pub fn record_about(&mut self, at: Time, salience: Salience, kind: K, about: &[Subject]) {
         if salience < self.floor {
+            self.forgotten[salience as usize] += 1;
             return;
         }
         debug_assert!(
             self.records.last().is_none_or(|last| last.at <= at),
             "the chronicle must stay ordered in time"
         );
+        let slot = self.records.len() as u32;
         self.records.push(Record { at, salience, kind });
+        for subject in about {
+            self.index.entry(*subject).or_default().push(slot);
+        }
+    }
+
+    /// Everything on record about one subject, oldest first — a biography.
+    pub fn about(&self, subject: Subject) -> impl Iterator<Item = &Record<K>> {
+        self.index
+            .get(&subject)
+            .map(|slots| slots.as_slice())
+            .unwrap_or(&[])
+            .iter()
+            .map(|slot| &self.records[*slot as usize])
+    }
+
+    /// How many records mention this subject.
+    pub fn mentions(&self, subject: Subject) -> usize {
+        self.index.get(&subject).map_or(0, |slots| slots.len())
+    }
+
+    pub fn subjects(&self) -> usize {
+        self.index.len()
+    }
+
+    /// How many records have been dropped, at each level of salience.
+    pub fn forgotten(&self) -> [u64; LEVELS] {
+        self.forgotten
+    }
+
+    pub fn forgotten_total(&self) -> u64 {
+        self.forgotten.iter().sum()
+    }
+
+    /// Forget enough of the small and old to come back under a budget.
+    ///
+    /// The rule is the one memory uses: the least important goes first, and among equally
+    /// unimportant things the oldest goes first. Salience is walked upwards from the
+    /// bottom, dropping everything at each level that falls in the oldest part of the log,
+    /// until the log fits. Nothing above `keep_above` is ever dropped however old, because
+    /// a mass extinction has to still be there in a billion years.
+    ///
+    /// Returns how many records were let go.
+    pub fn compact(&mut self, budget: usize, keep_above: Salience) -> usize {
+        if self.records.len() <= budget {
+            return 0;
+        }
+        let mut doomed = vec![false; self.records.len()];
+        let mut over = self.records.len() - budget;
+
+        for level in 0..keep_above as usize {
+            if over == 0 {
+                break;
+            }
+            for (slot, record) in self.records.iter().enumerate() {
+                if over == 0 {
+                    break;
+                }
+                if record.salience as usize == level && !doomed[slot] {
+                    doomed[slot] = true;
+                    self.forgotten[level] += 1;
+                    over -= 1;
+                }
+            }
+        }
+
+        let dropped = doomed.iter().filter(|d| **d).count();
+        if dropped == 0 {
+            return 0;
+        }
+
+        // Rebuild, and rebuild the index with it: every surviving record has moved.
+        let mut moved_to = vec![u32::MAX; self.records.len()];
+        let mut kept = Vec::with_capacity(self.records.len() - dropped);
+        for (slot, record) in std::mem::take(&mut self.records).into_iter().enumerate() {
+            if doomed[slot] {
+                continue;
+            }
+            moved_to[slot] = kept.len() as u32;
+            kept.push(record);
+        }
+        self.records = kept;
+
+        for slots in self.index.values_mut() {
+            slots.retain(|slot| moved_to[*slot as usize] != u32::MAX);
+            for slot in slots.iter_mut() {
+                *slot = moved_to[*slot as usize];
+            }
+        }
+        self.index.retain(|_, slots| !slots.is_empty());
+        dropped
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &Record<K>> {
@@ -211,5 +339,187 @@ mod tests {
         assert!(Salience::Routine < Salience::Notable);
         assert!(Salience::Pivotal < Salience::Historic);
         assert!(Salience::Historic < Salience::Epochal);
+    }
+
+    // ---- the index -----------------------------------------------------------
+
+    #[test]
+    fn a_biography_is_a_lookup_rather_than_a_search() {
+        let mut c = Chronicle::new();
+        for i in 0..1000u64 {
+            c.record_about(
+                Time::from_secs(i),
+                Salience::Routine,
+                Happening::Born(i as u32),
+                &[i % 7],
+            );
+        }
+        // Seven subjects, and each should own its own share.
+        assert_eq!(c.subjects(), 7);
+        assert_eq!(c.mentions(3), 143);
+        let theirs: Vec<u32> = c
+            .about(3)
+            .map(|r| match r.kind {
+                Happening::Born(n) => n,
+                _ => unreachable!(),
+            })
+            .collect();
+        assert_eq!(theirs.len(), 143);
+        assert!(theirs.iter().all(|n| *n % 7 == 3), "somebody else's life");
+        // And in order, oldest first, which is what a life is.
+        assert!(theirs.windows(2).all(|w| w[0] < w[1]));
+    }
+
+    #[test]
+    fn one_record_can_be_about_several_people() {
+        let mut c = Chronicle::new();
+        c.record_about(
+            Time::ORIGIN,
+            Salience::Pivotal,
+            Happening::Born(1),
+            &[10, 20],
+        );
+        assert_eq!(c.mentions(10), 1);
+        assert_eq!(c.mentions(20), 1);
+        assert_eq!(c.len(), 1, "it is one event, not two");
+    }
+
+    #[test]
+    fn a_stranger_has_no_history_rather_than_an_error() {
+        let c: Chronicle<Happening> = Chronicle::new();
+        assert_eq!(c.about(99).count(), 0);
+        assert_eq!(c.mentions(99), 0);
+    }
+
+    // ---- forgetting -----------------------------------------------------------
+
+    #[test]
+    fn the_floor_counts_what_it_refuses() {
+        // Refusing to store something is still a decision to forget it, and the count has
+        // to say so — otherwise a run reports a tidy hundred events and implies that is
+        // all that happened.
+        let mut c: Chronicle<Happening> = Chronicle::new();
+        c.set_floor(Salience::Pivotal);
+        for i in 0..50u64 {
+            c.record(Time::from_secs(i), Salience::Routine, Happening::Sunrise);
+        }
+        assert_eq!(c.len(), 0);
+        assert_eq!(c.forgotten_total(), 50);
+        assert_eq!(c.forgotten()[Salience::Routine as usize], 50);
+    }
+
+    #[test]
+    fn compaction_drops_the_small_before_the_large() {
+        let mut c = Chronicle::new();
+        for i in 0..300u64 {
+            let salience = match i % 3 {
+                0 => Salience::Routine,
+                1 => Salience::Notable,
+                _ => Salience::Historic,
+            };
+            c.record_about(
+                Time::from_secs(i),
+                salience,
+                Happening::Born(i as u32),
+                &[i % 5],
+            );
+        }
+
+        let dropped = c.compact(150, Salience::Pivotal);
+        assert_eq!(dropped, 150);
+        assert_eq!(c.len(), 150);
+        // Every routine thing went, then half the notable ones, and nothing historic was
+        // touched — which is the order it is supposed to work in.
+        assert_eq!(
+            c.iter().filter(|r| r.salience == Salience::Routine).count(),
+            0
+        );
+        assert_eq!(
+            c.iter().filter(|r| r.salience == Salience::Notable).count(),
+            50
+        );
+        assert_eq!(c.at_least(Salience::Historic).count(), 100);
+        assert_eq!(c.forgotten_total(), 150);
+    }
+
+    #[test]
+    fn compaction_keeps_the_oldest_of_what_it_keeps_and_the_newest_of_what_it_drops() {
+        // Among equally unimportant things the oldest goes first, which is the other half
+        // of how memory works.
+        let mut c = Chronicle::new();
+        for i in 0..100u64 {
+            c.record(
+                Time::from_secs(i),
+                Salience::Routine,
+                Happening::Born(i as u32),
+            );
+        }
+        c.compact(40, Salience::Pivotal);
+        let left: Vec<u32> = c
+            .iter()
+            .map(|r| match r.kind {
+                Happening::Born(n) => n,
+                _ => unreachable!(),
+            })
+            .collect();
+        assert_eq!(left.len(), 40);
+        assert_eq!(left[0], 60, "it kept the wrong end");
+        assert_eq!(left[39], 99);
+    }
+
+    #[test]
+    fn compaction_never_touches_what_matters() {
+        // A mass extinction has to still be there in a billion years, however tight the
+        // budget gets.
+        let mut c = Chronicle::new();
+        for i in 0..100u64 {
+            c.record(Time::from_secs(i), Salience::Epochal, Happening::Extinction);
+        }
+        assert_eq!(c.compact(10, Salience::Pivotal), 0);
+        assert_eq!(c.len(), 100, "it forgot an epoch to meet a budget");
+    }
+
+    #[test]
+    fn the_index_survives_compaction() {
+        // The failure this guards against is silent and total: indices are positions in
+        // the log, compaction moves every record, and an index left pointing at the old
+        // positions returns somebody else's life.
+        let mut c = Chronicle::new();
+        for i in 0..200u64 {
+            let salience = if i % 2 == 0 {
+                Salience::Routine
+            } else {
+                Salience::Historic
+            };
+            c.record_about(
+                Time::from_secs(i),
+                salience,
+                Happening::Born(i as u32),
+                &[i % 4],
+            );
+        }
+        c.compact(100, Salience::Pivotal);
+
+        for subject in 0..4u64 {
+            for record in c.about(subject) {
+                let Happening::Born(n) = record.kind else {
+                    unreachable!()
+                };
+                assert_eq!(
+                    n as u64 % 4,
+                    subject,
+                    "after compaction, subject {subject}'s life contains event {n}"
+                );
+            }
+        }
+        // And nobody keeps a pointer to a record that is gone.
+        assert_eq!(c.about(0).count(), c.mentions(0));
+    }
+
+    #[test]
+    fn compacting_a_log_that_fits_does_nothing() {
+        let mut c = sample();
+        assert_eq!(c.compact(100, Salience::Pivotal), 0);
+        assert_eq!(c.len(), 3);
     }
 }

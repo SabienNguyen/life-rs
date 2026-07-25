@@ -14,6 +14,7 @@ use std::fmt::Write as _;
 
 use biome::Biosphere;
 use climate::Climate;
+use ecology::Ecology;
 use geo::{Boundary, CellId, Lithosphere};
 
 /// Pixels across the map. Equirectangular, so half as many down.
@@ -42,6 +43,8 @@ pub struct Frame {
     /// whole history has to arrive in one file.
     pub temperature: Vec<u8>,
     pub rain: Vec<u8>,
+    /// How many species live in each pixel.
+    pub richness: Vec<u8>,
     pub sea_level_m: f32,
     pub land_fraction: f32,
     pub continental_fraction: f32,
@@ -56,6 +59,9 @@ pub struct Frame {
     pub forest_share: f32,
     pub desert_share: f32,
     pub production_gt: f32,
+    pub species: usize,
+    pub animal_mt: f32,
+    pub extinctions: usize,
 }
 
 /// Sample the planet onto an equirectangular grid.
@@ -64,11 +70,12 @@ pub struct Frame {
 /// as its starting point. Neighbouring pixels are neighbouring places, so the search
 /// almost always finishes in a hop or two — which is what makes sampling a hundred
 /// thousand points per frame cost nothing worth measuring.
-pub fn sample(planet: &Lithosphere, climate: &Climate, life: &Biosphere) -> Frame {
+pub fn sample(planet: &Lithosphere, climate: &Climate, life: &Biosphere, fauna: &Ecology) -> Frame {
     let mut height = Vec::with_capacity(WIDE * TALL);
     let mut tenure = Vec::with_capacity(WIDE * TALL);
     let mut temperature = Vec::with_capacity(WIDE * TALL);
     let mut rain = Vec::with_capacity(WIDE * TALL);
+    let mut richness = Vec::with_capacity(WIDE * TALL);
     let mut hint: CellId = 0;
 
     for row in 0..TALL {
@@ -89,6 +96,7 @@ pub fn sample(planet: &Lithosphere, climate: &Climate, life: &Biosphere) -> Fram
             tenure.push((life.biome(cell) as u8) << 4 | kind);
             temperature.push(((climate.temperature_c(cell) + 64.0) * 2.0).clamp(0.0, 255.0) as u8);
             rain.push((climate.rain_mm(cell) / 20.0).clamp(0.0, 255.0) as u8);
+            richness.push(fauna.richness_at(cell).min(255) as u8);
         }
     }
 
@@ -98,6 +106,7 @@ pub fn sample(planet: &Lithosphere, climate: &Climate, life: &Biosphere) -> Fram
         tenure,
         temperature,
         rain,
+        richness,
         sea_level_m: planet.sea_level_m(),
         land_fraction: planet.land_fraction(),
         continental_fraction: planet.continental_fraction(),
@@ -116,6 +125,9 @@ pub fn sample(planet: &Lithosphere, climate: &Climate, life: &Biosphere) -> Fram
         forest_share: life.forest_share(planet),
         desert_share: life.desert_share(planet),
         production_gt: life.total_production_gt(planet),
+        species: fauna.richness(),
+        animal_mt: fauna.total_biomass_mt(),
+        extinctions: fauna.lost,
     }
 }
 
@@ -146,7 +158,8 @@ fn data(seed: &str, level: u8, frames: &[Frame]) -> String {
              \"plates\":{},\"biggest\":{:.3},\"peak\":{:.0},\"temp\":{:.2},\
              \"co2\":{:.0},\"ice\":{:.4},\"temperate\":{:.4},\"rainfall\":{:.0},\
              \"forest\":{:.4},\"arid\":{:.4},\"biomass\":{:.1},\
-             \"height\":\"{}\",\"tenure\":\"{}\",\"warmth\":\"{}\",\"wet\":\"{}\"}}",
+             \"species\":{},\"animals\":{:.1},\"extinct\":{},\
+             \"height\":\"{}\",\"tenure\":\"{}\",\"warmth\":\"{}\",\"wet\":\"{}\",\"kinds\":\"{}\"}}",
             frame.myr,
             frame.sea_level_m,
             frame.land_fraction,
@@ -162,10 +175,14 @@ fn data(seed: &str, level: u8, frames: &[Frame]) -> String {
             frame.forest_share,
             frame.desert_share,
             frame.production_gt,
+            frame.species,
+            frame.animal_mt,
+            frame.extinctions,
             base64(&as_bytes(&frame.height)),
             base64(&frame.tenure),
             base64(&frame.temperature),
             base64(&frame.rain),
+            base64(&frame.richness),
         );
     }
     out.push_str("\n  ]\n}");
@@ -214,13 +231,18 @@ mod tests {
     use super::*;
     use sim_core::{Domain, WorldSeed};
 
-    fn a_world() -> (Lithosphere, Climate, Biosphere) {
-        let mut rng = WorldSeed::from_u128(0x5eed).stream(Domain::Terrain, 0, 0);
+    fn a_world() -> (Lithosphere, Climate, Biosphere, Ecology) {
+        let seed = WorldSeed::from_u128(0x5eed);
+        let mut rng = seed.stream(Domain::Terrain, 0, 0);
         let mut planet = Lithosphere::genesis(4, 9, 0.42, &mut rng);
         planet.step_myr(2.0, &mut rng);
         let climate = Climate::genesis(&planet, 4.57, climate::insolation::EARTH_OBLIQUITY);
         let life = Biosphere::read(&planet, &climate);
-        (planet, climate, life)
+        let mut fauna = Ecology::genesis(&planet, &life, &climate, 24, seed);
+        for _ in 0..4 {
+            fauna.step_myr(&planet, &life, &climate, 1.0, &mut rng);
+        }
+        (planet, climate, life, fauna)
     }
 
     #[test]
@@ -249,8 +271,8 @@ mod tests {
 
     #[test]
     fn a_frame_covers_the_whole_map() {
-        let (planet, climate, life) = a_world();
-        let frame = sample(&planet, &climate, &life);
+        let (planet, climate, life, fauna) = a_world();
+        let frame = sample(&planet, &climate, &life, &fauna);
         assert_eq!(frame.height.len(), WIDE * TALL);
         assert_eq!(frame.tenure.len(), WIDE * TALL);
         assert_eq!(frame.temperature.len(), WIDE * TALL);
@@ -282,8 +304,8 @@ mod tests {
     fn the_map_wraps_and_the_poles_are_poles() {
         // An equirectangular map is a cylinder: the last column has to be the same
         // place as the first. A seam here means every pixel is offset by half a cell.
-        let (planet, climate, life) = a_world();
-        let frame = sample(&planet, &climate, &life);
+        let (planet, climate, life, fauna) = a_world();
+        let frame = sample(&planet, &climate, &life, &fauna);
         let row = TALL / 2;
         let west = frame.height[row * WIDE];
         let east = frame.height[row * WIDE + WIDE - 1];
@@ -300,8 +322,8 @@ mod tests {
 
     #[test]
     fn the_page_has_no_placeholders_left() {
-        let (planet, climate, life) = a_world();
-        let frame = sample(&planet, &climate, &life);
+        let (planet, climate, life, fauna) = a_world();
+        let frame = sample(&planet, &climate, &life, &fauna);
         let filled = page(
             "<b>__GLOBE_DATA__</b> __GLOBE_WIDE__x__GLOBE_TALL__",
             "0x1",

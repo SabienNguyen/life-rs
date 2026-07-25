@@ -251,9 +251,28 @@ fn run_globe(options: &Options, myr: f64) -> String {
     planet.step_myr(STEP_MYR, &mut rng);
     let mut climate =
         climate::Climate::genesis(&planet, START_GYR, climate::insolation::EARTH_OBLIQUITY);
+    // The one wire that runs back down the stack: rivers cut in proportion to how much
+    // falls on them, and only the climate knows that.
+    let mut runoff: Vec<f32> = Vec::with_capacity(planet.grid().len());
+    let soak = |planet: &geo::Lithosphere, climate: &climate::Climate, into: &mut Vec<f32>| {
+        into.clear();
+        into.extend(
+            planet
+                .grid()
+                .cells()
+                .map(|c| climate.rain_mm(c) / climate::moisture::REFERENCE_RAIN_MM),
+        );
+    };
+    soak(&planet, &climate, &mut runoff);
+    planet.set_runoff(&runoff);
 
     let mut life = biome::Biosphere::read(&planet, &climate);
-    let mut frames = vec![globe::sample(&planet, &climate, &life)];
+    let mut fauna = ecology::Ecology::genesis(&planet, &life, &climate, 48, options.seed);
+    // A few short steps so the populations find their level before the first frame.
+    for _ in 0..5 {
+        fauna.step_myr(&planet, &life, &climate, 1.0, &mut rng);
+    }
+    let mut frames = vec![globe::sample(&planet, &climate, &life, &fauna)];
     let per_frame = myr / (FRAMES - 1) as f64;
     for _ in 1..FRAMES {
         let mut done = 0.0;
@@ -261,10 +280,13 @@ fn run_globe(options: &Options, myr: f64) -> String {
             let step = STEP_MYR.min((per_frame - done) as f32);
             planet.step_myr(step, &mut rng);
             climate.step_myr(&planet, step, &mut rng);
+            soak(&planet, &climate, &mut runoff);
+            planet.set_runoff(&runoff);
+            life = biome::Biosphere::read(&planet, &climate);
+            fauna.step_myr(&planet, &life, &climate, step, &mut rng);
             done += step as f64;
         }
-        life = biome::Biosphere::read(&planet, &climate);
-        frames.push(globe::sample(&planet, &climate, &life));
+        frames.push(globe::sample(&planet, &climate, &life, &fauna));
     }
 
     globe::page(GLOBE, &options.seed.to_string(), options.grid, &frames)

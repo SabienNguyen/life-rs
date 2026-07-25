@@ -2,13 +2,15 @@
 
 > Big-picture architecture — the plan we implement against.
 >
-> **Phases 0–6, 10, and the §15 balance harness are implemented** — foundations
+> **Phases 0–8, 10, and the §15 balance harness are implemented** — foundations
 > (`sim-core`, `sim`), person depth (`life`, `person`), genetics with families
 > (`genetics`, `society`), neighbourhoods with the four behaviour channels, the solid
 > planet (`geo`: geodesic grid, plates, isostasy, erosion, eustatic sea level), the
 > climate on top of it (`climate`: insolation, energy balance, moisture, and the
 > carbon–silicate thermostat), the biosphere read off it (`biome`: Whittaker
-> classification and the Miami productivity model), and level-of-detail (§6, pulled forward from phase 10 because everyone acting whether
+> classification and the Miami productivity model), the animals on it (`ecology`:
+> demes, tolerances, the trophic pyramid), a chronicle that indexes and forgets, and
+> level-of-detail (§6, pulled forward from phase 10 because everyone acting whether
 > watched or not was making every later phase more expensive to build and test).
 > §20 marks progress. Everything beyond that is still a plan.
 >
@@ -953,7 +955,7 @@ Being explicit about this is what separates a coarse simulation from a fake one.
 | Tectonics | Euler-pole plate motion, Airy isostasy, √age ridge subsidence | No mantle convection; plate reorganizations and rifting are stochastic |
 | Erosion | Threshold stream power, sediment routed downstream | No hillslope diffusion — see below; coarse at 112 km cells; no river networks below cell size |
 | Vegetation | Whittaker classification + Miami productivity | Read instantly from climate: no lag, no competition, no fire, no plant populations |
-| Populations | Logistic + Holling type II | Not individual-based outside Full LOD |
+| Populations | Energy-limited demes, Kleiber and Damuth scaling, tenth passed up | Not individual-based outside Full LOD; no age structure, no migration |
 | Genetics | 256 polygenic loci, Wright–Fisher | Not molecular; no gene regulation or real recombination maps |
 | Behavior | Utility AI over needs and traits | Not a cognitive model; no language or planning depth |
 
@@ -1036,7 +1038,7 @@ later means rewriting every system, and it's cheap to build before there are sys
 | **4** ✓ | `geo`: geodesic grid, plates, elevation, isostasy, erosion, bathymetry |
 | **5** ◑ | `climate`: energy balance, insolation, moisture, ice, carbon cycle. Ocean circulation — gyres, overturning, upwelling, nutrients — deferred to Phase 7, where something finally reads it |
 | **6** ◑ | `biome`: Whittaker classification, NPP. Plant functional types with populations of their own — and therefore lag, and fire — deferred to Phase 7 |
-| **7** | `ecology`: animal demes, trophic web, dispersal, habitat suitability |
+| **7** ✓ | `ecology`: animal demes, trophic web, dispersal, habitat suitability |
 
 Neighbourhoods come before geography, which is the reverse of the obvious order and
 deliberate. The four channels are already wired into behaviour and sitting neutral, so
@@ -1044,6 +1046,22 @@ filling them needs households and places with properties — not tectonics. Plac
 abstract and acquire a grid cell in Phase 4; nothing about §14 depends on where a
 neighbourhood physically sits. Doing it the other way round would mean a planet with a
 climate and no one whose life it changes.
+
+**Phase 7, in the event.** The trophic pyramid, the latitudinal diversity gradient, and
+ranges that track their climate all came out of the arithmetic rather than being aimed
+at. Two things had to be got right for them to. Capacity has to be shared among
+competitors *in proportion to how well each is suited*, not equally — equal shares makes
+every species of a class the same size, so none is ever rare and nothing ever dies. And
+"present" has to be an absolute density rather than a share of a species' own best cell,
+which quietly inverted the diversity map: a species with an enormous tropical peak counted
+as absent everywhere else, so the richest places came out looking the poorest.
+
+The phase also closed the loop Phase 4 left open. Erosion now cuts in proportion to how
+much rain actually falls, which needed the climate to exist first. Without it a desert
+wore down as fast as a rainforest, land fell from a third of the surface to three percent
+over a gigayear, and the carbon thermostat then lost the rock it regulates with and let
+carbon dioxide climb to six percent of the atmosphere. With it the same planet holds a
+tenth of its surface dry and stays temperate throughout.
 
 **Phase 6, in the event.** Almost nothing to report, which is the point: a biome turned
 out to be sixty lines of `if` and the whole crate has no state at all. That is principle
@@ -1098,7 +1116,7 @@ only after the fact; all three were found by drawing the planet and looking at i
 ### M3 — A world you can watch
 | Phase | Deliverable |
 | --- | --- |
-| **8** | `chronicle`: unified event log, indices, salience, compaction, memory |
+| **8** ◑ | `chronicle`: unified event log, indices, salience, compaction. Per-person *memory* — a bounded set of remembered events that feeds back into behaviour — is left with the observer phase that reads it |
 | **9** | `observer` + TUI: random person, dossier, family tree, why, nature/nurture, counterfactual |
 | **10** ◑ | Spatial LOD: tiers, promotion/demotion, aggregate invariants — **done early**. Backfill of never-simulated history is the remaining part |
 

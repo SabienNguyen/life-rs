@@ -236,7 +236,8 @@
   .keys { display: flex; flex-wrap: wrap; gap: 7px 16px; }
   .legend#legend-relief,
   .legend#legend-warmth,
-  .legend#legend-wet { flex-direction: column; gap: 7px; }
+  .legend#legend-wet,
+  .legend#legend-fauna { flex-direction: column; gap: 7px; }
 
   /* ---- figures ----------------------------------------------------------- */
 
@@ -312,6 +313,7 @@
         <button id="view-warmth" aria-pressed="false">Temperature</button>
         <button id="view-wet" aria-pressed="false">Rainfall</button>
         <button id="view-life" aria-pressed="false">Biomes</button>
+        <button id="view-fauna" aria-pressed="false">Animals</button>
         <button id="view-plates" aria-pressed="false">Boundaries</button>
       </div>
     </div>
@@ -347,6 +349,15 @@
       <div class="keys" id="biome-keys"></div>
     </div>
 
+    <div class="legend hidden" id="legend-fauna">
+      <div class="ramp">
+        <span class="key" style="color:var(--muted)">Few</span>
+        <span class="bar" id="ramp-fauna"></span>
+        <span class="key" style="color:var(--muted)">Many</span>
+      </div>
+      <div class="ends"><span>no animals</span><span>kinds of animal sharing a place</span><span id="fauna-top">most</span></div>
+    </div>
+
     <div class="legend hidden" id="legend-plates">
       <span class="key"><span class="swatch" style="background:var(--divergent)"></span>Divergent — crust is born here</span>
       <span class="key"><span class="swatch" style="background:var(--convergent)"></span>Convergent — crust is destroyed here</span>
@@ -362,7 +373,7 @@
     <summary>The same numbers as a table</summary>
     <div class="scroller">
       <table id="numbers">
-        <thead><tr><th>Age</th><th>Land</th><th>Sea level</th><th>Highest point</th><th>Plates</th><th>Mean temp</th><th>CO₂</th><th>Ice</th><th>Rainfall</th><th>Forest</th><th>Growth</th></tr></thead>
+        <thead><tr><th>Age</th><th>Land</th><th>Sea level</th><th>Highest point</th><th>Plates</th><th>Mean temp</th><th>CO₂</th><th>Ice</th><th>Rainfall</th><th>Forest</th><th>Growth</th><th>Species</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
@@ -393,6 +404,7 @@ for (const frame of DATA.frames) {
   frame.t = bytesOf(frame.tenure);
   frame.w = bytesOf(frame.warmth);   // half-degrees from −64 °C
   frame.r = bytesOf(frame.wet);      // twenty-millimetre steps
+  frame.k = bytesOf(frame.kinds);
   frame.tempAt = i => frame.w[i] / 2 - 64;
   frame.rainAt = i => frame.r[i] * 20;
 }
@@ -431,6 +443,17 @@ const WARMTH = [
   [ 10, [214, 176, 124]],
   [ 25, [196, 112,  70]],
   [ 40, [136,  40,  44]],
+];
+
+// Species richness: sequential, one hue, light to dark — a magnitude, so a ramp with an
+// order to it and never a rainbow.
+const FAUNA = [
+  [ 0, [244, 241, 232]],
+  [ 4, [206, 214, 190]],
+  [10, [154, 184, 152]],
+  [18, [ 92, 146, 122]],
+  [28, [ 44, 104,  94]],
+  [44, [ 20,  58,  58]],
 ];
 
 // Rainfall: sequential, one hue, light to dark. Never a rainbow — a magnitude has an
@@ -538,6 +561,8 @@ function draw() {
       [r, g, b] = ramp(WARMTH, frame.tempAt(i));
     } else if (view === 'wet') {
       [r, g, b] = ramp(WET, frame.rainAt(i));
+    } else if (view === 'fauna') {
+      [r, g, b] = ramp(FAUNA, frame.k[i]);
     } else if (view === 'life') {
       [r, g, b] = BIOMES[frame.t[i] >> 4][1];
     } else {
@@ -548,7 +573,7 @@ function draw() {
 
     // The coastline, drawn on every view that is not the relief map itself, because a
     // temperature field with no land in it is unreadable.
-    if (view === 'warmth' || view === 'wet') {
+    if (view === 'warmth' || view === 'wet' || view === 'fauna') {
       const land = frame.h[i] > 0;
       const row = (i / WIDE) | 0, col = i % WIDE;
       const west = frame.h[row * WIDE + (col - 1 + WIDE) % WIDE] > 0;
@@ -610,6 +635,10 @@ const MEASURES = [
     blurb: 'Desert and cold desert, as a share of the land' },
   { key: 'biomass', label: 'Growth',            unit: 'Gt',  scale: 1,   digits: 0,
     blurb: 'Dry matter the whole biosphere fixes in a year' },
+  { key: 'species', label: 'Kinds of animal',  unit: '',    scale: 1,   digits: 0,
+    blurb: 'Still living. Nothing new arises yet, so this only falls' },
+  { key: 'animals', label: 'Animal biomass',   unit: 'Mt',  scale: 1,   digits: 0,
+    blurb: 'A tenth of a tenth of what the plants make' },
 ];
 
 function paintStats(frame) {
@@ -679,6 +708,7 @@ map.addEventListener('pointermove', event => {
   readout.innerHTML =
     `<b>${height >= 0 ? '+' : '−'}${Math.abs(height).toLocaleString()} m</b> ${height >= 0 ? 'above' : 'below'} the sea · ` +
     `<b>${frame.tempAt(i).toFixed(1)} °C</b> · <b>${frame.rainAt(i).toLocaleString()} mm</b><br>` +
+    `<span class="kind">${frame.k[i]} kinds of animal · </span>` +
     `<span class="kind">${latitude}°, ${longitude}° · ${BIOMES[frame.t[i] >> 4][0].toLowerCase()} · ${KINDS[frame.t[i] & 3]}</span>`;
   readout.style.opacity = 1;
   const left = Math.min(event.clientX - box.left + 14, box.width - 210);
@@ -693,7 +723,7 @@ const slider = document.getElementById('time');
 slider.max = DATA.frames.length - 1;
 slider.addEventListener('input', () => { at = +slider.value; stop(); draw(); });
 
-const VIEWS = ['relief', 'warmth', 'wet', 'life', 'plates'];
+const VIEWS = ['relief', 'warmth', 'wet', 'life', 'fauna', 'plates'];
 function setView(next) {
   view = next;
   for (const name of VIEWS) {
@@ -729,6 +759,10 @@ gradient('ramp', [-8000, -5000, -2500, -600, -1, 1, 600, 1600, 3000, 4600, 6500]
 gradient('ramp-warmth', [-45, -35, -25, -15, -5, 0, 5, 15, 25, 35, 42], v => ramp(WARMTH, v));
 gradient('ramp-wet', [0, 150, 350, 600, 900, 1300, 1800, 2400, 3200], v => ramp(WET, v));
 
+gradient('ramp-fauna', [0, 3, 6, 10, 15, 21, 28, 36, 46], v => ramp(FAUNA, v));
+document.getElementById('fauna-top').textContent =
+  `${Math.max(...DATA.frames.map(f => Math.max(...f.k)))} kinds`;
+
 document.getElementById('biome-keys').innerHTML = BIOMES.map(([name, rgb]) =>
   `<span class="key"><span class="swatch" style="background:rgb(${rgb.join(',')})"></span>${name}</span>`
 ).join('');
@@ -753,6 +787,7 @@ document.querySelector('#numbers tbody').innerHTML = DATA.frames.map(f => `<tr>
   <td>${f.rainfall.toFixed(0)} mm</td>
   <td>${(f.forest * 100).toFixed(0)}%</td>
   <td>${f.biomass.toFixed(0)} Gt</td>
+  <td>${f.species}</td>
 </tr>`).join('');
 
 const last = DATA.frames[DATA.frames.length - 1];
