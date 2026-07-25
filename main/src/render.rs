@@ -73,6 +73,38 @@ fn sentence(world: &World, happening: Happening) -> String {
             Cause::OldAge => format!("{} dies of old age", who(world, person)),
             other => format!("{} dies of {}", who(world, person), other.label()),
         },
+
+        Happening::PersonPairs { person, with } => format!(
+            "{} and {} set up house together",
+            who(world, person),
+            who(world, with)
+        ),
+
+        Happening::PersonBorn {
+            child,
+            mother,
+            father,
+        } => {
+            let heritage = world
+                .people
+                .get(child)
+                .map(|c| {
+                    let openness = c.origins.openness;
+                    format!(
+                        " (openness {:+.2}: {:+.2} inherited, {:+.2} from home)",
+                        openness.total(),
+                        openness.genetic,
+                        openness.shared
+                    )
+                })
+                .unwrap_or_default();
+            format!(
+                "{} is born to {} and {}{heritage}",
+                who(world, child),
+                who(world, mother),
+                who(world, father)
+            )
+        }
     }
 }
 
@@ -124,6 +156,90 @@ pub fn portrait(world: &World, id: person::PersonId) -> String {
         pressure * 100.0,
         p.health().vitality * 100.0,
     )
+}
+
+/// Where a person's temperament came from, factor by factor.
+///
+/// The whole reason genes, household, and chance are carried separately rather than
+/// summed: with them apart, "why is she like that" has an answer, and "what if she had
+/// been raised elsewhere" is a substitution rather than another lifetime.
+pub fn heritage(world: &World, id: person::PersonId) -> Vec<String> {
+    let Some(p) = world.people.get(id) else {
+        return Vec::new();
+    };
+
+    let mut lines: Vec<String> = p
+        .origins
+        .labelled()
+        .iter()
+        .map(|(name, e)| {
+            format!(
+                "  {name:<18} {:+.2}   = genes {:+.2}  home {:+.2}  chance {:+.2}",
+                e.total(),
+                e.genetic,
+                e.shared,
+                e.unique
+            )
+        })
+        .collect();
+
+    // The counterfactual, free because the parts were never merged.
+    let bleak = p.origins.if_raised(-1.5);
+    let kind = p.origins.if_raised(1.5);
+    lines.push(String::new());
+    lines.push(format!(
+        "  raised badly, conscientiousness would be {:+.2}; raised well, {:+.2} (is {:+.2})",
+        bleak.conscientiousness, kind.conscientiousness, p.personality.conscientiousness
+    ));
+    lines
+}
+
+/// Immediate family, as far as it is recorded.
+pub fn family(world: &World, id: person::PersonId) -> Vec<String> {
+    let mut lines = Vec::new();
+
+    match world.society.parents_of(id) {
+        Some((mother, father)) => lines.push(format!(
+            "  parents    {} and {}",
+            who(world, mother),
+            who(world, father)
+        )),
+        None => lines.push("  parents    unrecorded — of the founding generation".to_string()),
+    }
+
+    if let Some(partner) = world.society.partner_of(id) {
+        lines.push(format!("  partner    {}", who(world, partner)));
+    }
+
+    let siblings = world.society.siblings_of(id);
+    if !siblings.is_empty() {
+        lines.push(format!(
+            "  siblings   {}",
+            siblings
+                .iter()
+                .map(|s| who(world, *s))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+
+    let children = world.society.children_of(id);
+    if !children.is_empty() {
+        lines.push(format!(
+            "  children   {}",
+            children
+                .iter()
+                .map(|c| who(world, *c))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+
+    let descendants = world.society.descendants_of(id).len();
+    if descendants > children.len() {
+        lines.push(format!("  lineage    {descendants} descendants in all"));
+    }
+    lines
 }
 
 /// The scoring table behind a person's current choice — an early `why()`.

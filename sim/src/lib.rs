@@ -12,9 +12,11 @@
 //! the pace of what they are doing (minutes to hours), and age at the pace of a year.
 //! Neither polls.
 
+use genetics::{Architecture, FounderPool};
 use person::{Cause, Deed, Person, PersonId, Situation};
 use planet::{DayPhase, Planet, PlanetId};
 use sim_core::{Arena, Chronicle, Domain, Duration, Rng, Salience, Scheduler, Time, WorldSeed};
+use society::Society;
 
 /// Worlds start with a history behind them, so that a founding population can be
 /// adults of varying ages rather than a single cohort of newborns.
@@ -23,14 +25,53 @@ use sim_core::{Arena, Chronicle, Domain, Duration, Rng, Salience, Scheduler, Tim
 /// boundary rather than partway through a day the observer never saw.
 pub const FOUNDING: Time = Time::from_secs(36_500 * 86_400);
 
+/// How long a pregnancy runs.
+pub const GESTATION: Duration = Duration::from_days(273);
+
+/// Annual chance that a fertile, partnered woman in good health conceives.
+///
+/// Set deliberately above replacement rather than tuned to sit on it. With no feedback,
+/// fertility near replacement is a knife edge: the population is a branching process, so
+/// slightly below it dies out and slightly above it grows exponentially, with drift
+/// deciding which. Measured here, 0.16 grows about fivefold per two centuries while 0.13
+/// went extinct — there is no stable value in between to find.
+///
+/// Real populations are steady because fertility *responds* to conditions — density,
+/// food, child mortality — and that negative feedback is what a constant cannot supply.
+/// It arrives with resources and an economy. Until then, unchecked slow growth is the
+/// honest failure mode; a knife-edge constant would only look stable until it wasn't.
+const CONCEPTION_PER_YEAR: f32 = 0.16;
+
 /// Something that happened, as the simulation records it — structured, not prose.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Happening {
-    WorldBegins { planet: PlanetId },
-    PhaseBegins { planet: PlanetId, phase: DayPhase },
-    PersonArrives { person: PersonId },
-    PersonDoes { person: PersonId, deed: Deed },
-    PersonDies { person: PersonId, cause: Cause },
+    WorldBegins {
+        planet: PlanetId,
+    },
+    PhaseBegins {
+        planet: PlanetId,
+        phase: DayPhase,
+    },
+    PersonArrives {
+        person: PersonId,
+    },
+    PersonDoes {
+        person: PersonId,
+        deed: Deed,
+    },
+    PersonDies {
+        person: PersonId,
+        cause: Cause,
+    },
+    PersonPairs {
+        person: PersonId,
+        with: PersonId,
+    },
+    PersonBorn {
+        child: PersonId,
+        mother: PersonId,
+        father: PersonId,
+    },
 }
 
 impl Happening {
@@ -39,7 +80,9 @@ impl Happening {
         match self {
             Happening::PersonArrives { person }
             | Happening::PersonDoes { person, .. }
-            | Happening::PersonDies { person, .. } => Some(*person),
+            | Happening::PersonDies { person, .. }
+            | Happening::PersonPairs { person, .. } => Some(*person),
+            Happening::PersonBorn { child, .. } => Some(*child),
             _ => None,
         }
     }
@@ -56,15 +99,22 @@ enum Task {
     PersonActs(PersonId),
     /// A person getting a year older, and rolling against mortality.
     PersonAges(PersonId),
+    /// A pregnancy coming to term.
+    Birth { mother: PersonId, father: PersonId },
 }
 
 pub struct World {
     pub seed: WorldSeed,
     pub planets: Arena<Planet>,
     pub people: Arena<Person>,
+    pub society: Society,
     pub chronicle: Chronicle<Happening>,
+    architecture: &'static Architecture,
+    pool: FounderPool,
     scheduler: Scheduler<Task>,
     next_stream: u64,
+    /// Mothers with a birth already queued. Ordered, so iteration cannot vary.
+    expecting: std::collections::BTreeSet<PersonId>,
 }
 
 impl World {
@@ -73,9 +123,13 @@ impl World {
             seed,
             planets: Arena::new(),
             people: Arena::new(),
+            society: Society::new(),
             chronicle: Chronicle::new(),
+            architecture: genetics::standard_architecture(),
+            pool: FounderPool::uniform(),
             scheduler: Scheduler::starting_at(FOUNDING),
             next_stream: 0,
+            expecting: std::collections::BTreeSet::new(),
         }
     }
 
@@ -147,16 +201,24 @@ impl World {
             .schedule_at(FOUNDING, Task::PlanetAwakens(earth));
 
         for _ in 0..population {
-            let mut rng = world.stream(Domain::Naming);
+            let mut rng = world.stream(Domain::Genetics);
             // Founders span the adult range, so the population has a shape from the
-            // start rather than being one cohort that all ages and dies together.
+            // start rather than being one cohort that ages and dies together.
             let age_years = rng.range_f64(18.0, 70.0);
             let born = FOUNDING - Duration::from_secs((age_years * 31_557_600.0) as u64);
-            let mut inhabitant = person::generate(&mut rng, earth, born);
+            let upbringing = rng.normal() as f32;
+
+            let architecture = world.architecture;
+            let pool = world.pool.clone();
+            let mut inhabitant =
+                person::found(architecture, &pool, &mut rng, earth, born, upbringing);
             // Their life before the world started was never simulated; do not bill
             // them for it.
             inhabitant.assume_settled(FOUNDING);
-            world.add_person(inhabitant);
+
+            let id = world.add_person(inhabitant);
+            let home = world.society.found_household(FOUNDING, upbringing);
+            world.society.move_in(id, home);
         }
         world
     }
@@ -201,6 +263,7 @@ impl World {
 
             Task::PersonActs(id) => self.person_acts(at, id),
             Task::PersonAges(id) => self.person_ages(at, id),
+            Task::Birth { mother, father } => self.birth(at, mother, father),
         }
     }
 
@@ -228,6 +291,11 @@ impl World {
         // is what shortens the time horizon and suppresses work under deprivation.
         let mut situation = Situation::plain(phase);
         situation.env.stress = subject.needs().total_pressure();
+        if subject.stage(at).is_dependent() {
+            // The opportunity channel doing real work: a child does not decline to
+            // work, the option is not on their menu.
+            situation.env.availability[Deed::Work as usize] = 0.0;
+        }
 
         let first = subject.first_sighting();
         let outcome = subject.step(at, &situation, &mut rng);
@@ -287,15 +355,173 @@ impl World {
             });
 
         match cause {
-            Some(cause) => self.chronicle.record(
-                at,
-                Salience::Pivotal,
-                Happening::PersonDies { person: id, cause },
-            ),
-            None => self
-                .scheduler
-                .schedule_at(at + Duration::from_years(1), Task::PersonAges(id)),
+            Some(cause) => {
+                self.society.separate(id);
+                self.society.move_out(id);
+                self.chronicle.record(
+                    at,
+                    Salience::Pivotal,
+                    Happening::PersonDies { person: id, cause },
+                );
+            }
+            None => {
+                self.seek_partner(at, id);
+                self.try_conceive(at, id);
+                self.scheduler
+                    .schedule_at(at + Duration::from_years(1), Task::PersonAges(id));
+            }
         }
+    }
+
+    /// Look for someone to pair off with.
+    ///
+    /// Choice is assortative: among a handful of candidates, the most compatible wins.
+    /// That is worth the extra work rather than pairing at random, because partners who
+    /// resemble each other produce a wider spread of children than random pairing does,
+    /// and the spread of a population is much of what the genetics is for.
+    fn seek_partner(&mut self, at: Time, id: PersonId) {
+        let Some(seeker) = self.people.get(id) else {
+            return;
+        };
+        if self.society.is_partnered(id) || !seeker.is_marriageable(at) {
+            return;
+        }
+        let (sex, age) = (seeker.sex, seeker.age(at).years());
+
+        let eligible: Vec<PersonId> = self
+            .people
+            .iter()
+            .filter(|(other_id, other)| {
+                *other_id != id
+                    && other.sex != sex
+                    && other.is_marriageable(at)
+                    && !self.society.is_partnered(*other_id)
+                    && (other.age(at).years() - age).abs() <= 15.0
+                    && !self.society.is_close_kin(id, *other_id)
+            })
+            .map(|(other_id, _)| other_id)
+            .collect();
+
+        if eligible.is_empty() {
+            return;
+        }
+
+        // Consider a few, not everyone: nobody surveys the whole world before choosing.
+        let mut rng = self.moment_stream(Domain::Behavior, id.to_bits() ^ 0x9a1d, at);
+        let mut shortlist = eligible;
+        rng.shuffle(&mut shortlist);
+        shortlist.truncate(8);
+
+        let Some(&chosen) = shortlist.iter().max_by(|a, b| {
+            let score = |c: &PersonId| {
+                self.people
+                    .get(*c)
+                    .map(|other| seeker.compatibility(other))
+                    .unwrap_or(0.0)
+            };
+            score(a).total_cmp(&score(b))
+        }) else {
+            return;
+        };
+
+        self.society.pair(id, chosen);
+
+        // A new household, with its own character, for the two of them and any
+        // children they raise.
+        let upbringing = rng.normal() as f32;
+        let home = self.society.found_household(at, upbringing);
+        self.society.move_in(id, home);
+        self.society.move_in(chosen, home);
+        self.society.dissolve_empty();
+
+        self.chronicle.record(
+            at,
+            Salience::Pivotal,
+            Happening::PersonPairs {
+                person: id,
+                with: chosen,
+            },
+        );
+    }
+
+    /// Roll for a pregnancy, and queue the birth if one takes.
+    fn try_conceive(&mut self, at: Time, id: PersonId) {
+        if self.expecting.contains(&id) {
+            return;
+        }
+        let Some(mother) = self.people.get(id) else {
+            return;
+        };
+        if !mother.is_fertile(at) {
+            return;
+        }
+        let Some(father_id) = self.society.partner_of(id) else {
+            return;
+        };
+        let Some(father) = self.people.get(father_id) else {
+            return;
+        };
+        if !father.is_alive() {
+            return;
+        }
+
+        let mut rng = self.moment_stream(Domain::Demography, id.to_bits() ^ 0xbabe, at);
+        if !rng.chance(f64::from(CONCEPTION_PER_YEAR) * f64::from(mother.health().vitality)) {
+            return;
+        }
+
+        self.expecting.insert(id);
+        self.scheduler.schedule_at(
+            at + GESTATION,
+            Task::Birth {
+                mother: id,
+                father: father_id,
+            },
+        );
+    }
+
+    fn birth(&mut self, at: Time, mother_id: PersonId, father_id: PersonId) {
+        self.expecting.remove(&mother_id);
+
+        // Either parent may have died while the pregnancy ran.
+        let Some(mother) = self.people.get(mother_id) else {
+            return;
+        };
+        let Some(father) = self.people.get(father_id) else {
+            return;
+        };
+        if !mother.is_alive() {
+            return;
+        }
+
+        let home = self.society.home_of(mother_id);
+        let upbringing = self.society.upbringing_in(home);
+        let mut rng = self.moment_stream(Domain::Genetics, mother_id.to_bits() ^ 0xb0_11, at);
+
+        let child = person::born_to(
+            self.architecture,
+            (mother_id, mother),
+            (father_id, father),
+            &mut rng,
+            at,
+            upbringing,
+        );
+
+        let child_id = self.add_person(child);
+        self.society.record_birth(child_id, mother_id, father_id);
+        if let Some(home) = home {
+            self.society.move_in(child_id, home);
+        }
+
+        self.chronicle.record(
+            at,
+            Salience::Pivotal,
+            Happening::PersonBorn {
+                child: child_id,
+                mother: mother_id,
+                father: father_id,
+            },
+        );
     }
 }
 
@@ -303,6 +529,27 @@ impl World {
 mod tests {
     use super::*;
     use life::{LifeStage, Need};
+
+    /// One world, lived for three generations, shared by every test needing lineages.
+    ///
+    /// Built once: the population grows as it runs, so paying for it per test is what
+    /// made the suite unbearable.
+    ///
+    /// Sixty founders, not thirty. Below about fifty the world reliably dwindles, and
+    /// that is the simulation being right rather than wrong: the pairing market thins,
+    /// and after a few generations close-kin exclusion rules out most of the remaining
+    /// candidates, so a small isolated population struggles to reproduce itself. Real
+    /// enough to keep — but it makes a small fixture a study of near-extinction rather
+    /// than of families.
+    fn lineages() -> &'static World {
+        static WORLD: std::sync::LazyLock<World> = std::sync::LazyLock::new(|| {
+            let mut world = World::genesis(WorldSeed::from_u128(0x11), 60);
+            world.record_only(Salience::Pivotal);
+            world.run_for(Duration::from_years(65));
+            world
+        });
+        &WORLD
+    }
 
     fn happenings(world: &World) -> Vec<Happening> {
         world.chronicle.iter().map(|r| r.kind).collect()
@@ -605,6 +852,230 @@ mod tests {
             .filter(|r| r.kind.subject().is_some())
             .count();
         assert!(mine > 0 && mine < all, "{mine} of {all}");
+    }
+
+    #[test]
+    fn a_population_sustains_itself() {
+        // Phase 2's headline: births now offset deaths, where Phase 1 could only decline.
+        let world = lineages();
+        let born = world
+            .chronicle
+            .iter()
+            .filter(|r| matches!(r.kind, Happening::PersonBorn { .. }))
+            .count();
+
+        assert!(born > 20, "only {born} births in sixty-five years");
+        assert!(
+            world.people.len() > 60,
+            "no one new ever existed: {}",
+            world.people.len()
+        );
+        // Not strict growth: the founding cohort was eighteen to seventy at the start,
+        // so most of it dies inside the first fifty years while its children are still
+        // reaching childbearing age. The population dips through that transient before
+        // it climbs. Holding most of its size across it is the real property.
+        assert!(
+            world.living() >= 40,
+            "population collapsed to {} from 60",
+            world.living()
+        );
+    }
+
+    #[test]
+    fn families_reach_a_third_generation() {
+        let world = lineages();
+        let grandparents = world
+            .people
+            .ids()
+            .filter(|id| {
+                world
+                    .society
+                    .children_of(*id)
+                    .iter()
+                    .any(|child| !world.society.children_of(*child).is_empty())
+            })
+            .count();
+        assert!(grandparents > 0, "no lineage reached a third generation");
+
+        let deep = world
+            .people
+            .ids()
+            .filter(|id| world.society.ancestors_of(*id, 3).len() >= 4)
+            .count();
+        assert!(deep > 0, "nobody has four known grandparents");
+    }
+
+    #[test]
+    fn nobody_pairs_with_close_kin() {
+        let world = lineages();
+        let mut pairings = 0;
+        for record in world.chronicle.iter() {
+            if let Happening::PersonPairs { person, with } = record.kind {
+                pairings += 1;
+                assert!(
+                    !world.society.is_close_kin(person, with),
+                    "{person:?} paired with close kin {with:?}"
+                );
+            }
+        }
+        assert!(pairings > 3, "only {pairings} pairings to check");
+    }
+
+    #[test]
+    fn children_resemble_their_parents() {
+        // Whether inheritance survives being wired through households and birth — the
+        // coefficient itself is measured in the genetics crate, over thousands of
+        // samples. A handful of families is far too few for a correlation, so this
+        // compares distances instead: a child should sit closer to its own parents than
+        // to a stranger, which is a much lower-variance thing to ask.
+        let world = lineages();
+        let architecture = genetics::standard_architecture();
+        let value = |p: &Person| architecture.genetic_value(&p.genome, genetics::Trait::Openness);
+
+        let others: Vec<f32> = world.people.iter().map(|(_, p)| value(p)).collect();
+        let mut to_parents = Vec::new();
+        let mut to_strangers = Vec::new();
+
+        for (child_id, child) in world.people.iter() {
+            let Some((mother, father)) = world.society.parents_of(child_id) else {
+                continue;
+            };
+            let (Some(m), Some(f)) = (world.people.get(mother), world.people.get(father)) else {
+                continue;
+            };
+            let midparent = (value(m) + value(f)) / 2.0;
+            to_parents.push((value(child) - midparent).abs());
+
+            // Everyone else, averaged — no single stranger, so no lucky draw.
+            let mean_other = others.iter().sum::<f32>() / others.len() as f32;
+            to_strangers.push((value(child) - mean_other).abs());
+        }
+
+        assert!(
+            to_parents.len() > 8,
+            "only {} families to measure",
+            to_parents.len()
+        );
+        let mean = |v: &[f32]| v.iter().sum::<f32>() / v.len() as f32;
+        assert!(
+            mean(&to_parents) < mean(&to_strangers),
+            "children should sit closer to their parents ({:.3}) than to the population ({:.3})",
+            mean(&to_parents),
+            mean(&to_strangers)
+        );
+    }
+
+    #[test]
+    fn siblings_share_an_upbringing() {
+        let world = lineages();
+        let mut full = 0;
+        let mut half_differing = 0;
+
+        for (id, person) in world.people.iter() {
+            let Some(mine) = world.society.parents_of(id) else {
+                continue;
+            };
+            for sibling in world.society.siblings_of(id) {
+                let (Some(other), Some(theirs)) =
+                    (world.people.get(sibling), world.society.parents_of(sibling))
+                else {
+                    continue;
+                };
+                let (a, b) = (
+                    person.origins.openness.shared,
+                    other.origins.openness.shared,
+                );
+
+                if mine == theirs {
+                    // Full siblings are raised by one couple in one household, so the
+                    // shared term is identical by construction — which is exactly what
+                    // makes them resemble each other beyond their genes.
+                    assert_eq!(a, b, "full siblings should share an upbringing");
+                    full += 1;
+                } else if a != b {
+                    // Half-siblings need not: a widowed parent who pairs again founds a
+                    // new household, and the children of the two are raised apart.
+                    half_differing += 1;
+                }
+            }
+        }
+        assert!(full > 2, "only {full} full-sibling pairs found");
+        let _ = half_differing;
+    }
+
+    #[test]
+    fn a_child_is_born_into_its_mothers_household() {
+        let world = lineages();
+        let mut checked = 0;
+        for record in world.chronicle.iter() {
+            let Happening::PersonBorn { child, mother, .. } = record.kind else {
+                continue;
+            };
+            // Only children who have not yet left: the dead move out, and anyone who
+            // pairs off founds a household of their own. Both are correct, and both
+            // make a present-day comparison say nothing about where someone was born.
+            let Some(hers) = world.society.home_of(mother) else {
+                continue;
+            };
+            let Some(offspring) = world.people.get(child) else {
+                continue;
+            };
+            if !offspring.is_alive() || world.society.is_partnered(child) {
+                continue;
+            }
+            assert_eq!(
+                world.society.home_of(child),
+                Some(hers),
+                "a child should live with its mother"
+            );
+            checked += 1;
+        }
+        assert!(checked > 2, "only {checked} living mothers to check");
+    }
+
+    #[test]
+    fn the_dead_leave_their_partner_and_their_house() {
+        let world = lineages();
+        let mut dead = 0;
+        for (id, person) in world.people.iter() {
+            if person.is_alive() {
+                continue;
+            }
+            dead += 1;
+            assert!(
+                world.society.partner_of(id).is_none(),
+                "{} is dead and still partnered",
+                person.name
+            );
+            assert!(
+                world.society.home_of(id).is_none(),
+                "{} is dead and still housed",
+                person.name
+            );
+        }
+        assert!(dead > 5, "only {dead} deaths to check");
+    }
+
+    #[test]
+    fn children_cannot_take_work() {
+        // Channel one doing structural work: the option is absent, not unattractive.
+        // Needs routine recording, so it runs its own small, short world.
+        let mut world = World::genesis(WorldSeed::from_u128(0x55), 8);
+        world.run_for(Duration::from_years(12));
+
+        let now = world.now();
+        let mut dependants = 0;
+        for (id, person) in world.people.iter() {
+            if !person.is_alive() || !person.stage(now).is_dependent() {
+                continue;
+            }
+            dependants += 1;
+            let worked = world.chronicle.iter().any(|r| {
+                matches!(r.kind, Happening::PersonDoes { person: p, deed } if p == id && deed == Deed::Work)
+            });
+            assert!(!worked, "{} worked while still a child", person.name);
+        }
+        assert!(dependants > 0, "no children were born to check");
     }
 
     #[test]

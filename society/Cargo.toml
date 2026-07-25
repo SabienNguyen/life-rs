@@ -1,12 +1,12 @@
 [package]
-name = "sim"
+name = "society"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 sim-core = { path = "../sim-core" }
-life = { path = "../life" }
-planet = { path = "../planet" }
 person = { path = "../person" }
+
+[dev-dependencies]
 genetics = { path = "../genetics" }
-society = { path = "../society" }
+planet = { path = "../planet" }

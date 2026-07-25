@@ -133,6 +133,17 @@ fn print_dossier(world: &mut World) {
 
     println!("── a closer look ──");
     println!("{}", render::portrait(world, id));
+
+    println!("\nfamily:");
+    for line in render::family(world, id) {
+        println!("{line}");
+    }
+
+    println!("\nwhere their temperament came from:");
+    for line in render::heritage(world, id) {
+        println!("{line}");
+    }
+
     println!("\nwhy they are doing that:");
     for line in render::reasoning(world, id) {
         println!("{line}");

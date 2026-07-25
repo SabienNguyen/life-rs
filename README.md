@@ -22,7 +22,7 @@ omniscient observer API, and the phased roadmap from here to there.
 
 ## Status
 
-**Phases 0 (foundations) and 1 (person depth) are in.**
+**Phases 0 (foundations), 1 (person depth) and 2 (genetics and families) are in.**
 
 ```
 cargo run -p main                                   # a new world, three days
@@ -73,8 +73,35 @@ personality, values, and utility-scored behaviour replacing the state machine.
   tables have the right bathtub shape — median lifespan ~74, and a closed founding
   population thins out mostly of old age.
 
-Next is Phase 2: genetics and families — polygenic inheritance, households, kinship,
-birth, and a population that sustains itself instead of only declining.
+**Phase 2** — `genetics`: 256 biallelic loci as bitsets (a genome is 64 bytes),
+pleiotropic trait architecture, meiosis with crossover and mutation. `society`:
+households, partnerships, and kinship stored as parent edges with everything else
+derived.
+
+- **Personality is inherited.** Computed from a genome, a household, and chance, with
+  the three kept apart — so a dossier can say which did what, and "what if they'd been
+  raised elsewhere" is a substitution rather than another lifetime.
+- **Regression to the mean falls out.** Parents pass on half their alleles, not their
+  phenotype. Selecting on phenotype recovers a slope near the heritability, by
+  construction rather than by a fudge factor.
+- **Siblings resemble each other twice over** — half their variable alleles, and the
+  same household term.
+- **Populations sustain themselves.** Pairing is assortative, close kin are excluded,
+  and births now offset deaths where Phase 1 could only decline.
+- **A guardrail, as a test.** Founder populations differ at physical loci only;
+  behavioural loci draw from one shared pool. Asserted in `genetics/src/pool.rs` so it
+  cannot rot.
+
+```
+where their temperament came from:
+  openness           -0.68   = genes +0.66  home -0.81  chance -0.52
+  conscientiousness  +0.43   = genes +0.43  home -0.81  chance +0.81
+
+  raised badly, conscientiousness would be +0.57; raised well, +1.91 (is +0.43)
+```
+
+Next is Phase 3: environment and neighbourhoods — places with real properties, the four
+channels by which they change behaviour, and residential sorting.
 
 ## Roadmap
 

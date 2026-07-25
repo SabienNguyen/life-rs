@@ -26,6 +26,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "genetics"
+version = "0.1.0"
+dependencies = [
+ "sim-core",
+]
+
+[[package]]
 name = "getrandom"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -71,6 +78,7 @@ name = "person"
 version = "0.1.0"
 dependencies = [
  "faker_rand",
+ "genetics",
  "life",
  "planet",
  "rand",
@@ -145,10 +153,12 @@ dependencies = [
 name = "sim"
 version = "0.1.0"
 dependencies = [
+ "genetics",
  "life",
  "person",
  "planet",
  "sim-core",
+ "society",
 ]
 
 [[package]]
@@ -156,6 +166,16 @@ name = "sim-core"
 version = "0.1.0"
 dependencies = [
  "rand",
+]
+
+[[package]]
+name = "society"
+version = "0.1.0"
+dependencies = [
+ "genetics",
+ "person",
+ "planet",
+ "sim-core",
 ]
 
 [[package]]

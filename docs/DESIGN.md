@@ -2,8 +2,9 @@
 
 > Big-picture architecture — the plan we implement against.
 >
-> **Phases 0 and 1 are implemented** — foundations (`sim-core`, `sim`) and person depth
-> (`life`, `person`). §20 marks progress. Everything beyond that is still a plan.
+> **Phases 0–2 are implemented** — foundations (`sim-core`, `sim`), person depth
+> (`life`, `person`), and genetics with families (`genetics`, `society`). §20 marks
+> progress. Everything beyond that is still a plan.
 
 ## 1. The goal
 
@@ -962,7 +963,7 @@ Four milestones, each shippable, each independently interesting.
 | --- | --- |
 | **0** ✅ | `sim-core`: handles, arenas, seeded RNG, **the full time-scale ladder and scheduler**, event bus. Port existing Person/Planet behavior unchanged onto it |
 | **1** ✅ | Person depth: OCEAN, values, continuous needs, utility AI (with §14.2 hooks present but constant), aging, health, mortality |
-| **2** | Genetics + families: loci, meiosis, pedigree-derived genomes, households, kinship, birth/pairing/death, a population that sustains itself |
+| **2** ✅ | Genetics + families: loci, meiosis, pedigree-derived genomes, households, kinship, birth/pairing/death, a population that sustains itself |
 
 The scale ladder lands in Phase 0 even though nothing uses it yet. Retrofitting it
 later means rewriting every system, and it's cheap to build before there are systems.

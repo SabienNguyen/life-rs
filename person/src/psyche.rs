@@ -4,10 +4,13 @@
 //! distinguishable people; a vector buys a population. `Outlook` survives as a *label
 //! read off* the vector, so prose stays readable while the mechanics stay continuous.
 //!
-//! Everything here is a **phenotype** — an output. Phase 1 samples it directly, which is
-//! a placeholder: Phase 2 computes it from a genome and Phase 3 adds the environment
-//! term, at which point nothing outside this module has to change.
+//! Everything here is a **phenotype** — an output, computed from a genome, a household,
+//! and everything idiosyncratic. [`Origins`] keeps those three contributions apart
+//! rather than summing them away, which is what lets a dossier say why someone is the
+//! way they are, and lets the counterfactual "raised somewhere else" be a substitution
+//! rather than a re-simulation.
 
+use genetics::{Architecture, Expression, Genome, Trait};
 use sim_core::Rng;
 
 /// The five factors, as z-scores. 0 is unremarkable, ±1 is a standard deviation out.
@@ -121,6 +124,102 @@ impl Values {
             tradition: around(0.5 - 0.10 * personality.openness),
             power: around(0.5 + 0.08 * personality.extraversion),
         }
+    }
+}
+
+/// The five factors, each still split into where it came from.
+///
+/// Carried alongside the personality rather than discarded once summed: the whole point
+/// of modelling genes and upbringing separately is being able to say which did what.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Origins {
+    pub openness: Expression,
+    pub conscientiousness: Expression,
+    pub extraversion: Expression,
+    pub agreeableness: Expression,
+    pub neuroticism: Expression,
+}
+
+/// The five personality factors, in the order `Origins` stores them.
+const FACTORS: [Trait; 5] = [
+    Trait::Openness,
+    Trait::Conscientiousness,
+    Trait::Extraversion,
+    Trait::Agreeableness,
+    Trait::Neuroticism,
+];
+
+impl Origins {
+    /// Express a personality from a genome, a household, and chance.
+    ///
+    /// `shared` is the household's contribution — the term that makes siblings resemble
+    /// each other beyond their genes. Everything left over is drawn per person and
+    /// inherited by nobody, which is what keeps identical circumstances from producing
+    /// identical people.
+    pub fn express(
+        architecture: &Architecture,
+        genome: &Genome,
+        shared: f32,
+        rng: &mut Rng,
+    ) -> Origins {
+        let mut of = |t: Trait| {
+            architecture.express(genome, t, shared, rng.normal().clamp(-3.0, 3.0) as f32)
+        };
+        Origins {
+            openness: of(Trait::Openness),
+            conscientiousness: of(Trait::Conscientiousness),
+            extraversion: of(Trait::Extraversion),
+            agreeableness: of(Trait::Agreeableness),
+            neuroticism: of(Trait::Neuroticism),
+        }
+    }
+
+    pub fn personality(&self) -> Personality {
+        Personality {
+            openness: self.openness.total(),
+            conscientiousness: self.conscientiousness.total(),
+            extraversion: self.extraversion.total(),
+            agreeableness: self.agreeableness.total(),
+            neuroticism: self.neuroticism.total(),
+        }
+    }
+
+    /// The same person, raised in a household of a different quality.
+    ///
+    /// Nearly free, because the contributions were never merged: swap the shared term
+    /// and re-add. Genes and luck are untouched, which is exactly why place matters
+    /// here without being destiny.
+    pub fn if_raised(&self, elsewhere: f32) -> Personality {
+        let each = self.each();
+        Personality {
+            openness: each[0].if_raised(elsewhere, FACTORS[0]),
+            conscientiousness: each[1].if_raised(elsewhere, FACTORS[1]),
+            extraversion: each[2].if_raised(elsewhere, FACTORS[2]),
+            agreeableness: each[3].if_raised(elsewhere, FACTORS[3]),
+            neuroticism: each[4].if_raised(elsewhere, FACTORS[4]),
+        }
+    }
+
+    pub fn each(&self) -> [Expression; 5] {
+        [
+            self.openness,
+            self.conscientiousness,
+            self.extraversion,
+            self.agreeableness,
+            self.neuroticism,
+        ]
+    }
+
+    /// Factor names paired with their decomposition, for display.
+    pub fn labelled(&self) -> [(&'static str, Expression); 5] {
+        let each = self.each();
+        [
+            (FACTORS[0].label(), each[0]),
+            (FACTORS[1].label(), each[1]),
+            (FACTORS[2].label(), each[2]),
+            (FACTORS[3].label(), each[3]),
+            (FACTORS[4].label(), each[4]),
+        ]
     }
 }
 

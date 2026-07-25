@@ -11,15 +11,47 @@ pub mod deeds;
 pub mod psyche;
 
 use faker_rand::en_us::names::FullName;
+use genetics::{Ancestry, Architecture, FounderPool, Genome};
 use life::{Age, Health, LifeStage, Mortality, Need, Needs};
 use planet::PlanetId;
 use sim_core::{Duration, Id, Rng, Time};
 use std::fmt;
 
 pub use deeds::{Choice, Deed, Mind, Situation, Surroundings};
-pub use psyche::{Outlook, Personality, Values};
+pub use psyche::{Origins, Outlook, Personality, Values};
 
 pub type PersonId = Id<Person>;
+
+/// Which gamete someone contributes. Reproduction needs the distinction; nothing else
+/// in the simulation reads it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Sex {
+    Female,
+    Male,
+}
+
+impl Sex {
+    pub fn sample(rng: &mut Rng) -> Sex {
+        // Slightly more boys are born than girls, and slightly more of them die young.
+        if rng.chance(0.512) {
+            Sex::Male
+        } else {
+            Sex::Female
+        }
+    }
+
+    pub const fn label(self) -> &'static str {
+        match self {
+            Sex::Female => "female",
+            Sex::Male => "male",
+        }
+    }
+}
+
+/// The window in which someone can bear children. A crude stand-in for fertility that
+/// declines with age and health.
+pub const FERTILE_FROM: f64 = 18.0;
+pub const FERTILE_UNTIL: f64 = 42.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Height {
@@ -145,10 +177,18 @@ impl Cause {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Person {
     pub name: String,
+    pub sex: Sex,
     pub country: Country,
     pub physical: PhysicalAttrs,
+    /// The totals. Kept alongside `origins` because behaviour reads them constantly.
     pub personality: Personality,
+    /// The same five factors, still split into genes, household, and chance.
+    pub origins: Origins,
     pub values: Values,
+    pub genome: Genome,
+    /// Where the genome came from — enough to recompute it without keeping it.
+    pub ancestry: Ancestry,
+    pub parents: Option<(PersonId, PersonId)>,
     /// Which world they live on — a handle, so no lifetime ties a person to a planet.
     pub home: PlanetId,
     pub born: Time,
@@ -163,21 +203,45 @@ pub struct Person {
 }
 
 impl Person {
-    pub fn new(
+    /// Assemble a person from a genome and the household that raised them.
+    ///
+    /// `shared` is the household's contribution to personality. Everything
+    /// idiosyncratic is drawn from `rng` and inherited by nobody.
+    #[allow(clippy::too_many_arguments)]
+    pub fn express(
+        architecture: &Architecture,
         name: impl Into<String>,
+        sex: Sex,
         country: Country,
-        physical: PhysicalAttrs,
-        personality: Personality,
-        values: Values,
+        genome: Genome,
+        ancestry: Ancestry,
+        parents: Option<(PersonId, PersonId)>,
         home: PlanetId,
         born: Time,
+        shared: f32,
+        rng: &mut Rng,
     ) -> Person {
+        let origins = Origins::express(architecture, &genome, shared, rng);
+        let personality = origins.personality();
+        let values = Values::sample(rng, &personality);
+
         Person {
             name: name.into(),
+            sex,
             country,
-            physical,
+            physical: PhysicalAttrs::new(
+                pick(
+                    rng,
+                    &[Weight::Underweight, Weight::Normal, Weight::Overweight],
+                ),
+                stature_of(architecture, &genome),
+            ),
             personality,
+            origins,
             values,
+            genome,
+            ancestry,
+            parents,
             home,
             born,
             needs: Needs::rested(),
@@ -187,6 +251,37 @@ impl Person {
             updated: born,
             met: false,
         }
+    }
+
+    /// Whether this person could bear a child right now.
+    pub fn is_fertile(&self, now: Time) -> bool {
+        let years = self.age(now).years();
+        self.is_alive()
+            && self.sex == Sex::Female
+            && (FERTILE_FROM..FERTILE_UNTIL).contains(&years)
+            && self.health.vitality > 0.5
+    }
+
+    /// Whether this person is old enough to pair off.
+    pub fn is_marriageable(&self, now: Time) -> bool {
+        self.is_alive() && self.age(now).years() >= FERTILE_FROM
+    }
+
+    /// How well two temperaments suit each other, 0 to 1.
+    ///
+    /// Similarity, mostly. Real pairing is assortative, and it matters downstream:
+    /// partners who resemble each other produce children whose traits are more
+    /// spread out than random pairing would give.
+    pub fn compatibility(&self, other: &Person) -> f32 {
+        let a = self.personality;
+        let b = other.personality;
+        let distance = ((a.openness - b.openness).powi(2)
+            + (a.conscientiousness - b.conscientiousness).powi(2)
+            + (a.extraversion - b.extraversion).powi(2)
+            + (a.agreeableness - b.agreeableness).powi(2)
+            + (a.neuroticism - b.neuroticism).powi(2))
+        .sqrt();
+        (1.0 - distance / 6.0).clamp(0.0, 1.0)
     }
 
     pub fn age(&self, now: Time) -> Age {
@@ -345,34 +440,127 @@ impl Person {
     }
 }
 
-/// A random person, drawn from a caller-supplied stream.
+/// A founder: someone with no simulated parents, whose genome comes from a
+/// population's allele frequencies.
+pub fn found(
+    architecture: &Architecture,
+    pool: &FounderPool,
+    rng: &mut Rng,
+    home: PlanetId,
+    born: Time,
+    shared: f32,
+) -> Person {
+    let genome = pool.draw(rng);
+    let seed = rng.next_u64();
+    Person::express(
+        architecture,
+        random_name(rng),
+        Sex::sample(rng),
+        pick(rng, &Country::ALL),
+        genome,
+        Ancestry::founder(seed),
+        None,
+        home,
+        born,
+        shared,
+        rng,
+    )
+}
+
+/// A child, from two parents.
 ///
-/// Personality is sampled directly here. Phase 2 replaces this with inheritance from a
-/// genome, at which point siblings start resembling their parents and each other.
-pub fn generate(rng: &mut Rng, home: PlanetId, born: Time) -> Person {
+/// The genome is conceived from the parents' and one recombination seed, so it can be
+/// recomputed from the pedigree later rather than stored.
+pub fn born_to(
+    architecture: &Architecture,
+    mother: (PersonId, &Person),
+    father: (PersonId, &Person),
+    rng: &mut Rng,
+    born: Time,
+    shared: f32,
+) -> Person {
+    let (mother_id, mother) = mother;
+    let (father_id, father) = father;
+
+    let recomb_seed = rng.next_u64();
+    let genome = genetics::conceive(&mother.genome, &father.genome, recomb_seed);
+    let ancestry = Ancestry::of(mother_id.to_bits(), father_id.to_bits(), recomb_seed);
+
+    // Family names travel with the father here, which is a convention rather than a
+    // finding; naming belongs with culture once culture exists.
+    let surname = family_name(&father.name);
+    let full = random_name(rng);
+    let given = given_name(&full);
+    let name = if surname.is_empty() || given.is_empty() {
+        full
+    } else {
+        format!("{given} {surname}")
+    };
+
+    Person::express(
+        architecture,
+        name,
+        Sex::sample(rng),
+        mother.country,
+        genome,
+        ancestry,
+        Some((mother_id, father_id)),
+        mother.home,
+        born,
+        shared,
+        rng,
+    )
+}
+
+/// Height is read off the genome rather than drawn — the first visible feature that
+/// actually descends from someone.
+fn stature_of(architecture: &Architecture, genome: &Genome) -> Height {
+    match architecture.genetic_value(genome, genetics::Trait::Stature) {
+        z if z < -0.6 => Height::Short,
+        z if z > 0.6 => Height::Tall,
+        _ => Height::Average,
+    }
+}
+
+/// The given name in a full name, ignoring any leading title.
+///
+/// Without this a child inherits "Mrs." as a first name from whichever generated name
+/// happened to carry a title.
+fn given_name(full: &str) -> String {
+    const TITLES: [&str; 8] = ["mr", "mrs", "ms", "miss", "dr", "prof", "sir", "dame"];
+    full.split_whitespace()
+        .find(|word| {
+            let bare = word.trim_end_matches('.').to_ascii_lowercase();
+            !TITLES.contains(&bare.as_str())
+        })
+        .unwrap_or("")
+        .to_string()
+}
+
+/// The family name in a full name, ignoring titles and suffixes.
+///
+/// Taking the last word gets "III" out of "Marcus Strosin III" — and once that is
+/// inherited, the next generation is "Coby III", and a few generations later everyone
+/// is a numeral.
+fn family_name(full: &str) -> String {
+    const SUFFIXES: [&str; 12] = [
+        "jr", "sr", "i", "ii", "iii", "iv", "v", "md", "dds", "phd", "dvm", "esq",
+    ];
+    full.split_whitespace()
+        .rfind(|word| {
+            let bare = word.trim_end_matches('.').to_ascii_lowercase();
+            !SUFFIXES.contains(&bare.as_str())
+        })
+        .unwrap_or("")
+        .to_string()
+}
+
+fn random_name(rng: &mut Rng) -> String {
     // Names come from `faker_rand`, which draws from our stream but picks from its own
     // word lists — stable for a pinned version rather than forever. Cosmetic.
     use rand::Rng as _;
     let name: FullName = rng.r#gen();
-
-    let personality = Personality::sample(rng);
-    let values = Values::sample(rng, &personality);
-
-    Person::new(
-        name.to_string(),
-        pick(rng, &Country::ALL),
-        PhysicalAttrs::new(
-            pick(
-                rng,
-                &[Weight::Underweight, Weight::Normal, Weight::Overweight],
-            ),
-            pick(rng, &[Height::Short, Height::Average, Height::Tall]),
-        ),
-        personality,
-        values,
-        home,
-        born,
-    )
+    name.to_string()
 }
 
 fn pick<T: Copy>(rng: &mut Rng, options: &[T]) -> T {
@@ -394,15 +582,18 @@ mod tests {
         WorldSeed::from_u128(0xb0_0c).stream(Domain::Behavior, n, 0)
     }
 
+    fn arch() -> &'static Architecture {
+        genetics::standard_architecture()
+    }
+
     fn somebody() -> Person {
-        Person::new(
-            "Ada",
-            Country::Gbr,
-            PhysicalAttrs::new(Weight::Normal, Height::Average),
-            Personality::AVERAGE,
-            Values::BALANCED,
+        found(
+            arch(),
+            &FounderPool::uniform(),
+            &mut rng(1),
             a_home(),
             Time::ORIGIN,
+            0.0,
         )
     }
 
@@ -595,6 +786,110 @@ mod tests {
     }
 
     #[test]
+    fn given_names_ignore_titles() {
+        assert_eq!(given_name("Mrs. Marjory O'Kon"), "Marjory");
+        assert_eq!(given_name("Dr. Savion Bode"), "Savion");
+        assert_eq!(given_name("Kyle Anderson MD"), "Kyle");
+        assert_eq!(given_name(""), "");
+    }
+
+    #[test]
+    fn family_names_ignore_titles_and_suffixes() {
+        assert_eq!(family_name("Marcus Strosin III"), "Strosin");
+        assert_eq!(family_name("Dr. Savion Bode"), "Bode");
+        assert_eq!(family_name("Kyle Anderson MD"), "Anderson");
+        assert_eq!(family_name("Mrs. Marjory O'Kon"), "O'Kon");
+        assert_eq!(family_name("Velva Corwin Jr."), "Corwin");
+        assert_eq!(family_name(""), "");
+    }
+
+    #[test]
+    fn a_child_takes_a_real_family_name() {
+        let home = a_home();
+        let pool = FounderPool::uniform();
+        let mut people: sim_core::Arena<Person> = sim_core::Arena::new();
+        let mother = people.insert(found(arch(), &pool, &mut rng(3), home, Time::ORIGIN, 0.0));
+        let father = people.insert(found(arch(), &pool, &mut rng(4), home, Time::ORIGIN, 0.0));
+
+        let child = born_to(
+            arch(),
+            (mother, people.get(mother).unwrap()),
+            (father, people.get(father).unwrap()),
+            &mut rng(5),
+            Time::ORIGIN,
+            0.0,
+        );
+
+        let words: Vec<&str> = child.name.split(' ').collect();
+        assert_eq!(
+            words.len(),
+            2,
+            "a child's name is given plus family: {}",
+            child.name
+        );
+        assert!(
+            !["I", "II", "III", "IV", "V", "Jr.", "MD"].contains(&words[1]),
+            "child inherited a suffix as a surname: {}",
+            child.name
+        );
+        assert!(
+            !["Mr.", "Mrs.", "Ms.", "Miss", "Dr."].contains(&words[0]),
+            "child inherited a title as a given name: {}",
+            child.name
+        );
+        assert_eq!(child.parents, Some((mother, father)));
+        assert!(!child.ancestry.is_founder());
+    }
+
+    #[test]
+    fn a_child_inherits_from_both_parents() {
+        let home = a_home();
+        let pool = FounderPool::uniform();
+        let mut people: sim_core::Arena<Person> = sim_core::Arena::new();
+        let mother = people.insert(found(arch(), &pool, &mut rng(6), home, Time::ORIGIN, 0.0));
+        let father = people.insert(found(arch(), &pool, &mut rng(7), home, Time::ORIGIN, 0.0));
+
+        let child = born_to(
+            arch(),
+            (mother, people.get(mother).unwrap()),
+            (father, people.get(father).unwrap()),
+            &mut rng(8),
+            Time::ORIGIN,
+            0.0,
+        );
+
+        // Closer to its parents than to an unrelated person, at the genome level.
+        let stranger = found(arch(), &pool, &mut rng(9), home, Time::ORIGIN, 0.0);
+        let to_mother = child.genome.distance(&people.get(mother).unwrap().genome);
+        let to_stranger = child.genome.distance(&stranger.genome);
+        assert!(
+            to_mother < to_stranger,
+            "child {to_mother:.3} from its mother, {to_stranger:.3} from a stranger"
+        );
+    }
+
+    #[test]
+    fn upbringing_shifts_a_personality_without_deciding_it() {
+        let home = a_home();
+        let pool = FounderPool::uniform();
+        let bleak = found(arch(), &pool, &mut rng(10), home, Time::ORIGIN, -2.0);
+        let kind = found(arch(), &pool, &mut rng(10), home, Time::ORIGIN, 2.0);
+
+        // Same seed, so the same genome and the same idiosyncratic draws: the only
+        // difference between these two people is where they grew up.
+        assert_eq!(bleak.genome, kind.genome);
+        assert_ne!(bleak.personality, kind.personality);
+        assert_eq!(
+            bleak.origins.openness.genetic, kind.origins.openness.genetic,
+            "genes are untouched by upbringing"
+        );
+        assert!(
+            (kind.origins.openness.shared - bleak.origins.openness.shared).abs() > 1.0,
+            "upbringing should move the shared term substantially"
+        );
+    }
+
+    #[test]
     fn a_first_sighting_happens_once() {
         let mut p = somebody();
         assert!(p.first_sighting());
@@ -605,25 +900,41 @@ mod tests {
     fn the_same_seed_produces_the_same_person() {
         let home = a_home();
         let seed = WorldSeed::from_u128(0xfeed);
-        let one = generate(&mut seed.stream(Domain::Naming, 0, 0), home, Time::ORIGIN);
-        let two = generate(&mut seed.stream(Domain::Naming, 0, 0), home, Time::ORIGIN);
+        let pool = FounderPool::uniform();
+        let one = found(
+            arch(),
+            &pool,
+            &mut seed.stream(Domain::Genetics, 0, 0),
+            home,
+            Time::ORIGIN,
+            0.0,
+        );
+        let two = found(
+            arch(),
+            &pool,
+            &mut seed.stream(Domain::Genetics, 0, 0),
+            home,
+            Time::ORIGIN,
+            0.0,
+        );
         assert_eq!(one, two);
     }
 
     #[test]
     fn a_different_world_produces_different_people() {
         let home = a_home();
-        let a = generate(
-            &mut WorldSeed::from_u128(1).stream(Domain::Naming, 0, 0),
-            home,
-            Time::ORIGIN,
-        );
-        let b = generate(
-            &mut WorldSeed::from_u128(2).stream(Domain::Naming, 0, 0),
-            home,
-            Time::ORIGIN,
-        );
-        assert_ne!(a, b);
+        let pool = FounderPool::uniform();
+        let of = |seed: u128| {
+            found(
+                arch(),
+                &pool,
+                &mut WorldSeed::from_u128(seed).stream(Domain::Genetics, 0, 0),
+                home,
+                Time::ORIGIN,
+                0.0,
+            )
+        };
+        assert_ne!(of(1), of(2));
     }
 
     #[test]
@@ -631,7 +942,16 @@ mod tests {
         let home = a_home();
         let seed = WorldSeed::from_u128(77);
         let people: Vec<Person> = (0..200)
-            .map(|i| generate(&mut seed.stream(Domain::Naming, i, 0), home, Time::ORIGIN))
+            .map(|i| {
+                found(
+                    arch(),
+                    &FounderPool::uniform(),
+                    &mut seed.stream(Domain::Genetics, i, 0),
+                    home,
+                    Time::ORIGIN,
+                    0.0,
+                )
+            })
             .collect();
 
         for p in &people {
