@@ -1,0 +1,677 @@
+<title>life-rs — a world, read out</title>
+
+<style>
+  /* ---- tokens -------------------------------------------------------------
+     Cool, blue-biased neutrals: a register read under fluorescent light. The UI
+     carries no accent hue at all — selection is ink inverted — so nothing on the
+     page competes with the data colours. */
+  :root {
+    color-scheme: light;
+    --ground:    #eef1f2;
+    --surface:   #ffffff;
+    --raised:    #f6f8f9;
+    --line:      #d3dadd;
+    --line-firm: #b6c0c5;
+    --ink:       #131b21;
+    --ink-soft:  #3d4d57;
+    --muted:     #5a6b75;
+
+    --place-1: #5f8a16;
+    --place-2: #7b4bc4;
+    --place-3: #0095ad;
+    --place-4: #c0335e;
+    --place-5: #2f5fa8;
+
+    --genes:  #b05a0e;
+    --home:   #008c7e;
+    --chance: #7a55c2;
+
+    --display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    --body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --ground:    #0d1215;
+      --surface:   #141b20;
+      --raised:    #1a2329;
+      --line:      #253039;
+      --line-firm: #3a4952;
+      --ink:       #e6edf1;
+      --ink-soft:  #b7c6ce;
+      --muted:     #8496a1;
+
+      --place-1: #6e9628;
+      --place-2: #9a72e0;
+      --place-3: #1b94a8;
+      --place-4: #d8506f;
+      --place-5: #5a85c9;
+
+      --genes:  #d2761c;
+      --home:   #0fa192;
+      --chance: #9575e0;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ground:    #0d1215;
+    --surface:   #141b20;
+    --raised:    #1a2329;
+    --line:      #253039;
+    --line-firm: #3a4952;
+    --ink:       #e6edf1;
+    --ink-soft:  #b7c6ce;
+    --muted:     #8496a1;
+    --place-1: #6e9628;
+    --place-2: #9a72e0;
+    --place-3: #1b94a8;
+    --place-4: #d8506f;
+    --place-5: #5a85c9;
+    --genes:  #d2761c;
+    --home:   #0fa192;
+    --chance: #9575e0;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+    display: flex;
+    flex-direction: column;
+    gap: 34px;
+  }
+
+  h1, h2, h3 { font-family: var(--display); font-weight: 600; text-wrap: balance; margin: 0; }
+  h1 { font-size: 34px; line-height: 1.15; letter-spacing: -0.01em; }
+  h2 { font-size: 21px; line-height: 1.25; }
+  h3 { font-size: 16px; }
+  p { margin: 0; }
+
+  .eyebrow {
+    font-family: var(--body);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .note { color: var(--muted); font-size: 13.5px; max-width: 64ch; }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  /* ---- masthead ---------------------------------------------------------- */
+  .masthead {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 28px 44px;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--line-firm);
+  }
+  .masthead .lede { display: flex; flex-direction: column; gap: 8px; max-width: 52ch; }
+  .seed { font-family: var(--mono); font-size: 12px; color: var(--muted); word-break: break-all; }
+  .readout { display: flex; gap: 30px; }
+  .tile { display: flex; flex-direction: column; gap: 2px; }
+  .tile .value { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 27px; line-height: 1.1; }
+  .tile .label { font-size: 11px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
+
+  /* ---- panels ------------------------------------------------------------ */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 22px 24px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .panel-head { display: flex; flex-direction: column; gap: 5px; }
+
+  .scroll { overflow-x: auto; }
+
+  /* ---- legend ------------------------------------------------------------ */
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; }
+  .legend button {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: none; border: 0; padding: 2px 0; cursor: pointer;
+    font: inherit; color: var(--ink-soft);
+  }
+  .legend button[aria-pressed="false"] { color: var(--muted); opacity: 0.5; }
+  .swatch { width: 11px; height: 11px; border-radius: 2px; flex: none; }
+
+  /* ---- chart ------------------------------------------------------------- */
+  .plot-wrap { position: relative; }
+  svg { display: block; width: 100%; height: auto; }
+  .grid-line { stroke: var(--line); stroke-width: 1; }
+  .axis-text { fill: var(--muted); font-family: var(--mono); font-size: 10px; }
+  .series-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .series-label { font-family: var(--mono); font-size: 10.5px; font-weight: 600; }
+  .crosshair { stroke: var(--line-firm); stroke-width: 1; stroke-dasharray: 3 3; }
+
+  .tip {
+    position: absolute; pointer-events: none; z-index: 5;
+    background: var(--surface); border: 1px solid var(--line-firm);
+    border-radius: 3px; padding: 9px 11px; font-size: 12.5px;
+    box-shadow: 0 4px 14px rgb(0 0 0 / 0.13);
+    min-width: 148px;
+  }
+  .tip[hidden] { display: none; }
+  .tip .tip-head { font-family: var(--mono); color: var(--muted); margin-bottom: 5px; }
+  .tip-row { display: flex; align-items: center; gap: 7px; justify-content: space-between; }
+  .tip-row .who { display: inline-flex; align-items: center; gap: 6px; }
+
+  /* ---- quarters ---------------------------------------------------------- */
+  .quarters { display: grid; grid-template-columns: repeat(auto-fit, minmax(196px, 1fr)); gap: 12px; }
+  .quarter {
+    text-align: left; cursor: pointer; font: inherit; color: inherit;
+    background: var(--raised); border: 1px solid var(--line);
+    border-left: 3px solid var(--qc); border-radius: 3px;
+    padding: 13px 14px; display: flex; flex-direction: column; gap: 9px;
+  }
+  .quarter[aria-pressed="true"] { background: var(--ink); color: var(--ground); border-color: var(--ink); }
+  .quarter[aria-pressed="true"] .q-arch,
+  .quarter[aria-pressed="true"] .meter-name { color: var(--ground); opacity: 0.75; }
+  .quarter[aria-pressed="true"] .meter-track { background: rgb(255 255 255 / 0.2); }
+  .q-name { font-family: var(--display); font-size: 17px; }
+  .q-arch { font-size: 11.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+  .meters { display: flex; flex-direction: column; gap: 4px; }
+  .meter { display: grid; grid-template-columns: 62px 1fr 34px; align-items: center; gap: 8px; font-size: 11px; }
+  .meter-name { color: var(--muted); }
+  .meter-track { height: 5px; border-radius: 2px; background: var(--line); overflow: hidden; }
+  .meter-fill { height: 100%; border-radius: 2px; background: var(--qc); }
+  .meter-val { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+
+  /* ---- split ------------------------------------------------------------- */
+  .split { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 20px; align-items: start; }
+  @media (max-width: 860px) { .split { grid-template-columns: 1fr; } }
+
+  .search {
+    width: 100%; padding: 8px 10px; font: inherit; font-size: 13.5px;
+    background: var(--raised); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 3px;
+  }
+  .search:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+
+  .register { max-height: 460px; overflow-y: auto; border-top: 1px solid var(--line); }
+  .row {
+    width: 100%; display: grid; grid-template-columns: 9px 1fr auto auto;
+    align-items: center; gap: 10px; padding: 7px 4px;
+    background: none; border: 0; border-bottom: 1px solid var(--line);
+    font: inherit; color: inherit; text-align: left; cursor: pointer;
+  }
+  .row:hover { background: var(--raised); }
+  .row[aria-current="true"] { background: var(--ink); color: var(--ground); }
+  .row .dot { width: 9px; height: 9px; border-radius: 50%; }
+  .row .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; }
+  .row .age, .row .stand {
+    font-family: var(--mono); font-variant-numeric: tabular-nums;
+    font-size: 12px; color: var(--muted);
+  }
+  .row[aria-current="true"] .age, .row[aria-current="true"] .stand { color: var(--ground); opacity: 0.8; }
+  .row.gone .who { color: var(--muted); }
+  .row.gone[aria-current="true"] .who { color: var(--ground); }
+
+  /* ---- dossier ----------------------------------------------------------- */
+  .dossier-head { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    font-size: 11.5px; padding: 2px 8px; border-radius: 2px;
+    border: 1px solid var(--line-firm); color: var(--ink-soft); background: var(--raised);
+  }
+  button.chip { cursor: pointer; font-family: inherit; }
+  button.chip:hover { border-color: var(--ink); }
+  .kin { display: grid; grid-template-columns: 78px 1fr; gap: 7px 12px; font-size: 13px; align-items: start; }
+  .kin dt { color: var(--muted); font-size: 11.5px; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 3px; }
+  .kin dd { margin: 0; }
+
+  .factor-rows { display: flex; flex-direction: column; gap: 7px; }
+  .factor { display: grid; grid-template-columns: 118px 1fr 46px; align-items: center; gap: 10px; }
+  .factor .fname { font-size: 12px; color: var(--ink-soft); }
+  .factor .ftotal { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; text-align: right; }
+
+  /* ---- balance ----------------------------------------------------------- */
+  .shares { display: flex; height: 30px; border-radius: 3px; overflow: hidden; gap: 2px; }
+  .share { position: relative; }
+  .measures { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); gap: 12px; }
+  .measure { display: flex; flex-direction: column; gap: 1px; padding: 11px 13px; background: var(--raised); border: 1px solid var(--line); border-radius: 3px; }
+  .measure .value { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 20px; }
+  .measure .label { font-size: 11.5px; color: var(--muted); }
+  .measure .band { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .measure.out { border-color: var(--line-firm); }
+  .measure.out .band { color: var(--ink); font-weight: 600; text-decoration: underline dotted; text-underline-offset: 3px; }
+
+  /* ---- chronicle --------------------------------------------------------- */
+  .filters { display: flex; flex-wrap: wrap; gap: 6px; }
+  .filters button {
+    font: inherit; font-size: 12px; padding: 3px 10px; cursor: pointer;
+    background: var(--raised); color: var(--ink-soft);
+    border: 1px solid var(--line); border-radius: 2px;
+  }
+  .filters button[aria-pressed="true"] { background: var(--ink); color: var(--ground); border-color: var(--ink); }
+  .events { max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; }
+  .event { display: grid; grid-template-columns: 54px 1fr; gap: 12px; padding: 5px 2px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .event .yr { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
+
+  :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="page">
+
+  <header class="masthead">
+    <div class="lede">
+      <p class="eyebrow">life-rs · a simulated world, read out</p>
+      <h1 id="title">Five quarters that began identical</h1>
+      <p class="seed" id="seed"></p>
+    </div>
+    <div class="readout">
+      <div class="tile"><span class="value num" id="stat-year"></span><span class="label">years run</span></div>
+      <div class="tile"><span class="value num" id="stat-living"></span><span class="label">living</span></div>
+      <div class="tile"><span class="value num" id="stat-ever"></span><span class="label">ever lived</span></div>
+    </div>
+  </header>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Affluence, year by year</h2>
+      <p class="note">Every quarter starts at the same middling value. Nothing in the
+        simulation writes "slum" or "enclave" anywhere — what separates them is who ends
+        up living in each, and what that does to the children raised there.</p>
+    </div>
+    <div class="legend" id="legend"></div>
+    <div class="plot-wrap">
+      <div id="plot" class="scroll"></div>
+      <div class="tip" id="tip" hidden></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>The quarters as they stand</h2>
+      <p class="note">Archetypes are read off the numbers, not assigned. Select one to
+        filter the register below.</p>
+    </div>
+    <div class="quarters" id="quarters"></div>
+  </section>
+
+  <div class="split">
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Register</h2>
+        <p class="note" id="register-note"></p>
+      </div>
+      <input class="search" id="search" type="search" placeholder="Search by name" aria-label="Search the register by name" />
+      <div class="register" id="register" role="list"></div>
+    </section>
+
+    <section class="panel" id="dossier"></section>
+  </div>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Inheritance, circumstance, and chance</h2>
+      <p class="note">How much of where someone ends up is accounted for by each. The
+        entangled share is hatched because it genuinely cannot be split: parents supply
+        both the genes and the neighbourhood, so the two causes are correlated from
+        birth.</p>
+    </div>
+    <div class="shares" id="shares"></div>
+    <div class="legend" id="shares-legend"></div>
+    <div class="measures" id="measures"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Chronicle</h2>
+      <p class="note">Every pivotal moment the run recorded.</p>
+    </div>
+    <div class="filters" id="filters"></div>
+    <div class="events" id="events"></div>
+  </section>
+
+</div>
+
+<script>
+const WORLD = __WORLD_DATA__;
+
+const PLACE_VARS = ["--place-1", "--place-2", "--place-3", "--place-4", "--place-5"];
+const placeColor = i => (i === null || i === undefined) ? "var(--muted)" : `var(${PLACE_VARS[i % PLACE_VARS.length]})`;
+const CAUSES = [
+  { key: "genes",  label: "genes",      css: "var(--genes)" },
+  { key: "home",   label: "upbringing", css: "var(--home)" },
+  { key: "chance", label: "chance",     css: "var(--chance)" },
+];
+
+const $ = id => document.getElementById(id);
+const text = (el, value) => { el.textContent = value; };
+const fmt = (v, dp = 2) => (v === null || v === undefined) ? "—" : v.toFixed(dp);
+const signed = (v, dp = 2) => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(dp);
+
+/* ---- masthead ---------------------------------------------------------- */
+text($("seed"), WORLD.seed);
+text($("stat-year"), WORLD.year);
+text($("stat-living"), WORLD.living);
+text($("stat-ever"), WORLD.everLived);
+
+/* ---- affluence chart --------------------------------------------------- */
+const hidden = new Set();
+const W = 940, H = 330, PAD = { t: 14, r: 96, b: 30, l: 44 };
+
+function drawPlot() {
+  const series = WORLD.series;
+  if (!series.length) { $("plot").innerHTML = ""; return; }
+  const maxYear = series[series.length - 1].year;
+  const x = y => PAD.l + (y / Math.max(maxYear, 1)) * (W - PAD.l - PAD.r);
+  const yScale = v => PAD.t + (1 - v) * (H - PAD.t - PAD.b);
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Affluence of each quarter over ${maxYear} years">`;
+  for (let g = 0; g <= 4; g++) {
+    const v = g / 4, yy = yScale(v);
+    svg += `<line class="grid-line" x1="${PAD.l}" x2="${W - PAD.r}" y1="${yy}" y2="${yy}" />`;
+    svg += `<text class="axis-text" x="${PAD.l - 8}" y="${yy + 3}" text-anchor="end">${v.toFixed(2)}</text>`;
+  }
+  for (let t = 0; t <= maxYear; t += Math.max(10, Math.round(maxYear / 10 / 10) * 10)) {
+    svg += `<text class="axis-text" x="${x(t)}" y="${H - PAD.b + 16}" text-anchor="middle">${t}</text>`;
+  }
+  svg += `<text class="axis-text" x="${PAD.l}" y="${H - 3}">years since founding</text>`;
+
+  const last = series[series.length - 1];
+  const shown = WORLD.places
+    .map((place, i) => ({ place, i, y: yScale(last.affluence[i] ?? 0) }))
+    .filter(d => !hidden.has(d.i));
+
+  shown.forEach(({ place, i }) => {
+    const pts = series.map(s => `${x(s.year).toFixed(1)},${yScale(s.affluence[i] ?? 0).toFixed(1)}`);
+    svg += `<path class="series-line" stroke="${placeColor(i)}" d="M${pts.join("L")}" />`;
+  });
+
+  // Direct labels are the secondary encoding that lets the palette pass its CVD check,
+  // so they have to stay legible: quarters that finish at nearly the same value would
+  // otherwise print on top of one another. Nudge them apart, keeping the dot on the line.
+  const GAP = 13;
+  const placed = shown.slice().sort((a, b) => a.y - b.y);
+  placed.forEach((d, k) => {
+    d.labelY = k === 0 ? d.y : Math.max(d.y, placed[k - 1].labelY + GAP);
+  });
+
+  placed.forEach(({ place, i, y, labelY }) => {
+    const lx = x(last.year);
+    svg += `<circle cx="${lx}" cy="${y}" r="4" fill="${placeColor(i)}" stroke="var(--surface)" stroke-width="2" />`;
+    if (Math.abs(labelY - y) > 1.5) {
+      svg += `<path d="M${lx + 4} ${y} L${lx + 7} ${labelY}" stroke="${placeColor(i)}" stroke-width="1" fill="none" opacity="0.6" />`;
+    }
+    svg += `<text class="series-label" x="${lx + 9}" y="${labelY + 3.5}" fill="${placeColor(i)}">${place.name}</text>`;
+  });
+  svg += `<line class="crosshair" id="hair" y1="${PAD.t}" y2="${H - PAD.b}" x1="-99" x2="-99" />`;
+  svg += `</svg>`;
+  $("plot").innerHTML = svg;
+}
+
+function drawLegend() {
+  $("legend").innerHTML = WORLD.places.map((p, i) =>
+    `<button type="button" data-i="${i}" aria-pressed="${!hidden.has(i)}">
+       <span class="swatch" style="background:${placeColor(i)}"></span>${p.name}
+     </button>`).join("");
+  $("legend").querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
+    const i = Number(b.dataset.i);
+    hidden.has(i) ? hidden.delete(i) : hidden.add(i);
+    drawLegend(); drawPlot();
+  }));
+}
+
+/* crosshair + tooltip */
+const plotWrap = document.querySelector(".plot-wrap");
+plotWrap.addEventListener("mousemove", ev => {
+  const svg = plotWrap.querySelector("svg");
+  if (!svg || !WORLD.series.length) return;
+  const box = svg.getBoundingClientRect();
+  const scale = W / box.width;
+  const sx = (ev.clientX - box.left) * scale;
+  if (sx < PAD.l || sx > W - PAD.r) { $("tip").hidden = true; return; }
+
+  const maxYear = WORLD.series[WORLD.series.length - 1].year;
+  const frac = (sx - PAD.l) / (W - PAD.l - PAD.r);
+  const year = Math.round(frac * maxYear);
+  const sample = WORLD.series.reduce((best, s) =>
+    Math.abs(s.year - year) < Math.abs(best.year - year) ? s : best, WORLD.series[0]);
+
+  const hair = svg.querySelector("#hair");
+  const hx = PAD.l + (sample.year / Math.max(maxYear, 1)) * (W - PAD.l - PAD.r);
+  hair.setAttribute("x1", hx); hair.setAttribute("x2", hx);
+
+  const rows = WORLD.places.map((p, i) => hidden.has(i) ? "" :
+    `<div class="tip-row"><span class="who"><span class="swatch" style="background:${placeColor(i)}"></span>${p.name}</span>
+     <span class="num">${fmt(sample.affluence[i])}</span></div>`).join("");
+  const tip = $("tip");
+  tip.innerHTML = `<div class="tip-head">year ${sample.year} · ${sample.living} living</div>${rows}`;
+  tip.hidden = false;
+  const left = Math.min(ev.clientX - box.left + 16, box.width - tip.offsetWidth - 8);
+  tip.style.left = Math.max(0, left) + "px";
+  tip.style.top = Math.max(0, ev.clientY - box.top - 10) + "px";
+});
+plotWrap.addEventListener("mouseleave", () => {
+  $("tip").hidden = true;
+  const hair = plotWrap.querySelector("#hair");
+  if (hair) { hair.setAttribute("x1", -99); hair.setAttribute("x2", -99); }
+});
+
+/* ---- quarters ----------------------------------------------------------- */
+let placeFilter = null;
+const METERS = [
+  ["affluence", "affluence"], ["safety", "safety"], ["bonding", "bonding"],
+  ["bridging", "bridging"], ["opportunity", "work"],
+];
+
+function drawQuarters() {
+  $("quarters").innerHTML = WORLD.places.map((p, i) => `
+    <button type="button" class="quarter" data-i="${i}" aria-pressed="${placeFilter === i}"
+            style="--qc:${placeColor(i)}">
+      <span>
+        <span class="q-name">${p.name}</span><br />
+        <span class="q-arch">${p.archetype} · ${p.residents} living</span>
+      </span>
+      <span class="meters">
+        ${METERS.map(([key, label]) => `
+          <span class="meter">
+            <span class="meter-name">${label}</span>
+            <span class="meter-track"><span class="meter-fill" style="width:${Math.round((p[key] ?? 0) * 100)}%"></span></span>
+            <span class="meter-val">${fmt(p[key])}</span>
+          </span>`).join("")}
+      </span>
+    </button>`).join("");
+  $("quarters").querySelectorAll(".quarter").forEach(b => b.addEventListener("click", () => {
+    const i = Number(b.dataset.i);
+    placeFilter = placeFilter === i ? null : i;
+    drawQuarters(); drawRegister();
+  }));
+}
+
+/* ---- register ----------------------------------------------------------- */
+let selected = null;
+let query = "";
+
+function matching() {
+  return WORLD.people
+    .map((p, i) => ({ p, i }))
+    .filter(({ p }) => placeFilter === null || p.place === placeFilter)
+    .filter(({ p }) => !query || p.name.toLowerCase().includes(query))
+    .sort((a, b) => (b.p.alive - a.p.alive) || (b.p.standing - a.p.standing));
+}
+
+function drawRegister() {
+  const rows = matching();
+  const where = placeFilter === null ? "everyone" : `${WORLD.places[placeFilter].name} only`;
+  text($("register-note"), `${rows.length} of ${WORLD.people.length} lives — ${where}. Select anyone to open their dossier.`);
+  $("register").innerHTML = rows.slice(0, 400).map(({ p, i }) => `
+    <button type="button" role="listitem" class="row${p.alive ? "" : " gone"}" data-i="${i}" aria-current="${selected === i}">
+      <span class="dot" style="background:${placeColor(p.place)}"></span>
+      <span class="who">${p.name}${p.alive ? "" : " †"}</span>
+      <span class="age">${p.age}y</span>
+      <span class="stand">${fmt(p.standing)}</span>
+    </button>`).join("");
+  $("register").querySelectorAll(".row").forEach(b => b.addEventListener("click", () => select(Number(b.dataset.i))));
+}
+
+$("search").addEventListener("input", e => { query = e.target.value.trim().toLowerCase(); drawRegister(); });
+
+/* ---- dossier ------------------------------------------------------------ */
+function personChip(index) {
+  if (index === null || index === undefined) return "";
+  const p = WORLD.people[index];
+  if (!p) return "";
+  return `<button type="button" class="chip" data-goto="${index}">${p.name}${p.alive ? "" : " †"}</button>`;
+}
+
+function factorBar(name, parts) {
+  // Diverging stack: each contribution sits left or right of zero, so the sign of a
+  // cause is visible as direction rather than having to be read off a number.
+  const total = parts.reduce((a, b) => a + b, 0);
+  const SPAN = 2.6;
+  const scale = v => (v / SPAN) * 50;
+  let posOffset = 50, negOffset = 50;
+  const segs = parts.map((v, k) => {
+    let w = Math.abs(scale(v));
+    if (w < 0.15) return "";
+    // Clamp to the track. A strongly expressed factor can otherwise run past the end
+    // of its own bar and print over the number beside it.
+    let left;
+    if (v >= 0) { w = Math.min(w, 100 - posOffset); left = posOffset; posOffset += w; }
+    else { w = Math.min(w, negOffset); negOffset -= w; left = negOffset; }
+    if (w <= 0) return "";
+    return `<span style="position:absolute;left:${left}%;width:${w}%;top:0;bottom:0;
+             background:${CAUSES[k].css};border-radius:1px;box-shadow:0 0 0 1px var(--surface)"
+             title="${CAUSES[k].label} ${signed(v)}"></span>`;
+  }).join("");
+  return `
+    <div class="factor">
+      <span class="fname">${name}</span>
+      <span style="position:relative;height:16px;background:var(--raised);border-radius:2px">
+        ${segs}
+        <span style="position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--line-firm)"></span>
+      </span>
+      <span class="ftotal">${signed(total)}</span>
+    </div>`;
+}
+
+function select(index) {
+  selected = index;
+  drawRegister();
+  const p = WORLD.people[index];
+  const place = p.place === null ? null : WORLD.places[p.place];
+
+  $("dossier").innerHTML = `
+    <div class="panel-head">
+      <div class="dossier-head">
+        <h2>${p.name}</h2>
+        <span class="q-arch">${p.alive ? `${p.age} years old` : `died at ${p.age}, of ${p.died}`}</span>
+      </div>
+      <div class="chips">
+        <span class="chip">${p.sex}</span>
+        <span class="chip">${p.outlook}</span>
+        <span class="chip">from ${p.country}</span>
+        ${place ? `<span class="chip" style="border-color:${placeColor(p.place)}">${place.name}</span>` : `<span class="chip">no fixed home</span>`}
+        ${p.mentored ? `<span class="chip">found a patron</span>` : ""}
+      </div>
+    </div>
+
+    <dl class="kin">
+      <dt>Standing</dt><dd class="num">${fmt(p.standing)} <span style="color:var(--muted)">peak, in adult life</span></dd>
+      <dt>Raised</dt><dd class="num">${signed(p.upbringing)} <span style="color:var(--muted)">quality of the places of their childhood</span></dd>
+      <dt>Parents</dt><dd class="chips">${p.parents ? p.parents.map(personChip).join("") : `<span class="chip">of the founding generation</span>`}</dd>
+      ${p.partner !== null ? `<dt>Partner</dt><dd class="chips">${personChip(p.partner)}</dd>` : ""}
+      ${p.children.length ? `<dt>Children</dt><dd class="chips">${p.children.map(personChip).join("")}</dd>` : ""}
+    </dl>
+
+    <div class="panel-head" style="gap:2px">
+      <h3>Where their temperament came from</h3>
+      <p class="note">Each factor split into the three causes. Kept apart rather than
+        summed, so the question "why are they like that" has an answer.</p>
+    </div>
+    <div class="factor-rows">
+      ${WORLD.factorNames.map((n, k) => factorBar(n, p.factors[k])).join("")}
+    </div>
+    <div class="legend">
+      ${CAUSES.map(c => `<span style="display:inline-flex;align-items:center;gap:7px;color:var(--ink-soft);font-size:13px">
+        <span class="swatch" style="background:${c.css}"></span>${c.label}</span>`).join("")}
+    </div>`;
+
+  $("dossier").querySelectorAll("[data-goto]").forEach(b =>
+    b.addEventListener("click", () => select(Number(b.dataset.goto))));
+}
+
+/* ---- balance ------------------------------------------------------------ */
+function drawBalance() {
+  const b = WORLD.balance;
+  if (!b.shares) { $("shares").innerHTML = ""; return; }
+  const parts = [
+    { label: "genes", v: b.shares.genes, css: "var(--genes)" },
+    { label: "entangled", v: b.shares.entangled, css: "var(--genes)", hatch: true },
+    { label: "upbringing", v: b.shares.environment, css: "var(--home)" },
+    { label: "chance", v: b.shares.luck, css: "var(--chance)" },
+  ];
+  $("shares").innerHTML = parts.map(p => {
+    const bg = p.hatch
+      ? `repeating-linear-gradient(135deg, var(--genes) 0 6px, var(--home) 6px 12px)`
+      : p.css;
+    return `<span class="share" style="flex:${Math.max(p.v, 0.004)};background:${bg}" title="${p.label} ${Math.round(p.v * 100)}%"></span>`;
+  }).join("");
+  $("shares-legend").innerHTML = parts.map(p => {
+    const sw = p.hatch
+      ? `background:repeating-linear-gradient(135deg, var(--genes) 0 4px, var(--home) 4px 8px)`
+      : `background:${p.css}`;
+    return `<span style="display:inline-flex;align-items:center;gap:7px;color:var(--ink-soft);font-size:13px">
+      <span class="swatch" style="${sw}"></span>${p.label} <span class="num">${Math.round(p.v * 100)}%</span></span>`;
+  }).join("");
+
+  const measures = [
+    { label: "intergenerational elasticity", v: b.elasticity, lo: 0.20, hi: 0.50 },
+    { label: "sibling correlation", v: b.siblings, lo: 0.25, hi: 0.65 },
+    { label: "mobility", v: b.mobility, lo: 0.40, hi: 0.90 },
+    { label: "upbringing gap (σ)", v: b.upbringingGap, lo: 0.30, hi: 1.20 },
+  ];
+  $("measures").innerHTML = measures.map(m => {
+    const within = m.v !== null && m.v >= m.lo && m.v <= m.hi;
+    return `<div class="measure${within ? "" : " out"}">
+      <span class="value">${fmt(m.v)}</span>
+      <span class="label">${m.label}</span>
+      <span class="band">${within ? "within" : "outside"} ${m.lo.toFixed(2)}–${m.hi.toFixed(2)}</span>
+    </div>`;
+  }).join("");
+}
+
+/* ---- chronicle ---------------------------------------------------------- */
+const KINDS = ["all", "birth", "death", "pairing", "move", "patron", "place"];
+let kindFilter = "all";
+
+function drawEvents() {
+  $("filters").innerHTML = KINDS.map(k =>
+    `<button type="button" data-k="${k}" aria-pressed="${kindFilter === k}">${k}</button>`).join("");
+  $("filters").querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
+    kindFilter = b.dataset.k; drawEvents();
+  }));
+
+  const rows = WORLD.events.filter(e => kindFilter === "all" || e.kind === kindFilter);
+  $("events").innerHTML = rows.slice(-300).reverse()
+    .map(e => `<div class="event"><span class="yr">yr ${e.year}</span><span>${e.text}</span></div>`).join("")
+    || `<p class="note">Nothing of that kind happened.</p>`;
+}
+
+/* ---- go ----------------------------------------------------------------- */
+drawLegend(); drawPlot(); drawQuarters(); drawRegister(); drawBalance(); drawEvents();
+const opener = matching()[0];
+if (opener) select(opener.i);
+window.addEventListener("resize", drawPlot);
+</script>

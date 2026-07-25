@@ -279,6 +279,15 @@ pub struct Place {
     pub env: EnvironmentVector,
 }
 
+/// How fast housing supply follows demand, per year.
+///
+/// Without this, capacity is fixed at whatever the founding population needed and every
+/// quarter is permanently overcrowded once the world grows. Crowding then dominates
+/// every choice of where to live, appeal equalises across the inhabited places, and no
+/// neighbourhood is ever meaningfully better or worse than another — which quietly
+/// switched off the entire environment mechanism.
+const BUILD_RATE: f32 = 0.06;
+
 /// How fast a place's character follows its residents.
 ///
 /// Slow on purpose. A neighbourhood that re-derived itself instantly from this year's
@@ -302,6 +311,7 @@ impl Place {
     /// residents have; safety and services follow affluence; bonding capital is what
     /// low turnover builds; norms are literally what people did.
     pub fn observe(&mut self, census: &Census) {
+        self.build_for(census.households);
         let occupancy = (census.households as f32 / self.capacity as f32).clamp(0.0, 1.5);
 
         // An empty place is vacant, not destitute. Reading affluence off nobody gives
@@ -366,6 +376,19 @@ impl Place {
 
     pub fn archetype(&self) -> Archetype {
         self.env.archetype()
+    }
+
+    /// Housing follows demand, slowly and in one direction.
+    ///
+    /// Somewhere crowded gets built out; somewhere emptied keeps its buildings, because
+    /// houses do not disappear when the people do. The lag is what lets a place be
+    /// genuinely overcrowded for a while rather than instantly accommodating everyone.
+    fn build_for(&mut self, households: u32) {
+        if households > self.capacity {
+            let wanted = households as f32;
+            let grown = self.capacity as f32 + (wanted - self.capacity as f32) * BUILD_RATE;
+            self.capacity = grown.ceil() as u32;
+        }
     }
 
     /// Whether a household of this standing could get in, given how full it is.
@@ -687,6 +710,42 @@ mod tests {
         // Once full, it wants better than its own average — which is what excludes.
         assert!(!enclave.admits(enclave.env.affluence - 0.1, 1.0));
         assert!(enclave.admits(enclave.env.affluence + 0.1, 1.0));
+    }
+
+    #[test]
+    fn housing_follows_demand_but_never_vanishes() {
+        let mut place = Place::new("Somewhere", 20);
+        for _ in 0..60 {
+            place.observe(&census(80, 0.5, 0));
+        }
+        assert!(
+            place.capacity >= 70,
+            "a crowded quarter should get built out: capacity {}",
+            place.capacity
+        );
+
+        // And then everyone leaves. The buildings stay.
+        let grown = place.capacity;
+        for _ in 0..40 {
+            place.observe(&census(0, 0.0, 0));
+        }
+        assert_eq!(
+            place.capacity, grown,
+            "houses do not disappear with the people"
+        );
+    }
+
+    #[test]
+    fn building_lags_behind_the_crowd() {
+        // Instant accommodation would mean nowhere is ever crowded, and crowding is
+        // half of what makes one quarter different from another.
+        let mut place = Place::new("Somewhere", 10);
+        place.observe(&census(100, 0.5, 0));
+        assert!(
+            place.capacity < 30,
+            "one year should not house everyone: capacity {}",
+            place.capacity
+        );
     }
 
     #[test]

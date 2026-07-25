@@ -42,6 +42,25 @@ pub const GESTATION: Duration = Duration::from_days(273);
 /// honest failure mode; a knife-edge constant would only look stable until it wasn't.
 const CONCEPTION_PER_YEAR: f32 = 0.16;
 
+/// How far below a neighbourhood's average a household can fall before being priced
+/// out of it.
+///
+/// Admission alone sorts nobody: it only ever tested newcomers, and there were none —
+/// founders start somewhere, children inherit their parents' quarter, and once inside
+/// a household was never asked again. So the best place accumulated everyone and the
+/// five quarters ended up indistinguishable. Rents rise; people who fall behind leave.
+/// The margin is hysteresis, so a household near the line does not shuttle every year.
+const DISPLACEMENT_MARGIN: f32 = 0.18;
+
+/// How much a household minds crowding, per multiple of a place's capacity.
+///
+/// The missing negative feedback. Admission keeps newcomers out of a full place, but
+/// nothing was pushing anyone out of one, and a new household founded by a couple
+/// inherits its parents' neighbourhood without passing admission at all. So the best
+/// quarter accumulated everyone: measured at 160 years, all 1,260 survivors lived in one
+/// place at twenty-five times its capacity while the other four stood empty.
+const CROWDING_AVERSION: f32 = 0.5;
+
 /// How much better a neighbourhood has to be before a household will move to it.
 ///
 /// Without a threshold, households shuffle endlessly between places that differ in the
@@ -598,7 +617,10 @@ impl World {
         env.stress = (env.stress + subject.needs().total_pressure()).clamp(0.0, 1.0);
         let situation = Situation { phase, env };
 
-        let first = subject.first_sighting();
+        // Only people who were here before the simulation started introduce themselves.
+        // Everyone since has a birth in the chronicle already, and a newborn announcing
+        // that they are nought years old and level-headed reads as nonsense.
+        let first = subject.first_sighting() && subject.parents.is_none();
         let finished = subject.settle_intent_only(at);
         let outcome = subject.step(at, &situation, &mut rng);
         let death = subject.death();
@@ -645,12 +667,12 @@ impl World {
                     .schedule_at(at + choice.deed.duration(), Task::PersonActs(id));
             }
             None => {
+                // Dying between birthdays. This has to go through the same route as
+                // any other death: recording it and leaving the body partnered was
+                // how a widow stayed married to a corpse until the next birthday
+                // came round to notice — and if the run ended first, forever.
                 if let Some((_, cause)) = death {
-                    self.chronicle.record(
-                        at,
-                        Salience::Pivotal,
-                        Happening::PersonDies { person: id, cause },
-                    );
+                    self.record_death(at, id, cause);
                 }
             }
         }
@@ -1085,30 +1107,54 @@ impl World {
                 .filter(|p| p.is_alive() && !p.stage(at).is_dependent())
                 .all(|p| p.age(at).years() < RESTLESS_UNTIL);
 
+            let occupancy_of = |world: &World, id: PlaceId| {
+                world
+                    .places
+                    .get(id)
+                    .map(|p| world.society.households_in(id).count() as f32 / p.capacity as f32)
+                    .unwrap_or(0.0)
+            };
+            // What a place is worth to this household: what it offers, less how packed
+            // it is. Crowding has to enter here rather than only in admission, or a
+            // desirable quarter fills without limit and nobody ever leaves.
+            let appeal = |world: &World, id: PlaceId| {
+                let Some(place) = world.places.get(id) else {
+                    return f32::MIN;
+                };
+                let offered = if restless {
+                    place.env.job_opportunity
+                } else {
+                    place.env.quality()
+                };
+                offered - CROWDING_AVERSION * (occupancy_of(world, id) - 1.0).max(0.0)
+            };
+
+            // Can they still afford where they are? Falling well behind the local
+            // average means leaving, whether or not anywhere better will have them.
+            let priced_out = current.is_some_and(|c| {
+                self.places.get(c).is_some_and(|place| {
+                    !place.admits(standing + DISPLACEMENT_MARGIN, occupancy_of(self, c))
+                })
+            });
+
             let best = self
                 .places
-                .iter()
-                .filter(|(id, place)| {
-                    let occupancy =
-                        self.society.households_in(*id).count() as f32 / place.capacity as f32;
+                .ids()
+                .filter(|id| {
                     let means = if restless {
                         standing + YOUNG_MOVER_SLACK
                     } else {
                         standing
                     };
-                    place.admits(means, occupancy)
+                    // Staying put needs no admitting — unless they have been priced
+                    // out of it, in which case it is no longer an option either.
+                    (current == Some(*id) && !priced_out)
+                        || self
+                            .places
+                            .get(*id)
+                            .is_some_and(|p| p.admits(means, occupancy_of(self, *id)))
                 })
-                .max_by(|(_, a), (_, b)| {
-                    let worth = |e: &society::EnvironmentVector| {
-                        if restless {
-                            e.job_opportunity
-                        } else {
-                            e.quality()
-                        }
-                    };
-                    worth(&a.env).total_cmp(&worth(&b.env))
-                })
-                .map(|(id, _)| id);
+                .max_by(|a, b| appeal(self, *a).total_cmp(&appeal(self, *b)));
 
             let Some(best) = best else { continue };
             if current == Some(best) {
@@ -1117,16 +1163,13 @@ impl World {
 
             // Moving costs something, so only a real improvement is worth it —
             // otherwise households churn between near-identical places forever.
-            let gain = self
-                .places
-                .get(best)
-                .map(|p| p.env.quality())
-                .unwrap_or(0.0)
-                - current
-                    .and_then(|c| self.places.get(c))
-                    .map(|p| p.env.quality())
-                    .unwrap_or(0.0);
-            if current.is_some() && gain < MOVE_THRESHOLD {
+            // Against appeal, not raw quality. Comparing what the two places offer
+            // while ignoring how packed they are rejected every move out of a crowded
+            // quarter, which is how one neighbourhood came to hold everybody.
+            let gain = appeal(self, best) - current.map(|c| appeal(self, c)).unwrap_or(f32::MIN);
+            // Being priced out is not a preference, so the usual "is it worth the
+            // move" test does not apply.
+            if !priced_out && current.is_some() && gain < MOVE_THRESHOLD {
                 continue;
             }
 
@@ -1215,6 +1258,7 @@ impl World {
 mod tests {
     use super::*;
     use life::{LifeStage, Need};
+    use std::collections::BTreeSet;
 
     /// One world, lived for three generations, shared by every test needing lineages.
     ///
@@ -2020,27 +2064,35 @@ mod tests {
 
         let somewhere = world.places.ids().next().unwrap();
         assert_eq!(world.detail_of(somewhere), Detail::Coarse);
-        let before = world
-            .chronicle
-            .iter()
-            .filter(|r| {
-                matches!(r.kind, Happening::PersonDoes { person, .. }
-                if world.society.place_of(person) == Some(somewhere))
-            })
-            .count();
 
+        // Fix the cast before watching. Asking who lives here *now* and applying that
+        // to the whole back-catalogue counts a person's past only while they stay put,
+        // so anyone who dies or is displaced in the meantime silently deletes their own
+        // history and the total can fall. The chronicle only grows; the measure of it
+        // should only grow too.
+        let watched: BTreeSet<PersonId> = world
+            .society
+            .households_in(somewhere)
+            .flat_map(|(_, h)| h.members.iter().copied())
+            .collect();
+        assert!(!watched.is_empty(), "nobody lives in the watched place");
+        let deeds = |world: &World| {
+            world
+                .chronicle
+                .iter()
+                .filter(|r| {
+                    matches!(r.kind, Happening::PersonDoes { person, .. }
+                    if watched.contains(&person))
+                })
+                .count()
+        };
+
+        let before = deeds(&world);
         world.watch(somewhere);
         assert_eq!(world.detail_of(somewhere), Detail::Full);
         world.run_for(Duration::from_days(4));
 
-        let after = world
-            .chronicle
-            .iter()
-            .filter(|r| {
-                matches!(r.kind, Happening::PersonDoes { person, .. }
-                if world.society.place_of(person) == Some(somewhere))
-            })
-            .count();
+        let after = deeds(&world);
         assert!(
             after > before,
             "a watched place should start deliberating again: {before} then {after}"

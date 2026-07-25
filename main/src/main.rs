@@ -9,6 +9,10 @@ use std::process::ExitCode;
 use sim::World;
 use sim_core::{Duration, Salience, WorldSeed};
 
+mod export;
+
+/// The viewer page, with a placeholder where the world goes.
+const VIEWER: &str = include_str!("viewer.html");
 mod render;
 
 const USAGE: &str = "\
@@ -26,6 +30,8 @@ options:
   --dossier        end with a close look at one random person
   --balance        report what the run turned out to be about
   --detail <n>     how many people to simulate finely (default: 400)
+  --json           write the whole world out as JSON
+  --html           write a self-contained page you can open in a browser
   --quiet          print only the closing summary
   -h, --help       this message
 ";
@@ -39,6 +45,8 @@ struct Options {
     dossier: bool,
     balance: bool,
     detail: Option<usize>,
+    json: bool,
+    html: bool,
     quiet: bool,
 }
 
@@ -53,6 +61,8 @@ impl Default for Options {
             dossier: false,
             balance: false,
             detail: None,
+            json: false,
+            html: false,
             quiet: false,
         }
     }
@@ -80,6 +90,35 @@ fn main() -> ExitCode {
         world.set_detail_budget(budget);
     }
     let started = world.now();
+
+    // The JSON path walks the run a year at a time so the viewer has a series to plot;
+    // otherwise it is one jump to the horizon.
+    let mut series = Vec::new();
+    if options.json || options.html {
+        let years = options.span.as_years().ceil() as u64;
+        for year in 0..=years {
+            if year > 0 {
+                world.run_for(Duration::from_years(1));
+            }
+            series.push(export::YearSample {
+                year,
+                living: world.living(),
+                affluence: world.places.iter().map(|(_, p)| p.env.affluence).collect(),
+            });
+        }
+        let balance = observer::measure(&world);
+        let data = export::snapshot(&world, &series, &balance);
+        if options.html {
+            // The viewer is a template with one hole in it, filled at run time. Keeping
+            // it a template rather than a written-out file means any seed can produce
+            // its own page.
+            println!("{}", VIEWER.replace("__WORLD_DATA__", &data));
+        } else {
+            println!("{data}");
+        }
+        return ExitCode::SUCCESS;
+    }
+
     world.run_for(options.span);
 
     // The seed is the world's name. Printed first and last so it survives a scrollback
@@ -185,6 +224,8 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Option<Options>, Str
             "--quiet" => options.quiet = true,
             "--dossier" => options.dossier = true,
             "--balance" => options.balance = true,
+            "--json" => options.json = true,
+            "--html" => options.html = true,
             "--seed" => {
                 let raw = value()?;
                 options.seed =
@@ -279,6 +320,20 @@ mod tests {
     fn the_dossier_is_opt_in() {
         assert!(!parse(&[]).unwrap().unwrap().dossier);
         assert!(parse(&["--dossier"]).unwrap().unwrap().dossier);
+    }
+
+    #[test]
+    fn the_viewer_template_has_exactly_one_hole() {
+        assert_eq!(
+            VIEWER.matches("__WORLD_DATA__").count(),
+            1,
+            "the world is substituted in exactly once"
+        );
+        assert!(VIEWER.contains("<title>"), "a page needs a name");
+        assert!(
+            !VIEWER.contains("http://") && !VIEWER.contains("https://"),
+            "the page must be self-contained — no external fetches"
+        );
     }
 
     #[test]
