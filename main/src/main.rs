@@ -7,13 +7,16 @@
 use std::process::ExitCode;
 
 use sim::World;
-use sim_core::{Duration, Salience, WorldSeed};
+use sim_core::{Domain, Duration, Salience, WorldSeed};
 
 mod export;
+mod globe;
+mod render;
 
 /// The viewer page, with a placeholder where the world goes.
 const VIEWER: &str = include_str!("viewer.html");
-mod render;
+/// The deep-time page, with a placeholder where the planet goes.
+const GLOBE: &str = include_str!("globe.html");
 
 const USAGE: &str = "\
 life-rs — run a world and watch it
@@ -32,6 +35,9 @@ options:
   --detail <n>     how many people to simulate finely (default: 400)
   --json           write the whole world out as JSON
   --html           write a self-contained page you can open in a browser
+  --globe <myr>    run the solid planet for this many megayears instead, and
+                   write a page you can scrub through
+  --grid <level>   how fine the planet's grid is (default: 4, ~450 km cells)
   --quiet          print only the closing summary
   -h, --help       this message
 ";
@@ -47,6 +53,8 @@ struct Options {
     detail: Option<usize>,
     json: bool,
     html: bool,
+    globe: Option<f64>,
+    grid: u8,
     quiet: bool,
 }
 
@@ -63,6 +71,8 @@ impl Default for Options {
             detail: None,
             json: false,
             html: false,
+            globe: None,
+            grid: 4,
             quiet: false,
         }
     }
@@ -80,6 +90,13 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+
+    // The solid planet is its own thing: no people, no chronicle, and a clock that runs
+    // a megayear at a time rather than fifteen minutes.
+    if let Some(myr) = options.globe {
+        println!("{}", run_globe(&options, myr));
+        return ExitCode::SUCCESS;
+    }
 
     let mut world = World::genesis(options.seed, options.people);
     // Don't record what won't be shown. A century of one person's every meal is tens of
@@ -213,6 +230,34 @@ fn print_dossier(world: &mut World) {
     println!();
 }
 
+/// Run the lithosphere and render its history.
+///
+/// Sampled at a fixed number of points rather than every step: a page carrying five
+/// hundred snapshots of a forty-thousand-cell grid is a hundred megabytes, and the eye
+/// cannot tell twenty frames from five hundred when each one is a different continent
+/// anyway.
+fn run_globe(options: &Options, myr: f64) -> String {
+    const FRAMES: usize = 13;
+    const STEP_MYR: f32 = 2.0;
+
+    let mut rng = options.seed.stream(Domain::Terrain, 0, 0);
+    let mut planet = geo::Lithosphere::genesis(options.grid, 9, 0.42, &mut rng);
+
+    let mut frames = vec![globe::sample(&planet)];
+    let per_frame = myr / (FRAMES - 1) as f64;
+    for _ in 1..FRAMES {
+        let mut done = 0.0;
+        while done < per_frame {
+            let step = STEP_MYR.min((per_frame - done) as f32);
+            planet.step_myr(step, &mut rng);
+            done += step as f64;
+        }
+        frames.push(globe::sample(&planet));
+    }
+
+    globe::page(GLOBE, &options.seed.to_string(), options.grid, &frames)
+}
+
 fn parse_args(args: impl Iterator<Item = String>) -> Result<Option<Options>, String> {
     let mut options = Options::default();
     let mut args = args.peekable();
@@ -226,6 +271,30 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Option<Options>, Str
             "--balance" => options.balance = true,
             "--json" => options.json = true,
             "--html" => options.html = true,
+            "--globe" => {
+                let raw = value()?;
+                let myr: f64 = raw
+                    .parse()
+                    .map_err(|e| format!("bad megayear count {raw:?}: {e}"))?;
+                // NaN included: `myr > 0.0` is false for it, which is what we want.
+                if !myr.is_finite() || myr <= 0.0 {
+                    return Err("--globe needs a positive number of megayears".to_string());
+                }
+                options.globe = Some(myr);
+            }
+            "--grid" => {
+                let raw = value()?;
+                let level: u8 = raw
+                    .parse()
+                    .map_err(|e| format!("bad grid level {raw:?}: {e}"))?;
+                if !(2..=6).contains(&level) {
+                    return Err(format!(
+                        "grid level {level} is outside 2..=6; below four the plates weld \
+                         into one and never rift again, and above six a run takes minutes"
+                    ));
+                }
+                options.grid = level;
+            }
             "--seed" => {
                 let raw = value()?;
                 options.seed =

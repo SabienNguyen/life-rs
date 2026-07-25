@@ -2,12 +2,17 @@
 
 > Big-picture architecture — the plan we implement against.
 >
-> **Phases 0–3 and 10 are implemented** — foundations (`sim-core`, `sim`), person depth
-> (`life`, `person`), genetics with families (`genetics`, `society`), and neighbourhoods
-> with the four behaviour channels live, plus level-of-detail (§6, pulled forward from
-> phase 10 because everyone acting whether watched or not was making every later phase
-> more expensive to build and test). §20 marks progress; the §15 balance harness is
-> the one part of Phase 3 still outstanding. Everything beyond that is still a plan.
+> **Phases 0–4, 10, and the §15 balance harness are implemented** — foundations
+> (`sim-core`, `sim`), person depth (`life`, `person`), genetics with families
+> (`genetics`, `society`), neighbourhoods with the four behaviour channels, the solid
+> planet (`geo`: geodesic grid, plates, isostasy, erosion, eustatic sea level), and
+> level-of-detail (§6, pulled forward from phase 10 because everyone acting whether
+> watched or not was making every later phase more expensive to build and test).
+> §20 marks progress. Everything beyond that is still a plan.
+>
+> The two are not yet joined: people live in abstract places and the planet has no
+> people on it. Giving a neighbourhood a grid cell is Phase 5's business, because a
+> place wants a climate before it wants a coordinate.
 
 ## 1. The goal
 
@@ -940,8 +945,8 @@ Being explicit about this is what separates a coarse simulation from a fake one.
 | --- | --- | --- |
 | Climate | Energy-balance model + parameterized moisture | No GCM: no resolved storms, jets, or eddies |
 | Ocean | Geometric gyres + bulk overturning | No resolved current dynamics |
-| Tectonics | Euler-pole plate motion, Airy isostasy | No mantle convection; plate reorganizations are stochastic |
-| Erosion | Stream-power + hillslope diffusion | Coarse at 112 km cells; no real river networks below cell size |
+| Tectonics | Euler-pole plate motion, Airy isostasy, √age ridge subsidence | No mantle convection; plate reorganizations and rifting are stochastic |
+| Erosion | Threshold stream power, sediment routed downstream | No hillslope diffusion — see below; coarse at 112 km cells; no river networks below cell size |
 | Vegetation | DGVM plant functional types | No individual plants outside Full LOD |
 | Populations | Logistic + Holling type II | Not individual-based outside Full LOD |
 | Genetics | 256 polygenic loci, Wright–Fisher | Not molecular; no gene regulation or real recombination maps |
@@ -951,6 +956,35 @@ Each row is a real method with real feedbacks, run coarsely. That's the honest c
 mechanistically grounded, low resolution. Anywhere the resolution stops mattering, we
 can refine that row without touching the others — which is the reason for the crate
 boundaries in §4.
+
+**Three things Phase 4 deviates from this plan on, and why.**
+
+*Hillslope diffusion is absent.* Measured hillslope creep has a diffusivity around
+10⁻² m²/yr. At 112 km cells the term it contributes is under a millimetre per megayear —
+sub-grid by four orders of magnitude. Putting it in would have meant inventing a
+coefficient thousands of times the measured one and calling the result physics.
+
+*Erosion carries a threshold.* `E = K(√A·S − ω)` rather than `E = K·√A·S`, which is the
+standard threshold form. Without it a continental interior at a gradient of one part in
+a thousand still erodes at tens of metres per megayear, and every continent is planed to
+the waterline within a few hundred megayears. With it a craton is below threshold and
+effectively permanent, which is what cratons are.
+
+*Erosion rates are resolution-dependent, and under-resolved.* An orogenic gradient is a
+few percent; a grid cannot represent a gradient steeper than its own spacing allows, so
+at 450 km cells a mountain range is a gentle ramp and erodes at cratonic rates. The
+planet compensates in part — collision piles crust high enough that neighbouring cells
+do differ by kilometres — but an isolated range decays several times slower than a real
+one. This improves with grid level and does not go away.
+
+**And one thing the model gets visibly wrong.** A planet settles at around a seventh to a
+quarter of its surface above water where Earth manages a little under a third. The
+continental crust itself is stable — arc magmatism replaces what collision and erosion
+take — but more of it ends up submerged than should. The likeliest reason is that
+erosion here is blind to climate: every square kilometre of land is rained on
+identically, where a third of the real one is arid and barely erodes. Precipitation
+arrives with Phase 5, and waiting for it is better than bending a measured constant
+until the land fraction comes out right.
 
 ### 19.2 Keeping it from feeling fake
 
@@ -987,7 +1021,7 @@ later means rewriting every system, and it's cheap to build before there are sys
 | Phase | Deliverable |
 | --- | --- |
 | **3** ✅ | Environment & neighbourhoods: environment vectors on places, archetypes derived from them, the four channels live, developmental windows, standing, residential sorting, the §15 balance harness |
-| **4** | `geo`: geodesic grid, plates, elevation, isostasy, erosion, bathymetry |
+| **4** ✓ | `geo`: geodesic grid, plates, elevation, isostasy, erosion, bathymetry |
 | **5** | `climate` + `ocean`: energy balance, insolation, moisture, ice, currents, sea level, carbon cycle |
 | **6** | `biome` + vegetation: Whittaker classification, PFT fields, NPP, fire and disturbance |
 | **7** | `ecology`: animal demes, trophic web, dispersal, habitat suitability |
@@ -998,6 +1032,20 @@ filling them needs households and places with properties — not tectonics. Plac
 abstract and acquire a grid cell in Phase 4; nothing about §14 depends on where a
 neighbourhood physically sits. Doing it the other way round would mean a planet with a
 climate and no one whose life it changes.
+
+**Phase 4, in the event.** The supercontinent cycle does fall out of the mechanism, which
+was the thing most at risk: plates weld where continents collide, a plate holding too
+much of the world's continental crust rifts, and the largest landmass accordingly runs
+up towards one and back down over hundreds of megayears without anything scheduling it.
+Three things had to be added that §7.2 does not mention, each because the planet visibly
+misbehaved without it — orogenic collapse (thick crust spreads sideways, or collisions
+convert continental area to thickness one way only and the continents shrink away), arc
+magmatism tied to convergent boundaries and calibrated to the measured rate of crustal
+growth (or erosion and collision between them retire the continents), and a **gather**
+rather than a scatter when resolving plate motion onto the grid (or the rounding is a
+random walk, and continents dissolve into archipelagos of single cells within a few
+hundred megayears). Only the last of those was visible in any summary statistic, and
+only after the fact; all three were found by drawing the planet and looking at it.
 
 ### M3 — A world you can watch
 | Phase | Deliverable |

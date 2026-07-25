@@ -1,0 +1,623 @@
+<title>life-rs — a planet, over deep time</title>
+
+<style>
+  /* ---- tokens -------------------------------------------------------------
+     A survey plate. Warm paper neutrals so the map's blues and greens are the
+     only saturated things on the page; the UI carries no accent of its own. */
+  :root {
+    color-scheme: light;
+    --ground:    #eceae4;
+    --surface:   #fcfcfb;
+    --raised:    #f4f2ec;
+    --line:      #d9d5cb;
+    --line-firm: #b9b3a5;
+    --ink:       #1b1a17;
+    --ink-soft:  #4a4741;
+    --muted:     #6c675e;
+
+    /* Boundary kinds. Validated for lightness, chroma, CVD separation,
+       normal-vision separation and contrast against the surface above. */
+    --divergent:  #0095ad;
+    --convergent: #c0335e;
+    --transform:  #5f8a16;
+
+    --shadow: 0 1px 2px rgba(27, 26, 23, .07), 0 6px 18px rgba(27, 26, 23, .05);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --ground:    #131312;
+      --surface:   #1a1a19;
+      --raised:    #232321;
+      --line:      #33322f;
+      --line-firm: #4b4945;
+      --ink:       #f2f0eb;
+      --ink-soft:  #c3bfb6;
+      --muted:     #918c82;
+
+      --divergent:  #1b94a8;
+      --convergent: #d8506f;
+      --transform:  #6e9628;
+
+      --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 8px 24px rgba(0, 0, 0, .35);
+    }
+  }
+
+  /* The viewer's own toggle stamps the root, and it must win either way. */
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ground:    #131312;
+    --surface:   #1a1a19;
+    --raised:    #232321;
+    --line:      #33322f;
+    --line-firm: #4b4945;
+    --ink:       #f2f0eb;
+    --ink-soft:  #c3bfb6;
+    --muted:     #918c82;
+    --divergent:  #1b94a8;
+    --convergent: #d8506f;
+    --transform:  #6e9628;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 8px 24px rgba(0, 0, 0, .35);
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --ground:    #eceae4;
+    --surface:   #fcfcfb;
+    --raised:    #f4f2ec;
+    --line:      #d9d5cb;
+    --line-firm: #b9b3a5;
+    --ink:       #1b1a17;
+    --ink-soft:  #4a4741;
+    --muted:     #6c675e;
+    --divergent:  #0095ad;
+    --convergent: #c0335e;
+    --transform:  #5f8a16;
+    --shadow: 0 1px 2px rgba(27, 26, 23, .07), 0 6px 18px rgba(27, 26, 23, .05);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .sheet {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 32px 22px 72px;
+    display: flex;
+    flex-direction: column;
+    gap: 26px;
+  }
+
+  /* ---- masthead ---------------------------------------------------------- */
+
+  .masthead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--line-firm);
+  }
+  .masthead h1 {
+    margin: 0;
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    font-size: 27px;
+    font-weight: 600;
+    letter-spacing: -0.012em;
+    text-wrap: balance;
+  }
+  .masthead p { margin: 4px 0 0; color: var(--muted); font-size: 13.5px; max-width: 62ch; }
+  .stamp {
+    font: 11.5px/1 ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border: 1px solid var(--line-firm);
+    border-radius: 3px;
+    padding: 6px 9px;
+    white-space: nowrap;
+  }
+
+  /* ---- the map ----------------------------------------------------------- */
+
+  .plate {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+
+  .mapwrap { position: relative; line-height: 0; background: var(--raised); }
+  canvas#map {
+    display: block;
+    width: 100%;
+    height: auto;
+    image-rendering: auto;
+    cursor: crosshair;
+  }
+
+  .readout {
+    position: absolute;
+    pointer-events: none;
+    background: var(--surface);
+    border: 1px solid var(--line-firm);
+    border-radius: 5px;
+    padding: 7px 10px;
+    font: 12px/1.45 ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    color: var(--ink);
+    box-shadow: var(--shadow);
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity .1s;
+    z-index: 4;
+  }
+  .readout b { font-weight: 600; }
+  .readout .kind { color: var(--muted); }
+
+  /* ---- controls ---------------------------------------------------------- */
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px 18px;
+    padding: 13px 16px;
+    border-top: 1px solid var(--line);
+  }
+
+  .scrub { flex: 1 1 260px; display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .scrub label {
+    font: 11.5px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  input[type=range] { flex: 1; min-width: 0; accent-color: var(--ink-soft); }
+  input[type=range]:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+
+  .age {
+    font: 600 14px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+    min-width: 8.5ch;
+    text-align: right;
+  }
+
+  .views { display: flex; gap: 0; border: 1px solid var(--line-firm); border-radius: 5px; overflow: hidden; }
+  .views button {
+    appearance: none;
+    border: 0;
+    border-right: 1px solid var(--line-firm);
+    background: var(--surface);
+    color: var(--ink-soft);
+    font: 12.5px/1 inherit;
+    padding: 8px 13px;
+    cursor: pointer;
+  }
+  .views button:last-child { border-right: 0; }
+  .views button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+  .views button:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+
+  .play {
+    appearance: none;
+    border: 1px solid var(--line-firm);
+    border-radius: 5px;
+    background: var(--surface);
+    color: var(--ink);
+    font: 12.5px/1 inherit;
+    padding: 8px 14px;
+    cursor: pointer;
+    min-width: 6.5ch;
+  }
+  .play:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  /* ---- legends ----------------------------------------------------------- */
+
+  .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; padding: 12px 16px; border-top: 1px solid var(--line); }
+  .legend.hidden { display: none; }
+  .key { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink-soft); }
+  .swatch { width: 13px; height: 13px; border-radius: 3px; box-shadow: 0 0 0 1px rgba(0,0,0,.16) inset; }
+
+  .ramp { display: flex; align-items: center; gap: 10px; width: 100%; }
+  .ramp .bar { flex: 1; height: 11px; border-radius: 3px; box-shadow: 0 0 0 1px rgba(0,0,0,.16) inset; }
+  .legend .ends {
+    display: flex; justify-content: space-between; width: 100%;
+    font: 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: var(--muted); font-variant-numeric: tabular-nums;
+  }
+  .legend#legend-relief { flex-direction: column; gap: 7px; }
+
+  /* ---- figures ----------------------------------------------------------- */
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .stat { background: var(--surface); padding: 13px 15px; }
+  .stat dt {
+    font: 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 0 0 7px;
+  }
+  .stat dd { margin: 0; font-size: 21px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.015em; }
+  .stat .unit { font-size: 12.5px; font-weight: 400; color: var(--muted); margin-left: 3px; }
+
+  .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+  figure.chart { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px 10px; box-shadow: var(--shadow); }
+  figure.chart figcaption { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+  figure.chart .sub { font-size: 12px; color: var(--muted); margin-bottom: 9px; }
+  figure.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+
+  .axis { stroke: var(--line-firm); stroke-width: 1; }
+  .grid { stroke: var(--line); stroke-width: 1; }
+  .series { fill: none; stroke: var(--ink-soft); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .marker { fill: var(--ink); stroke: var(--surface); stroke-width: 2; }
+  .tick { font: 10.5px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: var(--muted); font-variant-numeric: tabular-nums; }
+
+  /* ---- table ------------------------------------------------------------- */
+
+  details.table { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); }
+  details.table > summary { cursor: pointer; padding: 13px 16px; font-size: 13.5px; font-weight: 600; }
+  details.table > summary:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+  .scroller { overflow-x: auto; padding: 0 16px 16px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 6px 12px 6px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { font: 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding-bottom: 9px; }
+
+  footer.note { color: var(--muted); font-size: 12.5px; max-width: 76ch; }
+  footer.note code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+
+<div class="sheet">
+  <header class="masthead">
+    <div>
+      <h1>A planet, over deep time</h1>
+      <p id="blurb">Nothing here is drawn. Rigid plates turn about randomly drawn Euler poles; crust floats
+      by isostasy, is destroyed where plates converge and born where they part, and rivers take the rest apart.</p>
+    </div>
+    <div class="stamp" id="stamp">seed —</div>
+  </header>
+
+  <section class="plate">
+    <div class="mapwrap">
+      <canvas id="map"></canvas>
+      <div class="readout" id="readout"></div>
+    </div>
+
+    <div class="controls">
+      <button class="play" id="play" aria-label="Play through the run">Play</button>
+      <div class="scrub">
+        <label for="time">Age</label>
+        <input type="range" id="time" min="0" max="0" value="0" step="1" aria-label="Age of the planet, in megayears">
+        <span class="age" id="age">0 Myr</span>
+      </div>
+      <div class="views" role="group" aria-label="What the map shows">
+        <button id="view-relief" aria-pressed="true">Relief</button>
+        <button id="view-plates" aria-pressed="false">Boundaries</button>
+      </div>
+    </div>
+
+    <div class="legend" id="legend-relief">
+      <div class="ramp">
+        <span class="key" style="color:var(--muted)">Depth</span>
+        <span class="bar" id="ramp"></span>
+        <span class="key" style="color:var(--muted)">Height</span>
+      </div>
+      <div class="ends"><span>−8 km</span><span>sea level</span><span>+6 km</span></div>
+    </div>
+
+    <div class="legend hidden" id="legend-plates">
+      <span class="key"><span class="swatch" style="background:var(--divergent)"></span>Divergent — crust is born here</span>
+      <span class="key"><span class="swatch" style="background:var(--convergent)"></span>Convergent — crust is destroyed here</span>
+      <span class="key"><span class="swatch" style="background:var(--transform)"></span>Transform — sliding past</span>
+    </div>
+  </section>
+
+  <dl class="stats" id="stats"></dl>
+
+  <section class="charts" id="charts"></section>
+
+  <details class="table">
+    <summary>The same numbers as a table</summary>
+    <div class="scroller">
+      <table id="numbers">
+        <thead><tr><th>Age</th><th>Land</th><th>Continental crust</th><th>Sea level</th><th>Highest point</th><th>Plates</th><th>Largest mass</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </details>
+
+  <footer class="note" id="note"></footer>
+</div>
+
+<script>
+const DATA = __GLOBE_DATA__;
+
+// ---- decoding -------------------------------------------------------------
+// Frames arrive base64-encoded: fifty thousand pixels as JSON numbers is about
+// six times the bytes, per frame, and this file is meant to be opened.
+
+function bytesOf(base) {
+  const raw = atob(base);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+for (const frame of DATA.frames) {
+  const bytes = bytesOf(frame.height);
+  frame.h = new Int16Array(bytes.buffer, bytes.byteOffset, bytes.length / 2);
+  // Plate in the top six bits, boundary kind in the bottom two.
+  const tenure = bytesOf(frame.tenure);
+  frame.t = tenure;
+}
+
+// ---- the hypsometric ramp -------------------------------------------------
+// Sequential either side of the shoreline, which is the one place the colour
+// jumps: everywhere else it runs smoothly, so a gradient reads as a gradient
+// and the coast reads as a coast.
+
+const SEA = [
+  [-8000, [ 12,  34,  62]],
+  [-4000, [ 20,  62, 104]],
+  [-1500, [ 33,  96, 148]],
+  [ -300, [ 66, 138, 186]],
+  [    0, [130, 181, 209]],
+];
+const LAND = [
+  [    0, [ 96, 133,  85]],
+  [  300, [122, 152,  84]],
+  [ 1000, [166, 163,  92]],
+  [ 2200, [154, 122,  78]],
+  [ 3600, [134,  98,  80]],
+  [ 5200, [201, 197, 191]],
+  [ 7000, [246, 246, 246]],
+];
+
+function tint(metres) {
+  const stops = metres > 0 ? LAND : SEA;
+  for (let i = 1; i < stops.length; i++) {
+    if (metres <= stops[i][0] || i === stops.length - 1) {
+      const [lo, a] = stops[i - 1], [hi, b] = stops[i];
+      const t = Math.max(0, Math.min(1, (metres - lo) / (hi - lo)));
+      return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+    }
+  }
+  return stops[stops.length - 1][1];
+}
+
+// A shaded-relief cue: slope towards the north-west, which is the convention
+// every printed map uses and which the eye reads as height without being told.
+function shade(frame, i, wide, tall) {
+  const row = (i / wide) | 0, col = i % wide;
+  const west = frame.h[row * wide + (col - 1 + wide) % wide];
+  const north = frame.h[Math.max(0, row - 1) * wide + col];
+  const here = frame.h[i];
+  const rise = ((here - west) + (here - north)) / 2;
+  return Math.max(-0.34, Math.min(0.34, rise / 2600));
+}
+
+function css(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+function rgbOf(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+// ---- drawing --------------------------------------------------------------
+
+const WIDE = DATA.wide, TALL = DATA.tall;
+const SCALE = 3;
+const map = document.getElementById('map');
+map.width = WIDE * SCALE;
+map.height = TALL * SCALE;
+const ctx = map.getContext('2d');
+
+const buffer = document.createElement('canvas');
+buffer.width = WIDE; buffer.height = TALL;
+const bufferCtx = buffer.getContext('2d');
+const image = bufferCtx.createImageData(WIDE, TALL);
+
+let view = 'relief';
+let at = 0;
+
+function draw() {
+  const frame = DATA.frames[at];
+  const px = image.data;
+  const boundaryTint = [null, rgbOf(css('--divergent')), rgbOf(css('--convergent')), rgbOf(css('--transform'))];
+
+  for (let i = 0; i < WIDE * TALL; i++) {
+    let [r, g, b] = tint(frame.h[i]);
+    const lit = 1 + shade(frame, i, WIDE, TALL);
+    r *= lit; g *= lit; b *= lit;
+
+    if (view === 'plates') {
+      // The relief drops back to a grey base so the boundaries are the only
+      // coloured thing, and the three kinds never sit next to each other
+      // without a label in the legend to name them.
+      const grey = (r * 0.32 + g * 0.5 + b * 0.18);
+      r = g = b = grey * 0.55 + 90;
+      const kind = frame.t[i] & 3;
+      if (kind > 0) { [r, g, b] = boundaryTint[kind]; }
+    }
+
+    const o = i * 4;
+    px[o] = r; px[o + 1] = g; px[o + 2] = b; px[o + 3] = 255;
+  }
+  bufferCtx.putImageData(image, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.clearRect(0, 0, map.width, map.height);
+  ctx.drawImage(buffer, 0, 0, map.width, map.height);
+
+  document.getElementById('age').textContent = `${frame.myr.toLocaleString()} Myr`;
+  paintStats(frame);
+  paintCharts();
+}
+
+// ---- the numbers ----------------------------------------------------------
+
+const MEASURES = [
+  { key: 'land',    label: 'Above water',       unit: '%',   scale: 100, digits: 1,
+    blurb: 'Share of the surface standing above the sea' },
+  { key: 'crust',   label: 'Continental crust', unit: '%',   scale: 100, digits: 1,
+    blurb: 'Including the part of it that is drowned' },
+  { key: 'sea',     label: 'Sea level',         unit: 'm',   scale: 1,   digits: 0,
+    blurb: 'Against unstretched continental crust, not against itself' },
+  { key: 'peak',    label: 'Highest point',     unit: 'm',   scale: 1,   digits: 0,
+    blurb: 'Above the waterline of the moment' },
+  { key: 'plates',  label: 'Plates',            unit: '',    scale: 1,   digits: 0,
+    blurb: 'Falls when two weld together, rises when one rifts' },
+  { key: 'biggest', label: 'Largest landmass',  unit: '%',   scale: 100, digits: 0,
+    blurb: 'Share of all continental crust in one connected piece' },
+];
+
+function paintStats(frame) {
+  document.getElementById('stats').innerHTML = MEASURES.map(m => {
+    const value = (frame[m.key] * m.scale).toFixed(m.digits);
+    return `<div class="stat"><dt>${m.label}</dt><dd>${value}<span class="unit">${m.unit}</span></dd></div>`;
+  }).join('');
+}
+
+// ---- charts ---------------------------------------------------------------
+// One series each, so the caption names it and no legend is needed. Every
+// chart shares the same x axis: the age of the planet.
+
+const W = 300, H = 104, PAD = { l: 52, r: 12, t: 10, b: 22 };
+
+function paintCharts() {
+  const ages = DATA.frames.map(f => f.myr);
+  const span = Math.max(1, ages[ages.length - 1] - ages[0]);
+  const x = a => PAD.l + (a - ages[0]) / span * (W - PAD.l - PAD.r);
+
+  document.getElementById('charts').innerHTML = MEASURES.filter(m => m.key !== 'crust').map(m => {
+    const values = DATA.frames.map(f => f[m.key] * m.scale);
+    let lo = Math.min(...values), hi = Math.max(...values);
+    if (hi - lo < 1e-6) { hi = lo + 1; }
+    const pad = (hi - lo) * 0.12;
+    lo -= pad; hi += pad;
+    const y = v => PAD.t + (1 - (v - lo) / (hi - lo)) * (H - PAD.t - PAD.b);
+
+    const path = values.map((v, i) => `${i ? 'L' : 'M'}${x(ages[i]).toFixed(1)},${y(v).toFixed(1)}`).join('');
+    const here = `<circle class="marker" cx="${x(ages[at]).toFixed(1)}" cy="${y(values[at]).toFixed(1)}" r="3.6"/>`;
+    const fmt = v => v.toFixed(m.digits) + (m.unit === '%' ? '%' : '');
+
+    return `<figure class="chart">
+      <figcaption>${m.label}</figcaption>
+      <div class="sub">${m.blurb}</div>
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${m.label} over time, from ${fmt(values[0])} to ${fmt(values[values.length-1])}">
+        <line class="grid" x1="${PAD.l}" y1="${y(hi - pad).toFixed(1)}" x2="${W - PAD.r}" y2="${y(hi - pad).toFixed(1)}"/>
+        <line class="grid" x1="${PAD.l}" y1="${y(lo + pad).toFixed(1)}" x2="${W - PAD.r}" y2="${y(lo + pad).toFixed(1)}"/>
+        <line class="axis" x1="${PAD.l}" y1="${H - PAD.b}" x2="${W - PAD.r}" y2="${H - PAD.b}"/>
+        <text class="tick" x="${PAD.l - 6}" y="${(y(hi - pad) + 3.5).toFixed(1)}" text-anchor="end">${fmt(hi - pad)}</text>
+        <text class="tick" x="${PAD.l - 6}" y="${(y(lo + pad) + 3.5).toFixed(1)}" text-anchor="end">${fmt(lo + pad)}</text>
+        <text class="tick" x="${PAD.l}" y="${H - PAD.b + 13}">0</text>
+        <text class="tick" x="${W - PAD.r}" y="${H - PAD.b + 13}" text-anchor="end">${ages[ages.length-1].toLocaleString()} Myr</text>
+        <path class="series" d="${path}"/>
+        ${here}
+      </svg>
+    </figure>`;
+  }).join('');
+}
+
+// ---- hover ----------------------------------------------------------------
+
+const readout = document.getElementById('readout');
+const KINDS = ['plate interior', 'divergent boundary', 'convergent boundary', 'transform boundary'];
+
+map.addEventListener('pointermove', event => {
+  const box = map.getBoundingClientRect();
+  const col = Math.floor((event.clientX - box.left) / box.width * WIDE);
+  const row = Math.floor((event.clientY - box.top) / box.height * TALL);
+  if (col < 0 || col >= WIDE || row < 0 || row >= TALL) { readout.style.opacity = 0; return; }
+
+  const frame = DATA.frames[at];
+  const i = row * WIDE + col;
+  const height = frame.h[i];
+  const latitude = (90 - 180 * (row + 0.5) / TALL).toFixed(0);
+  const longitude = (-180 + 360 * (col + 0.5) / WIDE).toFixed(0);
+  readout.innerHTML =
+    `<b>${height >= 0 ? '+' : '−'}${Math.abs(height).toLocaleString()} m</b> ${height >= 0 ? 'above' : 'below'} the sea<br>` +
+    `<span class="kind">${latitude}°, ${longitude}° · plate ${frame.t[i] >> 2} · ${KINDS[frame.t[i] & 3]}</span>`;
+  readout.style.opacity = 1;
+  const left = Math.min(event.clientX - box.left + 14, box.width - 210);
+  readout.style.left = `${Math.max(6, left)}px`;
+  readout.style.top = `${Math.min(event.clientY - box.top + 14, box.height - 58)}px`;
+});
+map.addEventListener('pointerleave', () => { readout.style.opacity = 0; });
+
+// ---- controls -------------------------------------------------------------
+
+const slider = document.getElementById('time');
+slider.max = DATA.frames.length - 1;
+slider.addEventListener('input', () => { at = +slider.value; stop(); draw(); });
+
+const relief = document.getElementById('view-relief');
+const plates = document.getElementById('view-plates');
+function setView(next) {
+  view = next;
+  relief.setAttribute('aria-pressed', String(next === 'relief'));
+  plates.setAttribute('aria-pressed', String(next === 'plates'));
+  document.getElementById('legend-relief').classList.toggle('hidden', next !== 'relief');
+  document.getElementById('legend-plates').classList.toggle('hidden', next !== 'plates');
+  draw();
+}
+relief.addEventListener('click', () => setView('relief'));
+plates.addEventListener('click', () => setView('plates'));
+
+const playButton = document.getElementById('play');
+let running = null;
+function stop() { if (running) { clearInterval(running); running = null; playButton.textContent = 'Play'; } }
+playButton.addEventListener('click', () => {
+  if (running) { stop(); return; }
+  playButton.textContent = 'Pause';
+  running = setInterval(() => {
+    at = (at + 1) % DATA.frames.length;
+    slider.value = at;
+    draw();
+  }, 520);
+});
+
+// ---- the ramp swatch, the table, and the footnote -------------------------
+
+document.getElementById('ramp').style.background =
+  'linear-gradient(to right,' + [-8000, -5000, -2500, -600, -1, 1, 600, 1600, 3000, 4600, 6500]
+    .map(m => `rgb(${tint(m).map(Math.round).join(',')})`).join(',') + ')';
+
+// The seed is a 128-bit number and prints as thirty-four characters, which is a
+// bannerful of leading zeroes. Shown short, with the whole of it on hover for anyone
+// who wants to replay the run.
+const stamp = document.getElementById('stamp');
+const shortSeed = DATA.seed.replace(/^0x0+/, '0x') || DATA.seed;
+stamp.textContent = `seed ${shortSeed} · level ${DATA.level} · ${DATA.wide}×${DATA.tall}`;
+stamp.title = DATA.seed;
+
+document.querySelector('#numbers tbody').innerHTML = DATA.frames.map(f => `<tr>
+  <td>${f.myr.toLocaleString()} Myr</td>
+  <td>${(f.land * 100).toFixed(1)}%</td>
+  <td>${(f.crust * 100).toFixed(1)}%</td>
+  <td>${f.sea.toFixed(0)} m</td>
+  <td>${f.peak.toFixed(0)} m</td>
+  <td>${f.plates}</td>
+  <td>${(f.biggest * 100).toFixed(0)}%</td>
+</tr>`).join('');
+
+const last = DATA.frames[DATA.frames.length - 1];
+document.getElementById('note').innerHTML =
+  `Sampled at ${DATA.frames.length} points across ${last.myr.toLocaleString()} megayears, from a geodesic grid of level ` +
+  `${DATA.level}. Sea level is measured against unstretched continental crust rather than against itself, so it moves ` +
+  `when the basins change shape. Erosion here is blind to climate — every square kilometre of land is rained on ` +
+  `equally, where a third of the real one is arid — which is the main reason this planet settles with rather less ` +
+  `dry land than Earth manages.`;
+
+setView('relief');
+</script>

@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "genetics",
+    "geo",
     "life",
     "main",
     "observer",
