@@ -210,6 +210,17 @@ pub struct Person {
     /// measured intergenerational elasticity 0.93, not because the world was a caste
     /// system but because the outcome had the predictor baked into it.
     peak_standing: f32,
+    /// A lasting multiplier on what work returns, from having been taken up by someone.
+    ///
+    /// The mechanism by which a tight community produces people who get out. It is not
+    /// a reward for merit and it is not inherited — it is who happened to notice you.
+    patronage: f32,
+    /// The opportunity of the places lived in as an adult: weighted sum and weight.
+    ///
+    /// Childhood is not the whole of someone's circumstances. Once people can move for
+    /// work, where they end up matters as much as where they started — and an account of
+    /// environment that stops at twenty attributes all of that to nothing.
+    opportunity: (f32, f32),
     /// Childhood exposure, accumulating until maturity: weighted sum and total weight.
     upbringing: (f32, f32),
     matured: bool,
@@ -267,6 +278,8 @@ impl Person {
             born,
             standing: 0.0,
             peak_standing: 0.0,
+            patronage: 1.0,
+            opportunity: (0.0, 0.0),
             upbringing: (0.0, 0.0),
             matured: false,
             needs: Needs::rested(),
@@ -285,6 +298,23 @@ impl Person {
     pub fn set_standing(&mut self, standing: f32) {
         self.standing = standing.clamp(0.0, 1.0);
         self.peak_standing = self.peak_standing.max(self.standing);
+    }
+
+    pub fn patronage(&self) -> f32 {
+        self.patronage
+    }
+
+    pub fn is_mentored(&self) -> bool {
+        self.patronage > 1.0
+    }
+
+    /// Someone has taken an interest. Once only — a second patron is not twice the help.
+    pub fn take_patron(&mut self, worth: f32) -> bool {
+        if self.is_mentored() {
+            return false;
+        }
+        self.patronage = worth.max(1.0);
+        true
     }
 
     /// The highest standing reached in adult life — their attainment.
@@ -341,6 +371,23 @@ impl Person {
         let absorbed = self.upbringing.0 / self.upbringing.1;
         self.origins = self.origins.reshared(absorbed);
         self.personality = self.origins.personality();
+    }
+
+    /// Record `years` of adult life somewhere with this much opportunity.
+    pub fn work_amid(&mut self, opportunity: f32, years: f32) {
+        if years > 0.0 {
+            self.opportunity.0 += opportunity * years;
+            self.opportunity.1 += years;
+        }
+    }
+
+    /// The opportunity this person has had access to across their working life.
+    pub fn mean_opportunity(&self) -> f32 {
+        if self.opportunity.1 <= 0.0 {
+            0.0
+        } else {
+            self.opportunity.0 / self.opportunity.1
+        }
     }
 
     /// The upbringing absorbed so far, whether or not it has been applied.

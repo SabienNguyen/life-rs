@@ -135,26 +135,44 @@ cargo run -p main -- --people 90 --years 130 --min pivotal --balance --quiet
 
   measured over 342 lives
   outcome variance
-    genes          0.16  within target
-    upbringing     0.16  outside 0.20–0.55
-    entangled      0.23  inseparable — parents supply both
+    genes          0.18  within target
+    upbringing     0.13  outside 0.20–0.55
+    entangled      0.24  inseparable — parents supply both
     luck           0.46  outside 0.15–0.45
-  elasticity       0.62  outside 0.20–0.50
-  siblings         0.47  within target
-  mobility         0.67  within target
-  upbringing gap   1.49  outside 0.30–1.20
+  elasticity       0.55  outside 0.20–0.50
+  siblings         0.38  within target
+  mobility         0.70  within target
+  upbringing gap   1.01  within target
 ```
 
-Genes and upbringing come out *exactly* balanced — 0.39 each, counting the entangled
-share on both sides. That entangled fifth is reported rather than divided up: parents
-supply both genes and neighbourhood, so the split is genuinely ambiguous and saying so
-is more honest than a false precision.
+Counting the entangled share on both sides — genes 0.42, circumstance 0.37 — neither
+decides a life. That entangled quarter is reported rather than divided up: parents supply
+both genes and neighbourhood, so the split is genuinely ambiguous, and saying so beats a
+false precision.
 
-Elasticity is above target — this world is less mobile than intended. Worth knowing
-*why*: moving the transfer-at-birth constant across a 2.75× range barely shifts it.
-Advantage travels through the neighbourhood a child grows up in, not through what they
-inherit. So the fix is §14.4's escape routes — bridging ties, mentors, schooling shocks
-— which aren't implemented yet, not a tuning dial.
+**Escape routes** (§14.4) are what keep it from being deterministic doom: unearned
+windfalls and ruins, young adults who will uproot for work and are taken in more readily
+because they are renting a room rather than buying a house, and patrons who open doors.
+Patronage runs on *bonding* capital, not bridging — bridging ties belong to the already
+comfortable, so a way out routed through them would only widen the gap. Dense
+mutual-dependence community is what a poor neighbourhood actually has, and it is what
+makes such places produce people who get out.
+
+**A frontier, not an optimum.** An escape route works by decoupling where someone ends up
+from where they began, so anything that lowers elasticity also lowers how much upbringing
+can explain and raises what is left to chance:
+
+| escape routes | elasticity | genes | circumstance | luck |
+| --- | --- | --- | --- | --- |
+| off | 0.62 | 0.39 | 0.39 | 0.46 |
+| **as shipped** | **0.55** | **0.42** | **0.37** | **0.46** |
+| stronger | 0.40 | 0.41 | 0.15 | 0.55 |
+| stronger still | 0.33 | 0.39 | 0.07 | 0.59 |
+
+§15 wants elasticity 0.20–0.50 *and* circumstance near 0.40 *and* luck near 0.30. This
+model cannot give all three at once. The shipped values buy the design's central claim —
+that neither cause decides a life — and leave elasticity and luck each a little outside
+their bands, which the harness reports rather than hides.
 
 Next is Phase 4: the geodesic grid and tectonics beneath these places.
 

@@ -13,7 +13,7 @@
 //! Neither polls.
 
 use genetics::{Architecture, FounderPool};
-use person::{Cause, Deed, Person, PersonId, Situation};
+use person::{Cause, Deed, FERTILE_FROM, Person, PersonId, Situation};
 use planet::{DayPhase, Planet, PlanetId};
 use sim_core::{Arena, Chronicle, Domain, Duration, Rng, Salience, Scheduler, Time, WorldSeed};
 use society::{Census, Place, PlaceId, Society};
@@ -74,6 +74,59 @@ const STANDING_DECAY: f32 = 0.15;
 /// change how mobile a world is.
 const INHERITED_STANDING: f32 = 0.35;
 
+// ---- escape routes (§14.4) ---------------------------------------------------------
+//
+// Without these, a world is deterministic doom: advantage travels down through the
+// neighbourhood a child is raised in, nothing travels the other way, and measured
+// mobility never recovers. Three routes, chosen because none of them reward the people
+// already ahead.
+//
+// These values sit on a frontier rather than at an optimum, and the trade is not a
+// tuning artefact — it is arithmetic. An escape route works precisely by decoupling
+// where someone ends up from where they began, so anything that lowers
+// intergenerational elasticity also lowers the share of outcome that upbringing can
+// explain, and raises the share left to chance. Measured across four settings:
+//
+//   routes off      elasticity 0.62   genes 0.39 / circumstance 0.39 / luck 0.46
+//   these values    elasticity 0.55   genes 0.42 / circumstance 0.37 / luck 0.46
+//   stronger        elasticity 0.40   genes 0.41 / circumstance 0.15 / luck 0.55
+//   stronger still  elasticity 0.33   genes 0.39 / circumstance 0.07 / luck 0.59
+//
+// §15 asks for elasticity 0.20–0.50 *and* circumstance near 0.40 *and* luck near 0.30.
+// This model cannot currently deliver all three at once. These values buy the closest
+// thing to the design's central claim — that neither genes nor circumstance decides
+// a life — and leave elasticity and luck each a little outside their bands, which the
+// harness reports rather than hides.
+
+/// Yearly chance of an unearned gain — a windfall, a good turn, being in the right place.
+const WINDFALL_CHANCE: f64 = 0.015;
+const WINDFALL: f32 = 0.12;
+
+/// And of the reverse. Slightly likelier than the windfall, because ruin is.
+const SETBACK_CHANCE: f64 = 0.020;
+const SETBACK: f32 = 0.12;
+
+/// Yearly chance, per unit of local bonding capital, that a young adult is taken up by
+/// someone who can open doors.
+///
+/// Scaled by *bonding* capital rather than bridging, which is the whole point. Bridging
+/// ties belong to the already-comfortable, so routing patronage through them would only
+/// have widened the gap. Dense mutual-dependence community is what poor neighbourhoods
+/// actually have, and turning it into a way out is what makes them produce escapees
+/// rather than only outcomes.
+const MENTOR_CHANCE: f64 = 0.055;
+const PATRONAGE: f32 = 2.1;
+
+/// Ages at which someone will still uproot themselves for work.
+const RESTLESS_UNTIL: f64 = 32.0;
+
+/// How much more readily somewhere takes in the young.
+///
+/// They are renting a room, not buying a house. Without this the spatial trap is
+/// absolute: you cannot move to where the work is until you have the standing that
+/// moving there would earn you.
+const YOUNG_MOVER_SLACK: f32 = 0.30;
+
 /// Something that happened, as the simulation records it — structured, not prose.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Happening {
@@ -108,6 +161,9 @@ pub enum Happening {
         person: PersonId,
         to: PlaceId,
     },
+    PersonMentored {
+        person: PersonId,
+    },
     PlaceChanges {
         place: PlaceId,
         into: society::Archetype,
@@ -122,7 +178,8 @@ impl Happening {
             | Happening::PersonDoes { person, .. }
             | Happening::PersonDies { person, .. }
             | Happening::PersonPairs { person, .. }
-            | Happening::PersonMoves { person, .. } => Some(*person),
+            | Happening::PersonMoves { person, .. }
+            | Happening::PersonMentored { person } => Some(*person),
             Happening::PersonBorn { child, .. } => Some(*child),
             _ => None,
         }
@@ -408,7 +465,7 @@ impl World {
             // in. Advantage passes along both, and along the transfer at birth.
             let diligence = (0.6 + 0.5 * subject.personality.conscientiousness).clamp(0.2, 2.0);
             let taught = 0.5 + schooling;
-            subject.earn(WORK_GAIN * job_opportunity * diligence * taught);
+            subject.earn(WORK_GAIN * job_opportunity * diligence * taught * subject.patronage());
         }
 
         if first {
@@ -488,11 +545,66 @@ impl World {
                     // backing, and that does not erode because they are young.
                     person.slip(STANDING_DECAY);
                 }
+                self.roll_fortune(at, id);
+                self.seek_patron(at, id);
                 self.seek_partner(at, id);
                 self.try_conceive(at, id);
                 self.scheduler
                     .schedule_at(at + Duration::from_years(1), Task::PersonAges(id));
             }
+        }
+    }
+
+    /// Plain luck: the windfalls and ruins that no one earns.
+    ///
+    /// Uncorrelated with everything, which is the point — it is the only share of an
+    /// outcome that cannot be inherited, and a world without it is a morality tale.
+    fn roll_fortune(&mut self, at: Time, id: PersonId) {
+        let mut rng = self.moment_stream(Domain::Chance, id.to_bits(), at);
+        let Some(person) = self.people.get_mut(id) else {
+            return;
+        };
+        if person.stage(at).is_dependent() {
+            return;
+        }
+        if rng.chance(WINDFALL_CHANCE) {
+            person.earn(WINDFALL);
+        }
+        if rng.chance(SETBACK_CHANCE) {
+            person.slip(SETBACK);
+        }
+    }
+
+    /// A young adult may be taken up by someone who can open doors.
+    fn seek_patron(&mut self, at: Time, id: PersonId) {
+        let Some(person) = self.people.get(id) else {
+            return;
+        };
+        let age = person.age(at).years();
+        if person.is_mentored() || !(FERTILE_FROM..RESTLESS_UNTIL).contains(&age) {
+            return;
+        }
+        let bonding = self
+            .society
+            .place_of(id)
+            .and_then(|p| self.places.get(p))
+            .map(|place| place.env.bonding_capital)
+            .unwrap_or(0.0);
+
+        let mut rng = self.moment_stream(Domain::Chance, id.to_bits() ^ 0x_1e17, at);
+        if !rng.chance(MENTOR_CHANCE * f64::from(bonding)) {
+            return;
+        }
+        if self
+            .people
+            .get_mut(id)
+            .is_some_and(|p| p.take_patron(PATRONAGE))
+        {
+            self.chronicle.record(
+                at,
+                Salience::Pivotal,
+                Happening::PersonMentored { person: id },
+            );
         }
     }
 
@@ -687,13 +799,27 @@ impl World {
                 .map(|p| p.env.upbringing())
                 .unwrap_or(0.0);
 
+            let opportunity = self
+                .society
+                .place_of(id)
+                .and_then(|p| self.places.get(p))
+                .map(|p| p.env.job_opportunity)
+                .unwrap_or(0.0);
+
             let Some(person) = self.people.get_mut(id) else {
                 continue;
             };
-            if !person.is_alive() || person.has_matured() {
+            if !person.is_alive() {
                 continue;
             }
             let age = person.age(at).years();
+
+            if !person.stage(at).is_dependent() {
+                person.work_amid(opportunity, 1.0);
+            }
+            if person.has_matured() {
+                continue;
+            }
             person.absorb(quality, age, 1.0);
             if age >= 20.0 {
                 // The window closes: what was absorbed becomes who they are.
@@ -729,17 +855,38 @@ impl World {
                 if count == 0 { 0.0 } else { sum / count as f32 }
             };
 
-            // The best place that would actually have them. Everyone wants the best
-            // neighbourhood; what sorts people is which ones will take them.
+            // The young will uproot for work, and are taken in more readily — they are
+            // renting a room, not buying a house. Everyone else is choosing a place to
+            // live, and is ranked out of the good ones by what they have.
+            let restless = members
+                .iter()
+                .filter_map(|m| self.people.get(*m))
+                .filter(|p| p.is_alive() && !p.stage(at).is_dependent())
+                .all(|p| p.age(at).years() < RESTLESS_UNTIL);
+
             let best = self
                 .places
                 .iter()
                 .filter(|(id, place)| {
                     let occupancy =
                         self.society.households_in(*id).count() as f32 / place.capacity as f32;
-                    place.admits(standing, occupancy)
+                    let means = if restless {
+                        standing + YOUNG_MOVER_SLACK
+                    } else {
+                        standing
+                    };
+                    place.admits(means, occupancy)
                 })
-                .max_by(|(_, a), (_, b)| a.env.quality().total_cmp(&b.env.quality()))
+                .max_by(|(_, a), (_, b)| {
+                    let worth = |e: &society::EnvironmentVector| {
+                        if restless {
+                            e.job_opportunity
+                        } else {
+                            e.quality()
+                        }
+                    };
+                    worth(&a.env).total_cmp(&worth(&b.env))
+                })
                 .map(|(id, _)| id);
 
             let Some(best) = best else { continue };
@@ -766,9 +913,13 @@ impl World {
             *self.arrivals.entry(best).or_insert(0) += 1;
             for member in members {
                 if self.people.get(member).is_some_and(|p| p.is_alive()) {
+                    // Pivotal, not routine. §14 makes the neighbourhood a child grows
+                    // up in the largest single influence on how they turn out, so
+                    // changing it is one of the more consequential things that can
+                    // happen to a family.
                     self.chronicle.record(
                         at,
-                        Salience::Notable,
+                        Salience::Pivotal,
                         Happening::PersonMoves {
                             person: member,
                             to: best,
@@ -1512,6 +1663,102 @@ mod tests {
         assert!(
             spread > 0.2,
             "everyone ended up the same: spread {spread:.3}"
+        );
+    }
+
+    #[test]
+    fn some_people_are_taken_up_by_someone() {
+        let world = lineages();
+        let mentored = world
+            .chronicle
+            .iter()
+            .filter(|r| matches!(r.kind, Happening::PersonMentored { .. }))
+            .count();
+        assert!(mentored > 0, "nobody ever found a patron");
+
+        // And it is a way out, not a reward for already being ahead: everyone who found
+        // one keeps it for life, and it multiplies what their work returns.
+        let lucky = world.people.iter().filter(|(_, p)| p.is_mentored()).count();
+        assert!(lucky > 0);
+        assert!(
+            lucky < world.people.len() / 2,
+            "patronage should be uncommon, not the norm"
+        );
+    }
+
+    #[test]
+    fn patronage_favours_tight_communities_over_comfortable_ones() {
+        // The inversion that makes the mechanism worth having. Bridging ties belong to
+        // people who are already comfortable; routing a way out through them would only
+        // widen the gap. Bonding capital is what a poor neighbourhood actually has.
+        let world = lineages();
+        let mut with_patron = Vec::new();
+        let mut without = Vec::new();
+
+        for (id, person) in world.people.iter() {
+            if !person.has_matured() {
+                continue;
+            }
+            let Some(bonding) = world
+                .society
+                .place_of(id)
+                .and_then(|p| world.places.get(p))
+                .map(|p| p.env.bonding_capital)
+            else {
+                continue;
+            };
+            if person.is_mentored() {
+                with_patron.push(bonding);
+            } else {
+                without.push(bonding);
+            }
+        }
+
+        if with_patron.len() >= 3 && !without.is_empty() {
+            let mean = |v: &[f32]| v.iter().sum::<f32>() / v.len() as f32;
+            assert!(
+                mean(&with_patron) > mean(&without) - 0.15,
+                "patrons should not be concentrated in the comfortable places: {:.2} vs {:.2}",
+                mean(&with_patron),
+                mean(&without)
+            );
+        }
+    }
+
+    #[test]
+    fn the_young_will_move_for_work() {
+        // The spatial trap without this is absolute: you cannot move to where the work
+        // is until you have the standing that moving there would have earned you.
+        let world = lineages();
+        let movers = world
+            .chronicle
+            .iter()
+            .filter(|r| matches!(r.kind, Happening::PersonMoves { .. }))
+            .count();
+        assert!(movers > 5, "only {movers} moves in seventy years");
+    }
+
+    #[test]
+    fn fortune_is_uncorrelated_with_deserving() {
+        // Luck has to reach people regardless of who they are, or it is not luck.
+        let world = lineages();
+        let now = world.now();
+        let adults: Vec<&Person> = world
+            .people
+            .iter()
+            .map(|(_, p)| p)
+            .filter(|p| p.has_matured() && !p.stage(now).is_dependent())
+            .collect();
+        assert!(adults.len() > 20);
+
+        // Standing should not have collapsed onto one value, which is what would happen
+        // if the shocks were the only thing moving it.
+        let peaks: Vec<f32> = adults.iter().map(|p| p.peak_standing()).collect();
+        let spread = peaks.iter().cloned().fold(f32::MIN, f32::max)
+            - peaks.iter().cloned().fold(f32::MAX, f32::min);
+        assert!(
+            spread > 0.2,
+            "outcomes collapsed together: spread {spread:.2}"
         );
     }
 

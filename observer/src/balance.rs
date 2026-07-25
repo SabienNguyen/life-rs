@@ -72,6 +72,8 @@ struct Subject {
     upbringing: f32,
     /// What their parents had — the transfer at birth.
     inherited: f32,
+    /// The opportunity available where they actually spent their working life.
+    opportunity: f32,
 }
 
 /// The age by which someone counts as having had a life.
@@ -90,14 +92,17 @@ pub fn measure(world: &World) -> Balance {
     let outcomes: Vec<f32> = subjects.iter().map(|s| s.outcome).collect();
     let genes: Vec<f32> = subjects.iter().map(|s| s.genetic).collect();
 
-    // Circumstance is more than the street someone grew up on: what their parents had
-    // is transmitted advantage too, and leaving it out pushed half the variance into
-    // the residual and called it chance. Both are on different scales, so they are
-    // standardised before being combined.
-    let homes = composite(
-        &subjects.iter().map(|s| s.upbringing).collect::<Vec<_>>(),
-        &subjects.iter().map(|s| s.inherited).collect::<Vec<_>>(),
-    );
+    // Circumstance is three things, not one: the street someone grew up on, what their
+    // parents had, and the opportunity where they actually worked. Leaving the first out
+    // pushed half the variance into the residual and called it chance; leaving the last
+    // out did the same again once people could move for work, because a childhood
+    // neighbourhood stops predicting an outcome as soon as you can leave it. All three
+    // are on different scales, so each is standardised before they are combined.
+    let homes = composite(&[
+        subjects.iter().map(|s| s.upbringing).collect(),
+        subjects.iter().map(|s| s.inherited).collect(),
+        subjects.iter().map(|s| s.opportunity).collect(),
+    ]);
 
     balance.shares = decompose(&outcomes, &genes, &homes);
     balance.elasticity = elasticity(world, &subjects);
@@ -131,6 +136,7 @@ fn gather(world: &World) -> Vec<Subject> {
                 genetic: p.origins.conscientiousness.genetic,
                 upbringing: p.absorbed_upbringing(),
                 inherited: midparent,
+                opportunity: p.mean_opportunity(),
             })
         })
         .collect()
@@ -270,17 +276,17 @@ fn upbringing_gap(subjects: &[Subject]) -> Option<f32> {
 }
 
 /// Standardise two series and add them, so neither dominates by having a wider scale.
-fn composite(a: &[f32], b: &[f32]) -> Vec<f32> {
-    let standardise = |values: &[f32]| {
+fn composite(series: &[Vec<f32>]) -> Vec<f32> {
+    let length = series.first().map(Vec::len).unwrap_or(0);
+    let mut total = vec![0.0; length];
+    for values in series {
         let (mean, spread) = (mean_of(values), variance_of(values).sqrt());
         let spread = if spread < 1e-9 { 1.0 } else { spread };
-        values
-            .iter()
-            .map(|v| (v - mean) / spread)
-            .collect::<Vec<f32>>()
-    };
-    let (za, zb) = (standardise(a), standardise(b));
-    za.iter().zip(&zb).map(|(x, y)| x + y).collect()
+        for (sum, value) in total.iter_mut().zip(values) {
+            *sum += (value - mean) / spread;
+        }
+    }
+    total
 }
 
 // ---- small statistics --------------------------------------------------------------
