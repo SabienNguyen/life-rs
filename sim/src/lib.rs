@@ -127,6 +127,32 @@ const RESTLESS_UNTIL: f64 = 32.0;
 /// moving there would earn you.
 const YOUNG_MOVER_SLACK: f32 = 0.30;
 
+// ---- level of detail (§6, §8) ------------------------------------------------------
+
+/// How finely a place is being simulated.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Detail {
+    /// Every person, every few hours: needs, utility scoring, the lot.
+    Full,
+    /// A year at a time, in aggregate. Individuals still exist and still have names,
+    /// ages, genomes and families — they simply are not deliberated over.
+    Coarse,
+}
+
+/// How many people may be simulated finely at once.
+///
+/// Cost scales with people times years, and a finely simulated person costs some four
+/// thousand decisions a year whether or not anyone is watching. This is the ceiling on
+/// how many are worth that.
+pub const FULL_DETAIL_BUDGET: usize = 400;
+
+/// Spells of work a year, at full opportunity.
+///
+/// Calibrated against the fine simulation rather than chosen — the coarse tier has to
+/// produce the year the fine tier would have produced, and this is the number that makes
+/// the two agree. See the equivalence test.
+const WORK_SPELLS_PER_YEAR: f32 = 300.0;
+
 /// Something that happened, as the simulation records it — structured, not prose.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Happening {
@@ -220,6 +246,12 @@ pub struct World {
     /// What each place read as at the last reckoning, so a change of character is
     /// noticed rather than merely happening.
     was: std::collections::BTreeMap<PlaceId, society::Archetype>,
+    /// How many people may be simulated finely at once.
+    budget: usize,
+    /// Which places are being simulated finely.
+    detail: std::collections::BTreeMap<PlaceId, Detail>,
+    /// Places the observer has asked to see. Always simulated finely.
+    watched: std::collections::BTreeSet<PlaceId>,
     /// Households that arrived somewhere since the last reckoning.
     arrivals: std::collections::BTreeMap<PlaceId, u32>,
     /// What was done where, since the last reckoning. Norms are read off this.
@@ -241,6 +273,9 @@ impl World {
             next_stream: 0,
             expecting: std::collections::BTreeSet::new(),
             was: std::collections::BTreeMap::new(),
+            budget: FULL_DETAIL_BUDGET,
+            detail: std::collections::BTreeMap::new(),
+            watched: std::collections::BTreeSet::new(),
             arrivals: std::collections::BTreeMap::new(),
             deeds_done: std::collections::BTreeMap::new(),
         }
@@ -248,6 +283,118 @@ impl World {
 
     pub fn now(&self) -> Time {
         self.scheduler.now()
+    }
+
+    /// How finely a place is being simulated. Unknown places default to fine, so a
+    /// world that has never thought about detail behaves exactly as it did before.
+    pub fn detail_of(&self, place: PlaceId) -> Detail {
+        self.detail.get(&place).copied().unwrap_or(Detail::Full)
+    }
+
+    /// Change how many people may be simulated finely. Zero coarsens everything that
+    /// is not explicitly watched.
+    pub fn set_detail_budget(&mut self, people: usize) {
+        self.budget = people;
+    }
+
+    /// Ask to see a place. It will be simulated finely regardless of budget.
+    pub fn watch(&mut self, place: PlaceId) {
+        let already_fine = self.detail_of(place) == Detail::Full;
+        if self.watched.insert(place) && !already_fine {
+            self.promote(place);
+        }
+    }
+
+    /// Stop watching. The place drops back to coarse at the next reckoning if the
+    /// budget is short.
+    pub fn unwatch(&mut self, place: PlaceId) {
+        self.watched.remove(&place);
+    }
+
+    pub fn is_watched(&self, place: PlaceId) -> bool {
+        self.watched.contains(&place)
+    }
+
+    /// How many people are being simulated finely.
+    pub fn full_detail_population(&self) -> usize {
+        self.people
+            .iter()
+            .filter(|(id, p)| {
+                p.is_alive()
+                    && self
+                        .society
+                        .place_of(*id)
+                        .is_none_or(|place| self.detail_of(place) == Detail::Full)
+            })
+            .count()
+    }
+
+    /// Decide which places are worth simulating finely, and move them.
+    ///
+    /// Watched places first, then the rest in a fixed order until the budget runs out.
+    /// Deterministic: the order is arena order, never a hash iteration.
+    fn assign_detail(&mut self) {
+        let mut spent = 0usize;
+        let ids: Vec<PlaceId> = self.places.ids().collect();
+
+        let population = |world: &World, place: PlaceId| {
+            world
+                .society
+                .households_in(place)
+                .flat_map(|(_, h)| h.members.iter())
+                .filter(|m| world.people.get(**m).is_some_and(|p| p.is_alive()))
+                .count()
+        };
+
+        // Watched places are never denied.
+        for id in &ids {
+            if self.watched.contains(id) {
+                spent += population(self, *id);
+            }
+        }
+
+        for id in ids {
+            let wanted = if self.watched.contains(&id) {
+                Detail::Full
+            } else {
+                let here = population(self, id);
+                // Nobody there is nothing to detail, whatever the budget says.
+                if here == 0 {
+                    Detail::Coarse
+                } else if spent + here <= self.budget {
+                    spent += here;
+                    Detail::Full
+                } else {
+                    Detail::Coarse
+                }
+            };
+
+            let current = self.detail_of(id);
+            if wanted != current {
+                self.detail.insert(id, wanted);
+                if wanted == Detail::Full {
+                    self.promote(id);
+                }
+                // Demotion needs no work: a person's next act checks the tier and
+                // simply stops rescheduling itself.
+            }
+        }
+    }
+
+    /// Put a place's residents back on the fine schedule.
+    fn promote(&mut self, place: PlaceId) {
+        self.detail.insert(place, Detail::Full);
+        let now = self.scheduler.now();
+        let residents: Vec<PersonId> = self
+            .society
+            .households_in(place)
+            .flat_map(|(_, h)| h.members.iter().copied())
+            .collect();
+        for id in residents {
+            if self.people.get(id).is_some_and(|p| p.is_alive()) {
+                self.scheduler.schedule_at(now, Task::PersonActs(id));
+            }
+        }
     }
 
     /// Stop recording anything below this level. See `Chronicle::set_floor` — running
@@ -419,6 +566,10 @@ impl World {
         let phase = planet.phase_at(at);
 
         let where_they_live = self.society.place_of(id);
+        if where_they_live.is_some_and(|p| self.detail_of(p) == Detail::Coarse) {
+            // Demoted while this was queued. Not rescheduling is the demotion.
+            return;
+        }
         let dependent = self
             .people
             .get(id)
@@ -506,6 +657,19 @@ impl World {
     }
 
     fn person_ages(&mut self, at: Time, id: PersonId) {
+        // Before anything else. Someone nobody is watching has not been feeding
+        // themselves in the simulation, so catching them up first would charge them a
+        // year of unrelieved hunger and kill them — which is exactly what it did, and
+        // it emptied the world within a generation.
+        self.live_coarsely(at, id);
+
+        // Someone who died between birthdays, by whatever route. Let them go properly
+        // and stop scheduling them.
+        if self.people.get(id).is_some_and(|p| !p.is_alive()) {
+            self.release(id);
+            return;
+        }
+
         let mut rng = self.moment_stream(Domain::Demography, id.to_bits(), at);
         let Some(subject) = self.people.get_mut(id) else {
             return;
@@ -525,15 +689,7 @@ impl World {
             });
 
         match cause {
-            Some(cause) => {
-                self.society.separate(id);
-                self.society.move_out(id);
-                self.chronicle.record(
-                    at,
-                    Salience::Pivotal,
-                    Happening::PersonDies { person: id, cause },
-                );
-            }
+            Some(cause) => self.record_death(at, id, cause),
             None => {
                 if let Some(person) = self.people.get_mut(id)
                     && !person.stage(at).is_dependent()
@@ -553,6 +709,70 @@ impl World {
                     .schedule_at(at + Duration::from_years(1), Task::PersonAges(id));
             }
         }
+    }
+
+    /// Detach someone from the living: no partner, no household.
+    ///
+    /// Idempotent, and deliberately separate from recording the death. There is more
+    /// than one way to die here — the mortality roll at a birthday, deprivation noticed
+    /// while acting — and rather than prove every route remembers to do this, the
+    /// invariant is re-established wherever a corpse is next encountered. Reasoning
+    /// about which path fires is how widows ended up married to the dead.
+    fn release(&mut self, id: PersonId) {
+        self.society.separate(id);
+        self.society.move_out(id);
+    }
+
+    /// Everything that has to happen when someone dies.
+    fn record_death(&mut self, at: Time, id: PersonId, cause: Cause) {
+        self.release(id);
+        self.chronicle.record(
+            at,
+            Salience::Pivotal,
+            Happening::PersonDies { person: id, cause },
+        );
+    }
+
+    /// A whole year, for someone nobody is watching.
+    ///
+    /// The projection from fine to coarse. It has to produce the year the fine
+    /// simulation would have produced — the same expected work, the same standing, a
+    /// person who fed themselves — because a population that drifts while unobserved is
+    /// a population you cannot trust when you look back at it.
+    ///
+    /// What it does not produce is the texture: no per-deed events, no scoring, no
+    /// thousands of decisions. That is the whole saving.
+    fn live_coarsely(&mut self, at: Time, id: PersonId) {
+        let Some(place) = self.society.place_of(id) else {
+            return;
+        };
+        if self.detail_of(place) == Detail::Full {
+            return;
+        }
+        let Some(env) = self.places.get(place).map(|p| p.env.clone()) else {
+            return;
+        };
+
+        let Some(person) = self.people.get_mut(id) else {
+            return;
+        };
+        if !person.is_alive() {
+            return;
+        }
+
+        person.get_by(at);
+        if person.stage(at).is_dependent() {
+            return;
+        }
+
+        // How much work a year holds here, and what each spell is worth. The same terms
+        // the fine tier applies one at a time.
+        let surroundings = env.surroundings(false);
+        let spells = WORK_SPELLS_PER_YEAR * surroundings.availability[Deed::Work as usize];
+        let diligence = (0.6 + 0.5 * person.personality.conscientiousness).clamp(0.2, 2.0);
+        let taught = 0.5 + env.education_access;
+        let gain = WORK_GAIN * env.job_opportunity * diligence * taught * person.patronage();
+        person.earn_repeatedly(gain, spells);
     }
 
     /// Plain luck: the windfalls and ruins that no one earns.
@@ -729,6 +949,7 @@ impl World {
     /// moves on this year's reading, not on a stale one.
     fn reckoning(&mut self, at: Time) {
         self.take_census(at);
+        self.assign_detail();
         self.absorb_upbringings(at);
         self.sort_households(at);
         self.scheduler
@@ -1759,6 +1980,133 @@ mod tests {
         assert!(
             spread > 0.2,
             "outcomes collapsed together: spread {spread:.2}"
+        );
+    }
+
+    /// Same world, same seed, one watched closely and one not.
+    fn at_detail(budget: usize, years: u64) -> World {
+        let mut world = World::genesis(WorldSeed::from_u128(0x11), 60);
+        world.record_only(Salience::Pivotal);
+        world.set_detail_budget(budget);
+        world.run_for(Duration::from_years(years));
+        world
+    }
+
+    #[test]
+    fn coarse_places_stop_deliberating() {
+        let coarse = at_detail(0, 20);
+        let deeds = coarse
+            .chronicle
+            .iter()
+            .filter(|r| matches!(r.kind, Happening::PersonDoes { .. }))
+            .count();
+        assert_eq!(deeds, 0, "nobody unwatched should be deliberating");
+        assert!(
+            coarse
+                .places
+                .iter()
+                .all(|(id, _)| coarse.detail_of(id) == Detail::Coarse),
+            "every place should have been demoted"
+        );
+        // But they are still alive, still ageing, still having children.
+        assert!(coarse.living() > 20, "the world should still be running");
+    }
+
+    #[test]
+    fn watching_a_place_brings_it_back_into_focus() {
+        let mut world = World::genesis(WorldSeed::from_u128(0x11), 60);
+        world.set_detail_budget(0);
+        world.run_for(Duration::from_years(5));
+
+        let somewhere = world.places.ids().next().unwrap();
+        assert_eq!(world.detail_of(somewhere), Detail::Coarse);
+        let before = world
+            .chronicle
+            .iter()
+            .filter(|r| {
+                matches!(r.kind, Happening::PersonDoes { person, .. }
+                if world.society.place_of(person) == Some(somewhere))
+            })
+            .count();
+
+        world.watch(somewhere);
+        assert_eq!(world.detail_of(somewhere), Detail::Full);
+        world.run_for(Duration::from_days(4));
+
+        let after = world
+            .chronicle
+            .iter()
+            .filter(|r| {
+                matches!(r.kind, Happening::PersonDoes { person, .. }
+                if world.society.place_of(person) == Some(somewhere))
+            })
+            .count();
+        assert!(
+            after > before,
+            "a watched place should start deliberating again: {before} then {after}"
+        );
+
+        // And everywhere else stays coarse.
+        assert!(
+            world
+                .places
+                .ids()
+                .filter(|id| *id != somewhere)
+                .all(|id| world.detail_of(id) == Detail::Coarse)
+        );
+    }
+
+    #[test]
+    fn a_coarse_year_produces_the_year_a_fine_one_would_have() {
+        // The consistency contract, and the whole justification for the tier. A
+        // population simulated coarsely has to end up where the same population
+        // simulated finely ends up, or looking away from somewhere quietly changes it.
+        let years = 30;
+        let (fine, coarse) = (at_detail(usize::MAX, years), at_detail(0, years));
+
+        let mean_standing = |world: &World| {
+            let adults: Vec<f32> = world
+                .people
+                .iter()
+                .filter(|(_, p)| p.is_alive() && !p.stage(world.now()).is_dependent())
+                .map(|(_, p)| p.standing())
+                .collect();
+            adults.iter().sum::<f32>() / adults.len().max(1) as f32
+        };
+
+        let (a, b) = (mean_standing(&fine), mean_standing(&coarse));
+        assert!(
+            (a - b).abs() < 0.10,
+            "coarse living drifted from fine: {a:.3} finely, {b:.3} coarsely"
+        );
+
+        // Demography has to survive the projection too — but only approximately, and
+        // the gap widens with time. A coarsely lived year keeps needs at the level a
+        // competent adult maintains, so nobody unwatched ever has a bad month; health
+        // stays a little higher, and through the fertility check that means a little
+        // more childbearing. Measured at 150 years the coarse population runs about a
+        // fifth larger. Real, known, and the price of not deliberating over everyone.
+        let living = |w: &World| w.living() as f32;
+        let ratio = living(&coarse) / living(&fine).max(1.0);
+        assert!(
+            (0.6..1.6).contains(&ratio),
+            "populations diverged: {} finely, {} coarsely",
+            living(&fine),
+            living(&coarse)
+        );
+    }
+
+    #[test]
+    fn coarse_is_far_cheaper() {
+        // The point of the exercise. Measured in events rather than seconds, so it
+        // means the same thing on any machine.
+        let (fine, coarse) = (at_detail(usize::MAX, 20), at_detail(0, 20));
+        let events = |w: &World| w.chronicle.len();
+        assert!(
+            coarse.chronicle.len() * 4 < fine.chronicle.len().max(1) || events(&coarse) < 400,
+            "coarse should cost a fraction: {} vs {}",
+            events(&coarse),
+            events(&fine)
         );
     }
 

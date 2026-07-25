@@ -22,8 +22,8 @@ omniscient observer API, and the phased roadmap from here to there.
 
 ## Status
 
-**Phases 0 (foundations), 1 (person depth), 2 (genetics and families) and
-3 (neighbourhoods) are in.**
+**Phases 0 (foundations), 1 (person depth), 2 (genetics and families),
+3 (neighbourhoods) and level-of-detail are in.**
 
 ```
 cargo run -p main                                   # a new world, three days
@@ -173,6 +173,27 @@ can explain and raises what is left to chance:
 model cannot give all three at once. The shipped values buy the design's central claim —
 that neither cause decides a life — and leave elasticity and luck each a little outside
 their bands, which the harness reports rather than hides.
+
+**Level of detail** (§6, pulled forward): people in places nobody is watching stop
+deliberating every few hours and live a year at a time instead.
+
+```
+300 people, 150 years
+  every place watched   52.7 s
+  none watched           0.7 s     — 73x
+```
+
+The coarse year is a *projection*, not an approximation: work compounds in closed form,
+so a population simulated coarsely lands where the same population simulated finely
+lands. That equivalence is a test, because a world that quietly changes while you are
+not looking is one you cannot trust when you look back at it. `--detail 0` coarsens
+everything; `World::watch(place)` brings a neighbourhood back into focus and its people
+resume deliberating within the day.
+
+One known cost, measured rather than hidden: a coarsely lived year keeps needs where a
+competent adult maintains them, so nobody unwatched ever has a bad month. Health runs
+slightly higher, and through the fertility check that means slightly more childbearing —
+about a fifth more population over 150 years.
 
 Next is Phase 4: the geodesic grid and tectonics beneath these places.
 

@@ -352,7 +352,13 @@ impl Place {
             services: (0.1 + 0.8 * census.mean_standing).clamp(0.0, 1.0),
             pollution: (0.15 + 0.5 * occupancy - 0.2 * census.mean_standing).clamp(0.0, 1.0),
             churn,
-            norms: norms_from(&census.deeds),
+            // A place nobody was watching reports no deeds. That is silence, not a
+            // sudden absence of local custom, so its norms are left where they were.
+            norms: if census.deeds.iter().all(|c| *c == 0) {
+                self.env.norms
+            } else {
+                norms_from(&census.deeds)
+            },
         };
 
         self.env = blend(&self.env, &target, ADJUSTMENT);
@@ -624,6 +630,30 @@ mod tests {
         let rich = settled(40, &census(12, 0.95, 0));
         assert!(poor.env.stress() > rich.env.stress() + 0.3);
         assert!((0.0..=1.0).contains(&poor.env.stress()));
+    }
+
+    #[test]
+    fn silence_leaves_local_custom_alone() {
+        // A coarsely simulated place emits no deeds. Reading that as "nobody here does
+        // anything in particular" would wipe out its character the moment it stopped
+        // being watched.
+        let mut place = Place::new("Somewhere", 20);
+        let mut busy = census(20, 0.5, 0);
+        busy.deeds[Deed::Work as usize] = 500;
+        for _ in 0..40 {
+            place.observe(&busy);
+        }
+        let working = place.env.norms[Deed::Work as usize];
+        assert!(working > 0.7);
+
+        for _ in 0..40 {
+            place.observe(&census(20, 0.5, 0));
+        }
+        assert_eq!(
+            place.env.norms[Deed::Work as usize],
+            working,
+            "silence should not erase custom"
+        );
     }
 
     #[test]

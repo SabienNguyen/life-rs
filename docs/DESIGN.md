@@ -2,9 +2,11 @@
 
 > Big-picture architecture — the plan we implement against.
 >
-> **Phases 0–3 are implemented** — foundations (`sim-core`, `sim`), person depth
+> **Phases 0–3 and 10 are implemented** — foundations (`sim-core`, `sim`), person depth
 > (`life`, `person`), genetics with families (`genetics`, `society`), and neighbourhoods
-> with the four behaviour channels live. §20 marks progress; the §15 balance harness is
+> with the four behaviour channels live, plus level-of-detail (§6, pulled forward from
+> phase 10 because everyone acting whether watched or not was making every later phase
+> more expensive to build and test). §20 marks progress; the §15 balance harness is
 > the one part of Phase 3 still outstanding. Everything beyond that is still a plan.
 
 ## 1. The goal
@@ -1002,7 +1004,7 @@ climate and no one whose life it changes.
 | --- | --- |
 | **8** | `chronicle`: unified event log, indices, salience, compaction, memory |
 | **9** | `observer` + TUI: random person, dossier, family tree, why, nature/nurture, counterfactual |
-| **10** | Spatial LOD: tiers, promotion/demotion, backfill, aggregate invariants |
+| **10** ◑ | Spatial LOD: tiers, promotion/demotion, aggregate invariants — **done early**. Backfill of never-simulated history is the remaining part |
 
 ### M4 — A world with history (deep time)
 | Phase | Deliverable |

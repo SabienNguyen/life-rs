@@ -328,6 +328,21 @@ impl Person {
         self.set_standing(self.standing + gain * (1.0 - self.standing));
     }
 
+    /// Apply many spells of work at once.
+    ///
+    /// Closed form, not an approximation. Each spell gains `gain * (1 - standing)`, so
+    /// `n` of them compound to `1 - (1 - s)(1 - gain)^n` exactly. That matters: this is
+    /// how a coarsely simulated year has to agree with a finely simulated one, and an
+    /// approximation here would show up as a population quietly diverging from the
+    /// version of itself that was being watched.
+    pub fn earn_repeatedly(&mut self, gain: f32, times: f32) {
+        if times <= 0.0 || gain <= 0.0 {
+            return;
+        }
+        let remaining = (1.0 - gain.min(1.0)).powf(times);
+        self.set_standing(1.0 - (1.0 - self.standing) * remaining);
+    }
+
     /// Lose ground — the slow drift back that keeps standing from ratcheting.
     pub fn slip(&mut self, loss: f32) {
         self.set_standing(self.standing - loss * self.standing);
@@ -592,6 +607,21 @@ impl Person {
         }
     }
 
+    /// Assume a year of coping: someone competent, unwatched, meeting their own needs.
+    ///
+    /// The claim a coarse tier makes. Rather than accruing a year of hunger nobody was
+    /// simulated to relieve, needs are returned to where a person who looks after
+    /// themselves actually sits — which is what the fine simulation shows them doing.
+    pub fn get_by(&mut self, now: Time) {
+        self.updated = now;
+        self.needs = Needs::rested();
+        for need in Need::ALL {
+            self.needs.set(need, COPING);
+        }
+        self.health
+            .respond_to(self.needs.vital_pressure(), Duration::ZERO);
+    }
+
     /// Force a need, for tests and for events that act on a person from outside.
     pub fn set_need(&mut self, need: Need, level: f32) {
         self.needs.set(need, level);
@@ -679,6 +709,12 @@ fn stature_of(architecture: &Architecture, genome: &Genome) -> Height {
         _ => Height::Average,
     }
 }
+
+/// Where needs sit for someone quietly getting on with looking after themselves.
+///
+/// Measured from finely simulated people rather than chosen: their needs oscillate as
+/// they eat and sleep, and this is roughly where that cycle averages out.
+const COPING: f32 = 0.25;
 
 /// How much a year at this age shapes someone.
 ///

@@ -25,6 +25,7 @@ options:
                    routine | notable | pivotal | historic | epochal
   --dossier        end with a close look at one random person
   --balance        report what the run turned out to be about
+  --detail <n>     how many people to simulate finely (default: 400)
   --quiet          print only the closing summary
   -h, --help       this message
 ";
@@ -37,6 +38,7 @@ struct Options {
     min_salience: Salience,
     dossier: bool,
     balance: bool,
+    detail: Option<usize>,
     quiet: bool,
 }
 
@@ -50,6 +52,7 @@ impl Default for Options {
             min_salience: Salience::Routine,
             dossier: false,
             balance: false,
+            detail: None,
             quiet: false,
         }
     }
@@ -73,6 +76,9 @@ fn main() -> ExitCode {
     // millions of records; asking to see only the pivotal moments should also mean not
     // paying to store the rest.
     world.record_only(options.min_salience);
+    if let Some(budget) = options.detail {
+        world.set_detail_budget(budget);
+    }
     let started = world.now();
     world.run_for(options.span);
 
@@ -205,6 +211,13 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Option<Options>, Str
                 options.people = raw
                     .parse()
                     .map_err(|e| format!("bad population {raw:?}: {e}"))?;
+            }
+            "--detail" => {
+                let raw = value()?;
+                options.detail = Some(
+                    raw.parse()
+                        .map_err(|e| format!("bad detail budget {raw:?}: {e}"))?,
+                );
             }
             "--min" => {
                 let raw = value()?;
