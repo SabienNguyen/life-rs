@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+biome = { path = "../biome" }
 climate = { path = "../climate" }
 geo = { path = "../geo" }
 sim-core = { path = "../sim-core" }

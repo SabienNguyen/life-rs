@@ -12,6 +12,7 @@
 
 use std::fmt::Write as _;
 
+use biome::Biosphere;
 use climate::Climate;
 use geo::{Boundary, CellId, Lithosphere};
 
@@ -30,9 +31,11 @@ pub struct Frame {
     pub myr: f64,
     /// Elevation relative to sea level, in metres, row-major from the north pole.
     pub height: Vec<i16>,
-    /// Plate and boundary kind, packed one byte per pixel: the plate in the top six
-    /// bits, the boundary in the bottom two. Two fields that are only ever read
-    /// together, and halving the bytes they cost is worth the shift.
+    /// Biome and boundary kind, packed one byte per pixel: the biome in the top four
+    /// bits, the boundary in the bottom two. Fifteen biomes and four boundary kinds fit
+    /// in six bits between them, and a byte a pixel is a byte a pixel — this used to
+    /// carry the plate number instead, which was of far less interest than what grows
+    /// there.
     pub tenure: Vec<u8>,
     /// Temperature in half-degrees from −64 °C, and rainfall in units of twenty
     /// millimetres a year. One byte each: the map cannot draw finer than that and the
@@ -50,6 +53,9 @@ pub struct Frame {
     pub ice_fraction: f32,
     pub temperate_fraction: f32,
     pub mean_rain_mm: f32,
+    pub forest_share: f32,
+    pub desert_share: f32,
+    pub production_gt: f32,
 }
 
 /// Sample the planet onto an equirectangular grid.
@@ -58,7 +64,7 @@ pub struct Frame {
 /// as its starting point. Neighbouring pixels are neighbouring places, so the search
 /// almost always finishes in a hop or two — which is what makes sampling a hundred
 /// thousand points per frame cost nothing worth measuring.
-pub fn sample(planet: &Lithosphere, climate: &Climate) -> Frame {
+pub fn sample(planet: &Lithosphere, climate: &Climate, life: &Biosphere) -> Frame {
     let mut height = Vec::with_capacity(WIDE * TALL);
     let mut tenure = Vec::with_capacity(WIDE * TALL);
     let mut temperature = Vec::with_capacity(WIDE * TALL);
@@ -80,7 +86,7 @@ pub fn sample(planet: &Lithosphere, climate: &Climate) -> Frame {
                 Boundary::Convergent => 2,
                 Boundary::Transform => 3,
             };
-            tenure.push(((planet.plate_of(cell) % 64) as u8) << 2 | kind);
+            tenure.push((life.biome(cell) as u8) << 4 | kind);
             temperature.push(((climate.temperature_c(cell) + 64.0) * 2.0).clamp(0.0, 255.0) as u8);
             rain.push((climate.rain_mm(cell) / 20.0).clamp(0.0, 255.0) as u8);
         }
@@ -107,6 +113,9 @@ pub fn sample(planet: &Lithosphere, climate: &Climate) -> Frame {
         ice_fraction: climate.ice_fraction(planet),
         temperate_fraction: climate.temperate_fraction(planet),
         mean_rain_mm: climate.mean_rain_mm(planet),
+        forest_share: life.forest_share(planet),
+        desert_share: life.desert_share(planet),
+        production_gt: life.total_production_gt(planet),
     }
 }
 
@@ -136,6 +145,7 @@ fn data(seed: &str, level: u8, frames: &[Frame]) -> String {
             "\n    {{\"myr\":{:.0},\"sea\":{:.0},\"land\":{:.4},\"crust\":{:.4},\
              \"plates\":{},\"biggest\":{:.3},\"peak\":{:.0},\"temp\":{:.2},\
              \"co2\":{:.0},\"ice\":{:.4},\"temperate\":{:.4},\"rainfall\":{:.0},\
+             \"forest\":{:.4},\"arid\":{:.4},\"biomass\":{:.1},\
              \"height\":\"{}\",\"tenure\":\"{}\",\"warmth\":\"{}\",\"wet\":\"{}\"}}",
             frame.myr,
             frame.sea_level_m,
@@ -149,6 +159,9 @@ fn data(seed: &str, level: u8, frames: &[Frame]) -> String {
             frame.ice_fraction,
             frame.temperate_fraction,
             frame.mean_rain_mm,
+            frame.forest_share,
+            frame.desert_share,
+            frame.production_gt,
             base64(&as_bytes(&frame.height)),
             base64(&frame.tenure),
             base64(&frame.temperature),
@@ -201,12 +214,13 @@ mod tests {
     use super::*;
     use sim_core::{Domain, WorldSeed};
 
-    fn a_world() -> (Lithosphere, Climate) {
+    fn a_world() -> (Lithosphere, Climate, Biosphere) {
         let mut rng = WorldSeed::from_u128(0x5eed).stream(Domain::Terrain, 0, 0);
         let mut planet = Lithosphere::genesis(4, 9, 0.42, &mut rng);
         planet.step_myr(2.0, &mut rng);
         let climate = Climate::genesis(&planet, 4.57, climate::insolation::EARTH_OBLIQUITY);
-        (planet, climate)
+        let life = Biosphere::read(&planet, &climate);
+        (planet, climate, life)
     }
 
     #[test]
@@ -235,14 +249,22 @@ mod tests {
 
     #[test]
     fn a_frame_covers_the_whole_map() {
-        let (planet, climate) = a_world();
-        let frame = sample(&planet, &climate);
+        let (planet, climate, life) = a_world();
+        let frame = sample(&planet, &climate, &life);
         assert_eq!(frame.height.len(), WIDE * TALL);
         assert_eq!(frame.tenure.len(), WIDE * TALL);
         assert_eq!(frame.temperature.len(), WIDE * TALL);
         assert_eq!(frame.rain.len(), WIDE * TALL);
         assert!(frame.height.iter().any(|h| *h > 0), "no land anywhere");
         assert!(frame.height.iter().any(|h| *h < 0), "no sea anywhere");
+        // Every pixel names a real biome, packed into the top four bits.
+        for byte in &frame.tenure {
+            assert!(
+                (byte >> 4) < biome::Biome::COUNT as u8,
+                "a pixel claimed biome {}",
+                byte >> 4
+            );
+        }
         // Temperature is stored offset and doubled; the tropics must come back warm.
         let warmest = *frame.temperature.iter().max().unwrap();
         assert!(
@@ -260,8 +282,8 @@ mod tests {
     fn the_map_wraps_and_the_poles_are_poles() {
         // An equirectangular map is a cylinder: the last column has to be the same
         // place as the first. A seam here means every pixel is offset by half a cell.
-        let (planet, climate) = a_world();
-        let frame = sample(&planet, &climate);
+        let (planet, climate, life) = a_world();
+        let frame = sample(&planet, &climate, &life);
         let row = TALL / 2;
         let west = frame.height[row * WIDE];
         let east = frame.height[row * WIDE + WIDE - 1];
@@ -271,15 +293,15 @@ mod tests {
         );
 
         // And the top row is one place, not a stretched line of different ones.
-        let top: Vec<u8> = (0..WIDE).map(|c| frame.tenure[c] >> 2).collect();
+        let top: Vec<u8> = (0..WIDE).map(|c| frame.tenure[c] >> 4).collect();
         let distinct = top.iter().collect::<std::collections::BTreeSet<_>>().len();
-        assert!(distinct <= 3, "the north pole spanned {distinct} plates");
+        assert!(distinct <= 3, "the north pole spanned {distinct} biomes");
     }
 
     #[test]
     fn the_page_has_no_placeholders_left() {
-        let (planet, climate) = a_world();
-        let frame = sample(&planet, &climate);
+        let (planet, climate, life) = a_world();
+        let frame = sample(&planet, &climate, &life);
         let filled = page(
             "<b>__GLOBE_DATA__</b> __GLOBE_WIDE__x__GLOBE_TALL__",
             "0x1",

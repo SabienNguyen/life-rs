@@ -1,0 +1,11 @@
+[package]
+name = "biome"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+climate = { path = "../climate" }
+geo = { path = "../geo" }
+
+[dev-dependencies]
+sim-core = { path = "../sim-core" }

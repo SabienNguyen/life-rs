@@ -3,6 +3,15 @@
 version = 4
 
 [[package]]
+name = "biome"
+version = "0.1.0"
+dependencies = [
+ "climate",
+ "geo",
+ "sim-core",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -81,6 +90,7 @@ dependencies = [
 name = "main"
 version = "0.1.0"
 dependencies = [
+ "biome",
  "climate",
  "geo",
  "life",

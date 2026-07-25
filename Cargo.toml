@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "biome",
     "climate",
     "genetics",
     "geo",

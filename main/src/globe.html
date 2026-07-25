@@ -233,6 +233,7 @@
     font: 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     color: var(--muted); font-variant-numeric: tabular-nums;
   }
+  .keys { display: flex; flex-wrap: wrap; gap: 7px 16px; }
   .legend#legend-relief,
   .legend#legend-warmth,
   .legend#legend-wet { flex-direction: column; gap: 7px; }
@@ -287,7 +288,8 @@
       <p id="blurb">Nothing here is drawn. Rigid plates turn about randomly drawn Euler poles; crust floats by
       isostasy, is destroyed where plates converge and born where they part, and rivers take the rest apart.
       Volcanoes at those same boundaries feed the air the carbon dioxide that keeps it warm, and rain on warm
-      rock takes it back — which is the loop that keeps a planet habitable while its sun brightens.</p>
+      rock takes it back — which is the loop that keeps a planet habitable while its sun brightens. What
+      grows on it is not drawn either: a biome is a reading of two numbers, so the forests move on their own.</p>
     </div>
     <div class="stamp" id="stamp">seed —</div>
   </header>
@@ -309,6 +311,7 @@
         <button id="view-relief" aria-pressed="true">Relief</button>
         <button id="view-warmth" aria-pressed="false">Temperature</button>
         <button id="view-wet" aria-pressed="false">Rainfall</button>
+        <button id="view-life" aria-pressed="false">Biomes</button>
         <button id="view-plates" aria-pressed="false">Boundaries</button>
       </div>
     </div>
@@ -340,6 +343,10 @@
       <div class="ends"><span>0 mm</span><span>1,000 mm a year</span><span>2,500 mm</span></div>
     </div>
 
+    <div class="legend hidden" id="legend-life">
+      <div class="keys" id="biome-keys"></div>
+    </div>
+
     <div class="legend hidden" id="legend-plates">
       <span class="key"><span class="swatch" style="background:var(--divergent)"></span>Divergent — crust is born here</span>
       <span class="key"><span class="swatch" style="background:var(--convergent)"></span>Convergent — crust is destroyed here</span>
@@ -355,7 +362,7 @@
     <summary>The same numbers as a table</summary>
     <div class="scroller">
       <table id="numbers">
-        <thead><tr><th>Age</th><th>Land</th><th>Sea level</th><th>Highest point</th><th>Plates</th><th>Largest mass</th><th>Mean temp</th><th>CO₂</th><th>Ice</th><th>Rainfall</th></tr></thead>
+        <thead><tr><th>Age</th><th>Land</th><th>Sea level</th><th>Highest point</th><th>Plates</th><th>Mean temp</th><th>CO₂</th><th>Ice</th><th>Rainfall</th><th>Forest</th><th>Growth</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
@@ -382,6 +389,7 @@ for (const frame of DATA.frames) {
   const bytes = bytesOf(frame.height);
   frame.h = new Int16Array(bytes.buffer, bytes.byteOffset, bytes.length / 2);
   // Plate in the top six bits, boundary kind in the bottom two.
+  // Biome in the top four bits, boundary kind in the bottom two.
   frame.t = bytesOf(frame.tenure);
   frame.w = bytesOf(frame.warmth);   // half-degrees from −64 °C
   frame.r = bytesOf(frame.wet);      // twenty-millimetre steps
@@ -434,6 +442,29 @@ const WET = [
   [ 1200, [ 84, 152, 156]],
   [ 2000, [ 40, 106, 128]],
   [ 3500, [ 20,  58,  86]],
+];
+
+// Biome colours are conventional rather than categorical: green means forest, tan means
+// dry, white means ice, blue means water, and darker means denser. That is a semantic
+// mapping the way a hypsometric tint is, not fifteen arbitrary hues — which matters,
+// because fifteen arbitrary hues could not be told apart. Identity never rests on colour
+// here: every one is named in the legend and again under the pointer.
+const BIOMES = [
+  ['Glacier',              [238, 242, 245]],
+  ['Tundra',               [166, 170, 152]],
+  ['Taiga',                [ 48,  86,  70]],
+  ['Cold desert',          [196, 190, 168]],
+  ['Grassland',            [190, 190, 108]],
+  ['Temperate forest',     [ 96, 140,  70]],
+  ['Temperate rainforest', [ 44, 104,  74]],
+  ['Shrubland',            [166, 152,  92]],
+  ['Desert',               [216, 190, 136]],
+  ['Savanna',              [200, 172,  92]],
+  ['Seasonal forest',      [110, 148,  56]],
+  ['Rainforest',           [ 30, 104,  44]],
+  ['Shelf sea',            [122, 168, 196]],
+  ['Open ocean',           [ 44,  86, 132]],
+  ['Sea ice',              [214, 228, 236]],
 ];
 
 function ramp(stops, value) {
@@ -507,15 +538,17 @@ function draw() {
       [r, g, b] = ramp(WARMTH, frame.tempAt(i));
     } else if (view === 'wet') {
       [r, g, b] = ramp(WET, frame.rainAt(i));
+    } else if (view === 'life') {
+      [r, g, b] = BIOMES[frame.t[i] >> 4][1];
     } else {
       [r, g, b] = tint(frame.h[i]);
     }
-    const lit = 1 + shade(frame, i, WIDE, TALL) * (view === 'relief' ? 1 : 0.45);
+    const lit = 1 + shade(frame, i, WIDE, TALL) * (view === 'relief' ? 1 : view === 'life' ? 0.3 : 0.45);
     r *= lit; g *= lit; b *= lit;
 
     // The coastline, drawn on every view that is not the relief map itself, because a
     // temperature field with no land in it is unreadable.
-    if (view !== 'relief' && view !== 'plates') {
+    if (view === 'warmth' || view === 'wet') {
       const land = frame.h[i] > 0;
       const row = (i / WIDE) | 0, col = i % WIDE;
       const west = frame.h[row * WIDE + (col - 1 + WIDE) % WIDE] > 0;
@@ -571,6 +604,12 @@ const MEASURES = [
     blurb: 'Share of the surface between freezing and 60 °C' },
   { key: 'rainfall', label: 'Rainfall',         unit: 'mm',  scale: 1,   digits: 0,
     blurb: 'Averaged over the whole surface, per year' },
+  { key: 'forest',  label: 'Land under forest', unit: '%',   scale: 100, digits: 0,
+    blurb: 'Which moves with every mountain range and every ice age' },
+  { key: 'arid',    label: 'Land too dry',      unit: '%',   scale: 100, digits: 0,
+    blurb: 'Desert and cold desert, as a share of the land' },
+  { key: 'biomass', label: 'Growth',            unit: 'Gt',  scale: 1,   digits: 0,
+    blurb: 'Dry matter the whole biosphere fixes in a year' },
 ];
 
 function paintStats(frame) {
@@ -640,7 +679,7 @@ map.addEventListener('pointermove', event => {
   readout.innerHTML =
     `<b>${height >= 0 ? '+' : '−'}${Math.abs(height).toLocaleString()} m</b> ${height >= 0 ? 'above' : 'below'} the sea · ` +
     `<b>${frame.tempAt(i).toFixed(1)} °C</b> · <b>${frame.rainAt(i).toLocaleString()} mm</b><br>` +
-    `<span class="kind">${latitude}°, ${longitude}° · plate ${frame.t[i] >> 2} · ${KINDS[frame.t[i] & 3]}</span>`;
+    `<span class="kind">${latitude}°, ${longitude}° · ${BIOMES[frame.t[i] >> 4][0].toLowerCase()} · ${KINDS[frame.t[i] & 3]}</span>`;
   readout.style.opacity = 1;
   const left = Math.min(event.clientX - box.left + 14, box.width - 210);
   readout.style.left = `${Math.max(6, left)}px`;
@@ -654,7 +693,7 @@ const slider = document.getElementById('time');
 slider.max = DATA.frames.length - 1;
 slider.addEventListener('input', () => { at = +slider.value; stop(); draw(); });
 
-const VIEWS = ['relief', 'warmth', 'wet', 'plates'];
+const VIEWS = ['relief', 'warmth', 'wet', 'life', 'plates'];
 function setView(next) {
   view = next;
   for (const name of VIEWS) {
@@ -690,6 +729,10 @@ gradient('ramp', [-8000, -5000, -2500, -600, -1, 1, 600, 1600, 3000, 4600, 6500]
 gradient('ramp-warmth', [-45, -35, -25, -15, -5, 0, 5, 15, 25, 35, 42], v => ramp(WARMTH, v));
 gradient('ramp-wet', [0, 150, 350, 600, 900, 1300, 1800, 2400, 3200], v => ramp(WET, v));
 
+document.getElementById('biome-keys').innerHTML = BIOMES.map(([name, rgb]) =>
+  `<span class="key"><span class="swatch" style="background:rgb(${rgb.join(',')})"></span>${name}</span>`
+).join('');
+
 // The seed is a 128-bit number and prints as thirty-four characters, which is a
 // bannerful of leading zeroes. Shown short, with the whole of it on hover for anyone
 // who wants to replay the run.
@@ -704,11 +747,12 @@ document.querySelector('#numbers tbody').innerHTML = DATA.frames.map(f => `<tr>
   <td>${f.sea.toFixed(0)} m</td>
   <td>${f.peak.toFixed(0)} m</td>
   <td>${f.plates}</td>
-  <td>${(f.biggest * 100).toFixed(0)}%</td>
   <td>${f.temp.toFixed(1)} °C</td>
   <td>${f.co2.toLocaleString()} ppm</td>
   <td>${(f.ice * 100).toFixed(1)}%</td>
   <td>${f.rainfall.toFixed(0)} mm</td>
+  <td>${(f.forest * 100).toFixed(0)}%</td>
+  <td>${f.biomass.toFixed(0)} Gt</td>
 </tr>`).join('');
 
 const last = DATA.frames[DATA.frames.length - 1];
@@ -719,7 +763,9 @@ document.getElementById('note').innerHTML =
   `heat carried sideways — and not from a circulation model, so there is no weather here, only climate. Rainfall ` +
   `is a moisture budget carried on prescribed trade winds and westerlies, which is why the deserts sit where the ` +
   `air is coming down. Erosion is still blind to how much it rains, which is the main reason this planet settles ` +
-  `with rather less dry land than Earth manages.`;
+  `with rather less dry land than Earth manages. Biomes are read off temperature and rainfall by Whittaker's ` +
+  `scheme, with dryness measured against evaporation rather than in millimetres — so nothing migrates and ` +
+  `nothing is edited; the vegetation is simply read somewhere else than it was last time.`;
 
 setView('relief');
 </script>

@@ -252,7 +252,8 @@ fn run_globe(options: &Options, myr: f64) -> String {
     let mut climate =
         climate::Climate::genesis(&planet, START_GYR, climate::insolation::EARTH_OBLIQUITY);
 
-    let mut frames = vec![globe::sample(&planet, &climate)];
+    let mut life = biome::Biosphere::read(&planet, &climate);
+    let mut frames = vec![globe::sample(&planet, &climate, &life)];
     let per_frame = myr / (FRAMES - 1) as f64;
     for _ in 1..FRAMES {
         let mut done = 0.0;
@@ -262,7 +263,8 @@ fn run_globe(options: &Options, myr: f64) -> String {
             climate.step_myr(&planet, step, &mut rng);
             done += step as f64;
         }
-        frames.push(globe::sample(&planet, &climate));
+        life = biome::Biosphere::read(&planet, &climate);
+        frames.push(globe::sample(&planet, &climate, &life));
     }
 
     globe::page(GLOBE, &options.seed.to_string(), options.grid, &frames)

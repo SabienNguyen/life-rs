@@ -2,12 +2,13 @@
 
 > Big-picture architecture — the plan we implement against.
 >
-> **Phases 0–5, 10, and the §15 balance harness are implemented** — foundations
+> **Phases 0–6, 10, and the §15 balance harness are implemented** — foundations
 > (`sim-core`, `sim`), person depth (`life`, `person`), genetics with families
 > (`genetics`, `society`), neighbourhoods with the four behaviour channels, the solid
 > planet (`geo`: geodesic grid, plates, isostasy, erosion, eustatic sea level), the
 > climate on top of it (`climate`: insolation, energy balance, moisture, and the
-> carbon–silicate thermostat), and level-of-detail (§6, pulled forward from phase 10 because everyone acting whether
+> carbon–silicate thermostat), the biosphere read off it (`biome`: Whittaker
+> classification and the Miami productivity model), and level-of-detail (§6, pulled forward from phase 10 because everyone acting whether
 > watched or not was making every later phase more expensive to build and test).
 > §20 marks progress. Everything beyond that is still a plan.
 >
@@ -951,7 +952,7 @@ Being explicit about this is what separates a coarse simulation from a fake one.
 | Ocean | Enhanced heat transport across water | No circulation as such: no gyres, upwelling, nutrients, or anoxia yet |
 | Tectonics | Euler-pole plate motion, Airy isostasy, √age ridge subsidence | No mantle convection; plate reorganizations and rifting are stochastic |
 | Erosion | Threshold stream power, sediment routed downstream | No hillslope diffusion — see below; coarse at 112 km cells; no river networks below cell size |
-| Vegetation | DGVM plant functional types | No individual plants outside Full LOD |
+| Vegetation | Whittaker classification + Miami productivity | Read instantly from climate: no lag, no competition, no fire, no plant populations |
 | Populations | Logistic + Holling type II | Not individual-based outside Full LOD |
 | Genetics | 256 polygenic loci, Wright–Fisher | Not molecular; no gene regulation or real recombination maps |
 | Behavior | Utility AI over needs and traits | Not a cognitive model; no language or planning depth |
@@ -1034,7 +1035,7 @@ later means rewriting every system, and it's cheap to build before there are sys
 | **3** ✅ | Environment & neighbourhoods: environment vectors on places, archetypes derived from them, the four channels live, developmental windows, standing, residential sorting, the §15 balance harness |
 | **4** ✓ | `geo`: geodesic grid, plates, elevation, isostasy, erosion, bathymetry |
 | **5** ◑ | `climate`: energy balance, insolation, moisture, ice, carbon cycle. Ocean circulation — gyres, overturning, upwelling, nutrients — deferred to Phase 7, where something finally reads it |
-| **6** | `biome` + vegetation: Whittaker classification, PFT fields, NPP, fire and disturbance |
+| **6** ◑ | `biome`: Whittaker classification, NPP. Plant functional types with populations of their own — and therefore lag, and fire — deferred to Phase 7 |
 | **7** | `ecology`: animal demes, trophic web, dispersal, habitat suitability |
 
 Neighbourhoods come before geography, which is the reverse of the obvious order and
@@ -1043,6 +1044,22 @@ filling them needs households and places with properties — not tectonics. Plac
 abstract and acquire a grid cell in Phase 4; nothing about §14 depends on where a
 neighbourhood physically sits. Doing it the other way round would mean a planet with a
 climate and no one whose life it changes.
+
+**Phase 6, in the event.** Almost nothing to report, which is the point: a biome turned
+out to be sixty lines of `if` and the whole crate has no state at all. That is principle
+two paying off — store the vectors, derive the labels — and the payoff is that biomes
+*move* with no machinery to move them. Continents drift into the subtropics and grow
+deserts down their middles; an orogeny casts a rain shadow and the forest behind it
+becomes steppe; the thermostat draws carbon down and the taiga retreats.
+
+Two corrections to the textbook diagram were needed, both because it was drawn from field
+sites on one planet. Dryness had to become the **aridity index** — rainfall over potential
+evaporation — rather than a depth of rain, because six hundred millimetres is a forest in
+Siberia and scrub in the Sahel. And potential evaporation had to be driven by the *warm
+season* rather than the annual mean, which meant the seasonless climate needed a stand-in
+for seasons: latitude and distance from the sea. That second term is what separates
+Yakutsk from Reykjavík — the same annual mean, taiga at one and tundra at the other,
+because only one of them gets a summer.
 
 **Phase 5, in the event.** The thermostat works, and it is the most satisfying thing in
 the project so far: give the planet a sun that brightens by a third and its mean
