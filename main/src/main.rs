@@ -237,22 +237,32 @@ fn print_dossier(world: &mut World) {
 /// cannot tell twenty frames from five hundred when each one is a different continent
 /// anyway.
 fn run_globe(options: &Options, myr: f64) -> String {
-    const FRAMES: usize = 13;
-    const STEP_MYR: f32 = 2.0;
+    const FRAMES: usize = 11;
+    const STEP_MYR: f32 = 4.0;
+    /// Where in the star's life the run starts, in gigayears. Three and a half puts the
+    /// sun at about nine tenths of today's output, so a gigayear of running carries it
+    /// across the part of the main sequence the thermostat has to cope with.
+    const START_GYR: f64 = 3.5;
 
     let mut rng = options.seed.stream(Domain::Terrain, 0, 0);
     let mut planet = geo::Lithosphere::genesis(options.grid, 9, 0.42, &mut rng);
+    // One step first, so the plate boundaries exist and there is volcanism to feed the
+    // carbon cycle before the climate is asked to settle against it.
+    planet.step_myr(STEP_MYR, &mut rng);
+    let mut climate =
+        climate::Climate::genesis(&planet, START_GYR, climate::insolation::EARTH_OBLIQUITY);
 
-    let mut frames = vec![globe::sample(&planet)];
+    let mut frames = vec![globe::sample(&planet, &climate)];
     let per_frame = myr / (FRAMES - 1) as f64;
     for _ in 1..FRAMES {
         let mut done = 0.0;
         while done < per_frame {
             let step = STEP_MYR.min((per_frame - done) as f32);
             planet.step_myr(step, &mut rng);
+            climate.step_myr(&planet, step, &mut rng);
             done += step as f64;
         }
-        frames.push(globe::sample(&planet));
+        frames.push(globe::sample(&planet, &climate));
     }
 
     globe::page(GLOBE, &options.seed.to_string(), options.grid, &frames)

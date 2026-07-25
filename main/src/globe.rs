@@ -12,6 +12,7 @@
 
 use std::fmt::Write as _;
 
+use climate::Climate;
 use geo::{Boundary, CellId, Lithosphere};
 
 /// Pixels across the map. Equirectangular, so half as many down.
@@ -33,12 +34,22 @@ pub struct Frame {
     /// bits, the boundary in the bottom two. Two fields that are only ever read
     /// together, and halving the bytes they cost is worth the shift.
     pub tenure: Vec<u8>,
+    /// Temperature in half-degrees from −64 °C, and rainfall in units of twenty
+    /// millimetres a year. One byte each: the map cannot draw finer than that and the
+    /// whole history has to arrive in one file.
+    pub temperature: Vec<u8>,
+    pub rain: Vec<u8>,
     pub sea_level_m: f32,
     pub land_fraction: f32,
     pub continental_fraction: f32,
     pub plates: usize,
     pub largest_landmass: f32,
     pub peak_m: f32,
+    pub mean_temp_c: f32,
+    pub co2_ppm: f32,
+    pub ice_fraction: f32,
+    pub temperate_fraction: f32,
+    pub mean_rain_mm: f32,
 }
 
 /// Sample the planet onto an equirectangular grid.
@@ -47,9 +58,11 @@ pub struct Frame {
 /// as its starting point. Neighbouring pixels are neighbouring places, so the search
 /// almost always finishes in a hop or two — which is what makes sampling a hundred
 /// thousand points per frame cost nothing worth measuring.
-pub fn sample(planet: &Lithosphere) -> Frame {
+pub fn sample(planet: &Lithosphere, climate: &Climate) -> Frame {
     let mut height = Vec::with_capacity(WIDE * TALL);
     let mut tenure = Vec::with_capacity(WIDE * TALL);
+    let mut temperature = Vec::with_capacity(WIDE * TALL);
+    let mut rain = Vec::with_capacity(WIDE * TALL);
     let mut hint: CellId = 0;
 
     for row in 0..TALL {
@@ -68,6 +81,8 @@ pub fn sample(planet: &Lithosphere) -> Frame {
                 Boundary::Transform => 3,
             };
             tenure.push(((planet.plate_of(cell) % 64) as u8) << 2 | kind);
+            temperature.push(((climate.temperature_c(cell) + 64.0) * 2.0).clamp(0.0, 255.0) as u8);
+            rain.push((climate.rain_mm(cell) / 20.0).clamp(0.0, 255.0) as u8);
         }
     }
 
@@ -75,6 +90,8 @@ pub fn sample(planet: &Lithosphere) -> Frame {
         myr: planet.age_myr(),
         height,
         tenure,
+        temperature,
+        rain,
         sea_level_m: planet.sea_level_m(),
         land_fraction: planet.land_fraction(),
         continental_fraction: planet.continental_fraction(),
@@ -85,6 +102,11 @@ pub fn sample(planet: &Lithosphere) -> Frame {
             .cells()
             .map(|c| planet.height_above_sea_m(c))
             .fold(f32::MIN, f32::max),
+        mean_temp_c: climate.mean_temperature_c(planet),
+        co2_ppm: climate.co2_ppm(),
+        ice_fraction: climate.ice_fraction(planet),
+        temperate_fraction: climate.temperate_fraction(planet),
+        mean_rain_mm: climate.mean_rain_mm(planet),
     }
 }
 
@@ -112,8 +134,9 @@ fn data(seed: &str, level: u8, frames: &[Frame]) -> String {
         let _ = write!(
             out,
             "\n    {{\"myr\":{:.0},\"sea\":{:.0},\"land\":{:.4},\"crust\":{:.4},\
-             \"plates\":{},\"biggest\":{:.3},\"peak\":{:.0},\
-             \"height\":\"{}\",\"tenure\":\"{}\"}}",
+             \"plates\":{},\"biggest\":{:.3},\"peak\":{:.0},\"temp\":{:.2},\
+             \"co2\":{:.0},\"ice\":{:.4},\"temperate\":{:.4},\"rainfall\":{:.0},\
+             \"height\":\"{}\",\"tenure\":\"{}\",\"warmth\":\"{}\",\"wet\":\"{}\"}}",
             frame.myr,
             frame.sea_level_m,
             frame.land_fraction,
@@ -121,8 +144,15 @@ fn data(seed: &str, level: u8, frames: &[Frame]) -> String {
             frame.plates,
             frame.largest_landmass,
             frame.peak_m,
+            frame.mean_temp_c,
+            frame.co2_ppm,
+            frame.ice_fraction,
+            frame.temperate_fraction,
+            frame.mean_rain_mm,
             base64(&as_bytes(&frame.height)),
             base64(&frame.tenure),
+            base64(&frame.temperature),
+            base64(&frame.rain),
         );
     }
     out.push_str("\n  ]\n}");
@@ -171,9 +201,12 @@ mod tests {
     use super::*;
     use sim_core::{Domain, WorldSeed};
 
-    fn a_planet() -> Lithosphere {
+    fn a_world() -> (Lithosphere, Climate) {
         let mut rng = WorldSeed::from_u128(0x5eed).stream(Domain::Terrain, 0, 0);
-        Lithosphere::genesis(4, 9, 0.42, &mut rng)
+        let mut planet = Lithosphere::genesis(4, 9, 0.42, &mut rng);
+        planet.step_myr(2.0, &mut rng);
+        let climate = Climate::genesis(&planet, 4.57, climate::insolation::EARTH_OBLIQUITY);
+        (planet, climate)
     }
 
     #[test]
@@ -202,18 +235,33 @@ mod tests {
 
     #[test]
     fn a_frame_covers_the_whole_map() {
-        let frame = sample(&a_planet());
+        let (planet, climate) = a_world();
+        let frame = sample(&planet, &climate);
         assert_eq!(frame.height.len(), WIDE * TALL);
         assert_eq!(frame.tenure.len(), WIDE * TALL);
+        assert_eq!(frame.temperature.len(), WIDE * TALL);
+        assert_eq!(frame.rain.len(), WIDE * TALL);
         assert!(frame.height.iter().any(|h| *h > 0), "no land anywhere");
         assert!(frame.height.iter().any(|h| *h < 0), "no sea anywhere");
+        // Temperature is stored offset and doubled; the tropics must come back warm.
+        let warmest = *frame.temperature.iter().max().unwrap();
+        assert!(
+            warmest as f32 / 2.0 - 64.0 > 10.0,
+            "the warmest place on the planet read {:.0} °C",
+            warmest as f32 / 2.0 - 64.0
+        );
+        assert!(
+            frame.rain.iter().any(|r| *r > 0),
+            "it never rained anywhere"
+        );
     }
 
     #[test]
     fn the_map_wraps_and_the_poles_are_poles() {
         // An equirectangular map is a cylinder: the last column has to be the same
         // place as the first. A seam here means every pixel is offset by half a cell.
-        let frame = sample(&a_planet());
+        let (planet, climate) = a_world();
+        let frame = sample(&planet, &climate);
         let row = TALL / 2;
         let west = frame.height[row * WIDE];
         let east = frame.height[row * WIDE + WIDE - 1];
@@ -230,7 +278,8 @@ mod tests {
 
     #[test]
     fn the_page_has_no_placeholders_left() {
-        let frame = sample(&a_planet());
+        let (planet, climate) = a_world();
+        let frame = sample(&planet, &climate);
         let filled = page(
             "<b>__GLOBE_DATA__</b> __GLOBE_WIDE__x__GLOBE_TALL__",
             "0x1",

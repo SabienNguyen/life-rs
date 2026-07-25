@@ -233,11 +233,14 @@
     font: 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     color: var(--muted); font-variant-numeric: tabular-nums;
   }
-  .legend#legend-relief { flex-direction: column; gap: 7px; }
+  .legend#legend-relief,
+  .legend#legend-warmth,
+  .legend#legend-wet { flex-direction: column; gap: 7px; }
 
   /* ---- figures ----------------------------------------------------------- */
 
-  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .stat + .stat { box-shadow: -1px 0 0 var(--line), 0 -1px 0 var(--line); }
   .stat { background: var(--surface); padding: 13px 15px; }
   .stat dt {
     font: 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -281,8 +284,10 @@
   <header class="masthead">
     <div>
       <h1>A planet, over deep time</h1>
-      <p id="blurb">Nothing here is drawn. Rigid plates turn about randomly drawn Euler poles; crust floats
-      by isostasy, is destroyed where plates converge and born where they part, and rivers take the rest apart.</p>
+      <p id="blurb">Nothing here is drawn. Rigid plates turn about randomly drawn Euler poles; crust floats by
+      isostasy, is destroyed where plates converge and born where they part, and rivers take the rest apart.
+      Volcanoes at those same boundaries feed the air the carbon dioxide that keeps it warm, and rain on warm
+      rock takes it back — which is the loop that keeps a planet habitable while its sun brightens.</p>
     </div>
     <div class="stamp" id="stamp">seed —</div>
   </header>
@@ -302,6 +307,8 @@
       </div>
       <div class="views" role="group" aria-label="What the map shows">
         <button id="view-relief" aria-pressed="true">Relief</button>
+        <button id="view-warmth" aria-pressed="false">Temperature</button>
+        <button id="view-wet" aria-pressed="false">Rainfall</button>
         <button id="view-plates" aria-pressed="false">Boundaries</button>
       </div>
     </div>
@@ -313,6 +320,24 @@
         <span class="key" style="color:var(--muted)">Height</span>
       </div>
       <div class="ends"><span>−8 km</span><span>sea level</span><span>+6 km</span></div>
+    </div>
+
+    <div class="legend hidden" id="legend-warmth">
+      <div class="ramp">
+        <span class="key" style="color:var(--muted)">Cold</span>
+        <span class="bar" id="ramp-warmth"></span>
+        <span class="key" style="color:var(--muted)">Hot</span>
+      </div>
+      <div class="ends"><span>−40 °C</span><span>0 °C</span><span>+40 °C</span></div>
+    </div>
+
+    <div class="legend hidden" id="legend-wet">
+      <div class="ramp">
+        <span class="key" style="color:var(--muted)">Arid</span>
+        <span class="bar" id="ramp-wet"></span>
+        <span class="key" style="color:var(--muted)">Wet</span>
+      </div>
+      <div class="ends"><span>0 mm</span><span>1,000 mm a year</span><span>2,500 mm</span></div>
     </div>
 
     <div class="legend hidden" id="legend-plates">
@@ -330,7 +355,7 @@
     <summary>The same numbers as a table</summary>
     <div class="scroller">
       <table id="numbers">
-        <thead><tr><th>Age</th><th>Land</th><th>Continental crust</th><th>Sea level</th><th>Highest point</th><th>Plates</th><th>Largest mass</th></tr></thead>
+        <thead><tr><th>Age</th><th>Land</th><th>Sea level</th><th>Highest point</th><th>Plates</th><th>Largest mass</th><th>Mean temp</th><th>CO₂</th><th>Ice</th><th>Rainfall</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
@@ -357,8 +382,11 @@ for (const frame of DATA.frames) {
   const bytes = bytesOf(frame.height);
   frame.h = new Int16Array(bytes.buffer, bytes.byteOffset, bytes.length / 2);
   // Plate in the top six bits, boundary kind in the bottom two.
-  const tenure = bytesOf(frame.tenure);
-  frame.t = tenure;
+  frame.t = bytesOf(frame.tenure);
+  frame.w = bytesOf(frame.warmth);   // half-degrees from −64 °C
+  frame.r = bytesOf(frame.wet);      // twenty-millimetre steps
+  frame.tempAt = i => frame.w[i] / 2 - 64;
+  frame.rainAt = i => frame.r[i] * 20;
 }
 
 // ---- the hypsometric ramp -------------------------------------------------
@@ -382,6 +410,42 @@ const LAND = [
   [ 5200, [201, 197, 191]],
   [ 7000, [246, 246, 246]],
 ];
+
+// Temperature: diverging about freezing, two hues with a neutral grey between them —
+// which is the whole point of a diverging scale, since the midpoint is a real boundary
+// and not just the middle of the range. Lightness runs down towards both ends so the
+// extremes read as extremes in greyscale too.
+const WARMTH = [
+  [-45, [ 32,  52,  96]],
+  [-25, [ 58, 100, 156]],
+  [-10, [124, 166, 200]],
+  [  0, [212, 212, 208]],
+  [ 10, [214, 176, 124]],
+  [ 25, [196, 112,  70]],
+  [ 40, [136,  40,  44]],
+];
+
+// Rainfall: sequential, one hue, light to dark. Never a rainbow — a magnitude has an
+// order and a ramp should show it without a legend.
+const WET = [
+  [    0, [242, 238, 224]],
+  [  250, [206, 216, 196]],
+  [  600, [150, 190, 176]],
+  [ 1200, [ 84, 152, 156]],
+  [ 2000, [ 40, 106, 128]],
+  [ 3500, [ 20,  58,  86]],
+];
+
+function ramp(stops, value) {
+  for (let i = 1; i < stops.length; i++) {
+    if (value <= stops[i][0] || i === stops.length - 1) {
+      const [lo, a] = stops[i - 1], [hi, b] = stops[i];
+      const t = Math.max(0, Math.min(1, (value - lo) / (hi - lo)));
+      return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+    }
+  }
+  return stops[stops.length - 1][1];
+}
 
 function tint(metres) {
   const stops = metres > 0 ? LAND : SEA;
@@ -435,11 +499,29 @@ function draw() {
   const frame = DATA.frames[at];
   const px = image.data;
   const boundaryTint = [null, rgbOf(css('--divergent')), rgbOf(css('--convergent')), rgbOf(css('--transform'))];
+  if (view === 'plates') { /* base map is greyed below */ }
 
   for (let i = 0; i < WIDE * TALL; i++) {
-    let [r, g, b] = tint(frame.h[i]);
-    const lit = 1 + shade(frame, i, WIDE, TALL);
+    let r, g, b;
+    if (view === 'warmth') {
+      [r, g, b] = ramp(WARMTH, frame.tempAt(i));
+    } else if (view === 'wet') {
+      [r, g, b] = ramp(WET, frame.rainAt(i));
+    } else {
+      [r, g, b] = tint(frame.h[i]);
+    }
+    const lit = 1 + shade(frame, i, WIDE, TALL) * (view === 'relief' ? 1 : 0.45);
     r *= lit; g *= lit; b *= lit;
+
+    // The coastline, drawn on every view that is not the relief map itself, because a
+    // temperature field with no land in it is unreadable.
+    if (view !== 'relief' && view !== 'plates') {
+      const land = frame.h[i] > 0;
+      const row = (i / WIDE) | 0, col = i % WIDE;
+      const west = frame.h[row * WIDE + (col - 1 + WIDE) % WIDE] > 0;
+      const north = frame.h[Math.max(0, row - 1) * WIDE + col] > 0;
+      if (land !== west || land !== north) { r *= 0.55; g *= 0.55; b *= 0.55; }
+    }
 
     if (view === 'plates') {
       // The relief drops back to a grey base so the boundaries are the only
@@ -479,6 +561,16 @@ const MEASURES = [
     blurb: 'Falls when two weld together, rises when one rifts' },
   { key: 'biggest', label: 'Largest landmass',  unit: '%',   scale: 100, digits: 0,
     blurb: 'Share of all continental crust in one connected piece' },
+  { key: 'temp',    label: 'Mean temperature',  unit: '°C',  scale: 1,   digits: 1,
+    blurb: 'What the radiation budget and the greenhouse settle on' },
+  { key: 'co2',     label: 'Carbon dioxide',    unit: 'ppm', scale: 1,   digits: 0,
+    blurb: 'Volcanoes supply it; rain on warm rock takes it away' },
+  { key: 'ice',     label: 'Under ice',         unit: '%',   scale: 100, digits: 1,
+    blurb: 'Which reflects sunlight, which makes more ice' },
+  { key: 'temperate', label: 'Could hold water', unit: '%',  scale: 100, digits: 0,
+    blurb: 'Share of the surface between freezing and 60 °C' },
+  { key: 'rainfall', label: 'Rainfall',         unit: 'mm',  scale: 1,   digits: 0,
+    blurb: 'Averaged over the whole surface, per year' },
 ];
 
 function paintStats(frame) {
@@ -546,7 +638,8 @@ map.addEventListener('pointermove', event => {
   const latitude = (90 - 180 * (row + 0.5) / TALL).toFixed(0);
   const longitude = (-180 + 360 * (col + 0.5) / WIDE).toFixed(0);
   readout.innerHTML =
-    `<b>${height >= 0 ? '+' : '−'}${Math.abs(height).toLocaleString()} m</b> ${height >= 0 ? 'above' : 'below'} the sea<br>` +
+    `<b>${height >= 0 ? '+' : '−'}${Math.abs(height).toLocaleString()} m</b> ${height >= 0 ? 'above' : 'below'} the sea · ` +
+    `<b>${frame.tempAt(i).toFixed(1)} °C</b> · <b>${frame.rainAt(i).toLocaleString()} mm</b><br>` +
     `<span class="kind">${latitude}°, ${longitude}° · plate ${frame.t[i] >> 2} · ${KINDS[frame.t[i] & 3]}</span>`;
   readout.style.opacity = 1;
   const left = Math.min(event.clientX - box.left + 14, box.width - 210);
@@ -561,18 +654,18 @@ const slider = document.getElementById('time');
 slider.max = DATA.frames.length - 1;
 slider.addEventListener('input', () => { at = +slider.value; stop(); draw(); });
 
-const relief = document.getElementById('view-relief');
-const plates = document.getElementById('view-plates');
+const VIEWS = ['relief', 'warmth', 'wet', 'plates'];
 function setView(next) {
   view = next;
-  relief.setAttribute('aria-pressed', String(next === 'relief'));
-  plates.setAttribute('aria-pressed', String(next === 'plates'));
-  document.getElementById('legend-relief').classList.toggle('hidden', next !== 'relief');
-  document.getElementById('legend-plates').classList.toggle('hidden', next !== 'plates');
+  for (const name of VIEWS) {
+    document.getElementById(`view-${name}`).setAttribute('aria-pressed', String(name === next));
+    document.getElementById(`legend-${name}`).classList.toggle('hidden', name !== next);
+  }
   draw();
 }
-relief.addEventListener('click', () => setView('relief'));
-plates.addEventListener('click', () => setView('plates'));
+for (const name of VIEWS) {
+  document.getElementById(`view-${name}`).addEventListener('click', () => setView(name));
+}
 
 const playButton = document.getElementById('play');
 let running = null;
@@ -589,9 +682,13 @@ playButton.addEventListener('click', () => {
 
 // ---- the ramp swatch, the table, and the footnote -------------------------
 
-document.getElementById('ramp').style.background =
-  'linear-gradient(to right,' + [-8000, -5000, -2500, -600, -1, 1, 600, 1600, 3000, 4600, 6500]
-    .map(m => `rgb(${tint(m).map(Math.round).join(',')})`).join(',') + ')';
+const gradient = (into, values, of) => {
+  document.getElementById(into).style.background =
+    'linear-gradient(to right,' + values.map(v => `rgb(${of(v).map(Math.round).join(',')})`).join(',') + ')';
+};
+gradient('ramp', [-8000, -5000, -2500, -600, -1, 1, 600, 1600, 3000, 4600, 6500], tint);
+gradient('ramp-warmth', [-45, -35, -25, -15, -5, 0, 5, 15, 25, 35, 42], v => ramp(WARMTH, v));
+gradient('ramp-wet', [0, 150, 350, 600, 900, 1300, 1800, 2400, 3200], v => ramp(WET, v));
 
 // The seed is a 128-bit number and prints as thirty-four characters, which is a
 // bannerful of leading zeroes. Shown short, with the whole of it on hover for anyone
@@ -604,20 +701,25 @@ stamp.title = DATA.seed;
 document.querySelector('#numbers tbody').innerHTML = DATA.frames.map(f => `<tr>
   <td>${f.myr.toLocaleString()} Myr</td>
   <td>${(f.land * 100).toFixed(1)}%</td>
-  <td>${(f.crust * 100).toFixed(1)}%</td>
   <td>${f.sea.toFixed(0)} m</td>
   <td>${f.peak.toFixed(0)} m</td>
   <td>${f.plates}</td>
   <td>${(f.biggest * 100).toFixed(0)}%</td>
+  <td>${f.temp.toFixed(1)} °C</td>
+  <td>${f.co2.toLocaleString()} ppm</td>
+  <td>${(f.ice * 100).toFixed(1)}%</td>
+  <td>${f.rainfall.toFixed(0)} mm</td>
 </tr>`).join('');
 
 const last = DATA.frames[DATA.frames.length - 1];
 document.getElementById('note').innerHTML =
   `Sampled at ${DATA.frames.length} points across ${last.myr.toLocaleString()} megayears, from a geodesic grid of level ` +
-  `${DATA.level}. Sea level is measured against unstretched continental crust rather than against itself, so it moves ` +
-  `when the basins change shape. Erosion here is blind to climate — every square kilometre of land is rained on ` +
-  `equally, where a third of the real one is arid — which is the main reason this planet settles with rather less ` +
-  `dry land than Earth manages.`;
+  `${DATA.level}. Sea level is measured against unstretched continental crust rather than against itself, so it ` +
+  `moves when the basins change shape. Temperature comes from an energy-balance model — sunlight in, infrared out, ` +
+  `heat carried sideways — and not from a circulation model, so there is no weather here, only climate. Rainfall ` +
+  `is a moisture budget carried on prescribed trade winds and westerlies, which is why the deserts sit where the ` +
+  `air is coming down. Erosion is still blind to how much it rains, which is the main reason this planet settles ` +
+  `with rather less dry land than Earth manages.`;
 
 setView('relief');
 </script>

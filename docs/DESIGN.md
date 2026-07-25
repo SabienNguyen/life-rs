@@ -2,11 +2,12 @@
 
 > Big-picture architecture — the plan we implement against.
 >
-> **Phases 0–4, 10, and the §15 balance harness are implemented** — foundations
+> **Phases 0–5, 10, and the §15 balance harness are implemented** — foundations
 > (`sim-core`, `sim`), person depth (`life`, `person`), genetics with families
 > (`genetics`, `society`), neighbourhoods with the four behaviour channels, the solid
-> planet (`geo`: geodesic grid, plates, isostasy, erosion, eustatic sea level), and
-> level-of-detail (§6, pulled forward from phase 10 because everyone acting whether
+> planet (`geo`: geodesic grid, plates, isostasy, erosion, eustatic sea level), the
+> climate on top of it (`climate`: insolation, energy balance, moisture, and the
+> carbon–silicate thermostat), and level-of-detail (§6, pulled forward from phase 10 because everyone acting whether
 > watched or not was making every later phase more expensive to build and test).
 > §20 marks progress. Everything beyond that is still a plan.
 >
@@ -943,8 +944,11 @@ Being explicit about this is what separates a coarse simulation from a fake one.
 
 | Subsystem | Real approach borrowed | What's given up |
 | --- | --- | --- |
-| Climate | Energy-balance model + parameterized moisture | No GCM: no resolved storms, jets, or eddies |
-| Ocean | Geometric gyres + bulk overturning | No resolved current dynamics |
+| Climate | Budyko-type energy balance, diffusive transport, smoothed ice albedo | No GCM: no storms, jets, eddies, or seasons — climate, not weather |
+| Insolation | Daily-mean integrated over the year, any obliquity | Circular orbit: no eccentricity or precession, so no sub-Myr Milankovitch |
+| Carbon | GEOCARB weathering against boundary-length outgassing | No organic carbon, no methane, no sea-floor weathering |
+| Moisture | Budget advected on prescribed Hadley/Ferrel winds | Winds are parameterized by latitude, not solved |
+| Ocean | Enhanced heat transport across water | No circulation as such: no gyres, upwelling, nutrients, or anoxia yet |
 | Tectonics | Euler-pole plate motion, Airy isostasy, √age ridge subsidence | No mantle convection; plate reorganizations and rifting are stochastic |
 | Erosion | Threshold stream power, sediment routed downstream | No hillslope diffusion — see below; coarse at 112 km cells; no river networks below cell size |
 | Vegetation | DGVM plant functional types | No individual plants outside Full LOD |
@@ -976,6 +980,13 @@ at 450 km cells a mountain range is a gentle ramp and erodes at cratonic rates. 
 planet compensates in part — collision piles crust high enough that neighbouring cells
 do differ by kilometres — but an isolated range decays several times slower than a real
 one. This improves with grid level and does not go away.
+
+**What Phase 5 gets wrong, stated plainly.** Below about three quarters of today's
+sunlight the planet goes to a snowball and no achievable carbon dioxide recovers it. The
+infrared law is linearised around present conditions and its greenhouse saturates
+logarithmically, so the forcing available at half a bar is not enough against an albedo
+that has doubled. The real Earth of that era is thought to have needed methane as well,
+which is not modelled. There is a test that pins this so it stays a known limit.
 
 **And one thing the model gets visibly wrong.** A planet settles at around a seventh to a
 quarter of its surface above water where Earth manages a little under a third. The
@@ -1022,7 +1033,7 @@ later means rewriting every system, and it's cheap to build before there are sys
 | --- | --- |
 | **3** ✅ | Environment & neighbourhoods: environment vectors on places, archetypes derived from them, the four channels live, developmental windows, standing, residential sorting, the §15 balance harness |
 | **4** ✓ | `geo`: geodesic grid, plates, elevation, isostasy, erosion, bathymetry |
-| **5** | `climate` + `ocean`: energy balance, insolation, moisture, ice, currents, sea level, carbon cycle |
+| **5** ◑ | `climate`: energy balance, insolation, moisture, ice, carbon cycle. Ocean circulation — gyres, overturning, upwelling, nutrients — deferred to Phase 7, where something finally reads it |
 | **6** | `biome` + vegetation: Whittaker classification, PFT fields, NPP, fire and disturbance |
 | **7** | `ecology`: animal demes, trophic web, dispersal, habitat suitability |
 
@@ -1032,6 +1043,26 @@ filling them needs households and places with properties — not tectonics. Plac
 abstract and acquire a grid cell in Phase 4; nothing about §14 depends on where a
 neighbourhood physically sits. Doing it the other way round would mean a planet with a
 climate and no one whose life it changes.
+
+**Phase 5, in the event.** The thermostat works, and it is the most satisfying thing in
+the project so far: give the planet a sun that brightens by a third and its mean
+temperature moves by fifteen degrees rather than thirty-eight, because weathering
+accelerates and draws carbon dioxide from thirty thousand parts per million down to
+sixty. Nothing in the code aims at a temperature. The faint young sun comes out right
+too — a planet under a sun four fifths of today's holds about a tenth of a bar of carbon
+dioxide, which is what geochemists read out of Archean rocks and is not a number this
+model was fitted to.
+
+Two things were wrong and both were arithmetic rather than physics. The heat-transport
+term was written as a conductance between neighbours without dividing by the square of
+the distance between them, which is a factor of a couple of hundred at level four and
+produced a planet with a hundred degrees between its equator and its poles. And the
+ice albedo was a step function, which makes the ice–albedo feedback far more violent
+than it is: the hysteresis loop it opened was so wide that a frozen planet could not
+escape under *any* amount of carbon dioxide. A third problem was subtler and worth
+recording — solving the temperature all the way to equilibrium before letting the carbon
+answer freezes a planet under a faint sun and then strands it, because by then its
+albedo has doubled. The two have to move together, which is what the real system does.
 
 **Phase 4, in the event.** The supercontinent cycle does fall out of the mechanism, which
 was the thing most at risk: plates weld where continents collide, a plate holding too
