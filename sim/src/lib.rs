@@ -65,9 +65,14 @@ const STANDING_DECAY: f32 = 0.15;
 /// The share of their parents' standing a child starts from.
 ///
 /// The most direct of the three routes by which advantage passes down — the other two
-/// being the genes they inherit and the neighbourhood they grow up in. Turning this to
-/// zero does not abolish inheritance; it just leaves the other two.
-const INHERITED_STANDING: f32 = 0.55;
+/// being the genes they inherit and the neighbourhood they grow up in.
+///
+/// Measured, it turns out to be the *weakest* of the three: moving it between 0.20 and
+/// 0.55 shifts intergenerational elasticity only from 0.55 to 0.62. Advantage here
+/// travels mostly through the neighbourhood a child is raised in, not through what is
+/// handed to them at birth — which is worth knowing before reaching for this dial to
+/// change how mobile a world is.
+const INHERITED_STANDING: f32 = 0.35;
 
 /// Something that happened, as the simulation records it — structured, not prose.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

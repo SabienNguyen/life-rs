@@ -7,5 +7,6 @@ edition = "2024"
 sim-core = { path = "../sim-core" }
 sim = { path = "../sim" }
 life = { path = "../life" }
+observer = { path = "../observer" }
 planet = { path = "../planet" }
 person = { path = "../person" }

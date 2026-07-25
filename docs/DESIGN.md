@@ -749,10 +749,22 @@ modeling it prevents the sim from becoming a morality tale in either direction �
 "anyone can make it" version and the "nobody ever escapes" version are both wrong, and
 both are what you get when chance is squeezed out.
 
-A **balance harness** runs headless for 10 generations and reports the whole table, so
-the constants are tuned against measurements rather than vibes. It runs in CI with
-tolerance bands, because these numbers will drift every time the economy or the
-scoring function changes.
+A **balance harness** (`observer::balance`) runs a world for generations and reports the
+whole table against its target bands, so constants are tuned against measurements rather
+than vibes.
+
+Two things it found immediately, neither visible by reading the code. Genes and
+upbringing came out *exactly* balanced — 0.39 each once the entangled share is counted
+on both sides — which is the design goal met. And intergenerational elasticity sits at
+0.6, above the target band, but moving the transfer-at-birth constant across a 2.75×
+range shifts it only from 0.55 to 0.62: advantage travels through the **neighbourhood a
+child is raised in**, not through what they are handed. Which means the lever for
+mobility is §14.4's escape routes, not the inheritance dial.
+
+A caution the harness reports rather than hides: because parents supply both genes and
+neighbourhood, a fifth of the variance is explained by either and separable by neither.
+That **entangled** share is shown as its own quantity instead of being assigned to
+whichever cause a regression happened to enter first.
 
 ## 16. Families, society, and the chronicle
 
@@ -972,7 +984,7 @@ later means rewriting every system, and it's cheap to build before there are sys
 ### M2 — A world that has places (neighbourhoods, then the planet under them)
 | Phase | Deliverable |
 | --- | --- |
-| **3** ◑ | Environment & neighbourhoods: environment vectors on places, archetypes derived from them, the four channels live, developmental windows, standing, residential sorting, the §15 balance harness |
+| **3** ✅ | Environment & neighbourhoods: environment vectors on places, archetypes derived from them, the four channels live, developmental windows, standing, residential sorting, the §15 balance harness |
 | **4** | `geo`: geodesic grid, plates, elevation, isostasy, erosion, bathymetry |
 | **5** | `climate` + `ocean`: energy balance, insolation, moisture, ice, currents, sea level, carbon cycle |
 | **6** | `biome` + vegetation: Whittaker classification, PFT fields, NPP, fire and disturbance |

@@ -199,6 +199,17 @@ pub struct Person {
     /// partly passed on to children, and averaged into the affluence of wherever they
     /// live. It is the quantity that closes the loop between people and places.
     standing: f32,
+    /// The highest standing reached since maturity.
+    ///
+    /// A lifetime measure rather than a snapshot: current standing depends on when you
+    /// look, since it decays in old age, so comparing a forty-year-old with their dead
+    /// grandmother needs something that stops moving.
+    ///
+    /// Reset at maturity on purpose. A child begins with a share of what their parents
+    /// had, so a peak tracked from birth is `max(inheritance, attainment)` — which made
+    /// measured intergenerational elasticity 0.93, not because the world was a caste
+    /// system but because the outcome had the predictor baked into it.
+    peak_standing: f32,
     /// Childhood exposure, accumulating until maturity: weighted sum and total weight.
     upbringing: (f32, f32),
     matured: bool,
@@ -255,6 +266,7 @@ impl Person {
             home,
             born,
             standing: 0.0,
+            peak_standing: 0.0,
             upbringing: (0.0, 0.0),
             matured: false,
             needs: Needs::rested(),
@@ -272,6 +284,12 @@ impl Person {
 
     pub fn set_standing(&mut self, standing: f32) {
         self.standing = standing.clamp(0.0, 1.0);
+        self.peak_standing = self.peak_standing.max(self.standing);
+    }
+
+    /// The highest standing reached in adult life — their attainment.
+    pub fn peak_standing(&self) -> f32 {
+        self.peak_standing
     }
 
     /// Gain from a spell of work. Saturating, so standing is a position rather than a
@@ -314,6 +332,9 @@ impl Person {
             return;
         }
         self.matured = true;
+        // Attainment is measured from here: what they made of their position, not the
+        // position they were handed.
+        self.peak_standing = self.standing;
         if self.upbringing.1 <= 0.0 {
             return;
         }

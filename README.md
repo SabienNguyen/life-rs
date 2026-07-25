@@ -22,7 +22,7 @@ omniscient observer API, and the phased roadmap from here to there.
 
 ## Status
 
-**Phases 0 (foundations), 1 (person depth), 2 (genetics and families) and most of
+**Phases 0 (foundations), 1 (person depth), 2 (genetics and families) and
 3 (neighbourhoods) are in.**
 
 ```
@@ -127,9 +127,36 @@ residents*, and the four channels by which a place changes what people do.
   Elmhurst     rural                0.03   0.25   0.93   0.07   0.31     0
 ```
 
-Still outstanding from Phase 3: the balance harness of §15 — measuring intergenerational
-elasticity and mobility, and tuning against them. Next after that is Phase 4: the
-geodesic grid and tectonics beneath these places.
+**The balance harness** (`observer`) answers the question the whole design is built
+around — is this a story about inheritance or about circumstance?
+
+```
+cargo run -p main -- --people 90 --years 130 --min pivotal --balance --quiet
+
+  measured over 342 lives
+  outcome variance
+    genes          0.16  within target
+    upbringing     0.16  outside 0.20–0.55
+    entangled      0.23  inseparable — parents supply both
+    luck           0.46  outside 0.15–0.45
+  elasticity       0.62  outside 0.20–0.50
+  siblings         0.47  within target
+  mobility         0.67  within target
+  upbringing gap   1.49  outside 0.30–1.20
+```
+
+Genes and upbringing come out *exactly* balanced — 0.39 each, counting the entangled
+share on both sides. That entangled fifth is reported rather than divided up: parents
+supply both genes and neighbourhood, so the split is genuinely ambiguous and saying so
+is more honest than a false precision.
+
+Elasticity is above target — this world is less mobile than intended. Worth knowing
+*why*: moving the transfer-at-birth constant across a 2.75× range barely shifts it.
+Advantage travels through the neighbourhood a child grows up in, not through what they
+inherit. So the fix is §14.4's escape routes — bridging ties, mentors, schooling shocks
+— which aren't implemented yet, not a tuning dial.
+
+Next is Phase 4: the geodesic grid and tectonics beneath these places.
 
 ## Roadmap
 

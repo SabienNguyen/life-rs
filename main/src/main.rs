@@ -24,6 +24,7 @@ options:
   --min <level>    least important event to show  (default: routine)
                    routine | notable | pivotal | historic | epochal
   --dossier        end with a close look at one random person
+  --balance        report what the run turned out to be about
   --quiet          print only the closing summary
   -h, --help       this message
 ";
@@ -35,6 +36,7 @@ struct Options {
     people: usize,
     min_salience: Salience,
     dossier: bool,
+    balance: bool,
     quiet: bool,
 }
 
@@ -47,6 +49,7 @@ impl Default for Options {
             people: 1,
             min_salience: Salience::Routine,
             dossier: false,
+            balance: false,
             quiet: false,
         }
     }
@@ -105,6 +108,12 @@ fn main() -> ExitCode {
         for line in render::neighbourhoods(&world) {
             println!("{line}");
         }
+        println!();
+    }
+
+    if options.balance {
+        println!("── inheritance and circumstance ──");
+        println!("{}", observer::measure(&world));
         println!();
     }
 
@@ -169,6 +178,7 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Option<Options>, Str
             "-h" | "--help" => return Ok(None),
             "--quiet" => options.quiet = true,
             "--dossier" => options.dossier = true,
+            "--balance" => options.balance = true,
             "--seed" => {
                 let raw = value()?;
                 options.seed =
@@ -256,6 +266,12 @@ mod tests {
     fn the_dossier_is_opt_in() {
         assert!(!parse(&[]).unwrap().unwrap().dossier);
         assert!(parse(&["--dossier"]).unwrap().unwrap().dossier);
+    }
+
+    #[test]
+    fn the_balance_report_is_opt_in() {
+        assert!(!parse(&[]).unwrap().unwrap().balance);
+        assert!(parse(&["--balance"]).unwrap().unwrap().balance);
     }
 
     #[test]

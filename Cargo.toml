@@ -3,6 +3,7 @@ members = [
     "genetics",
     "life",
     "main",
+    "observer",
     "person",
     "planet",
     "sim",

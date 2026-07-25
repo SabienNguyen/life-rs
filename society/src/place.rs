@@ -450,13 +450,20 @@ mod tests {
         let poor = slum.env.surroundings(false);
         let rich = enclave.env.surroundings(false);
 
-        // Channel one: the structural difference, and the largest.
+        // Channel one: work is scarcer, but not absent. Subsistence work exists nearly
+        // everywhere — a place with *no* work at all left the model no equilibrium and
+        // slid every world to destitution.
         assert!(
-            poor.availability[Deed::Work as usize] < 0.5,
-            "work should be scarce: {}",
-            poor.availability[Deed::Work as usize]
+            poor.availability[Deed::Work as usize] < rich.availability[Deed::Work as usize] - 0.2,
+            "work should be markedly scarcer: {} vs {}",
+            poor.availability[Deed::Work as usize],
+            rich.availability[Deed::Work as usize]
         );
-        assert!(rich.availability[Deed::Work as usize] > 0.9);
+        assert!(
+            poor.availability[Deed::Work as usize] > 0.3,
+            "but there should still be something to do"
+        );
+        assert!(rich.availability[Deed::Work as usize] > 0.8);
 
         // Channel two: and what work there is returns less.
         assert!(poor.payoff[Deed::Work as usize] < rich.payoff[Deed::Work as usize]);
@@ -672,10 +679,12 @@ mod tests {
     fn crowding_shuts_the_door_progressively() {
         let place = settled(20, &census(20, 0.5, 0));
         let a = place.env.affluence;
-        // Room to spare: a little below the average still gets in.
-        assert!(place.admits(a - 0.1, 0.5));
-        // At capacity: you need to beat it.
-        assert!(!place.admits(a - 0.1, 1.0));
+        // Plenty of room: a little below the average still gets in.
+        assert!(place.admits(a - 0.1, 0.2));
+        // Filling up: the same household no longer qualifies.
+        assert!(!place.admits(a - 0.1, 0.6));
+        // At capacity: you need to beat the average outright.
+        assert!(!place.admits(a - 0.01, 1.0));
         // Well over: only much better than average, so somewhere desirable cannot
         // simply swallow the whole world.
         assert!(!place.admits(a + 0.2, 2.0));

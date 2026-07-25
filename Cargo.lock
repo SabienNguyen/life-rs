@@ -67,10 +67,21 @@ name = "main"
 version = "0.1.0"
 dependencies = [
  "life",
+ "observer",
  "person",
  "planet",
  "sim",
  "sim-core",
+]
+
+[[package]]
+name = "observer"
+version = "0.1.0"
+dependencies = [
+ "person",
+ "sim",
+ "sim-core",
+ "society",
 ]
 
 [[package]]
