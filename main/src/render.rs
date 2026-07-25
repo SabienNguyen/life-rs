@@ -3,7 +3,7 @@
 //! The simulation never phrases anything. Keeping the wording here means the chronicle
 //! stays comparable between runs, and it is where a richer narrator will eventually go.
 
-use person::Remark;
+use person::{Cause, Deed, Person};
 use planet::{Calendar, DayPhase, PlanetId};
 use sim::{Happening, World};
 use sim_core::{Record, Time};
@@ -31,17 +31,17 @@ pub fn line(world: &World, record: &Record<Happening>) -> String {
 fn context_planet(world: &World, happening: Happening) -> Option<PlanetId> {
     match happening {
         Happening::WorldBegins { planet } | Happening::PhaseBegins { planet, .. } => Some(planet),
-        Happening::PersonArrives { person } | Happening::PersonRemarks { person, .. } => {
-            world.people.get(person).map(|p| p.home)
-        }
+        _ => happening
+            .subject()
+            .and_then(|id| world.people.get(id))
+            .map(|p| p.home),
     }
 }
 
 fn sentence(world: &World, happening: Happening) -> String {
     match happening {
         Happening::WorldBegins { planet } => {
-            let name = planet_name(world, planet);
-            format!("Hello, I am planet {name}")
+            format!("Hello, I am planet {}", planet_name(world, planet))
         }
 
         Happening::PhaseBegins { planet, phase } => {
@@ -55,28 +55,37 @@ fn sentence(world: &World, happening: Happening) -> String {
         }
 
         Happening::PersonArrives { person } => match world.people.get(person) {
-            Some(p) => format!("Hi! My name is {} and I am from {}.", p.name, p.country),
+            Some(p) => format!(
+                "Hi! My name is {} and I am from {}. I am {}, and {}.",
+                p.name,
+                p.country,
+                describe_age(world, p),
+                p.personality.outlook().label(),
+            ),
             None => "Someone arrives.".to_string(),
         },
 
-        Happening::PersonRemarks { person, remark } => {
-            let who = world
-                .people
-                .get(person)
-                .map(|p| p.name.as_str())
-                .unwrap_or("Someone");
-            format!("{who} says \"{}\"", words(remark))
+        Happening::PersonDoes { person, deed } => {
+            format!("{} is {}", who(world, person), deed.label())
         }
+
+        Happening::PersonDies { person, cause } => match cause {
+            Cause::OldAge => format!("{} dies of old age", who(world, person)),
+            other => format!("{} dies of {}", who(world, person), other.label()),
+        },
     }
 }
 
-fn words(remark: Remark) -> &'static str {
-    match remark {
-        Remark::Bored => "Good morning! I am bored now...",
-        Remark::Lunch => "It is the afternoon now, I will eat lunch!",
-        Remark::Dinner => "It is the evening now, I will eat dinner!",
-        Remark::GoodNight => "It is nighttime now... Good night.",
-    }
+fn who(world: &World, id: person::PersonId) -> &str {
+    world
+        .people
+        .get(id)
+        .map(|p| p.name.as_str())
+        .unwrap_or("Someone")
+}
+
+fn describe_age(world: &World, p: &Person) -> String {
+    format!("{} years old", p.age(world.now()).years().floor() as u64)
 }
 
 fn planet_name(world: &World, id: PlanetId) -> &str {
@@ -85,6 +94,76 @@ fn planet_name(world: &World, id: PlanetId) -> &str {
         .get(id)
         .map(|p| p.name.as_str())
         .unwrap_or("?")
+}
+
+/// A one-line summary of a person as they stand — the seed of a dossier.
+pub fn portrait(world: &World, id: person::PersonId) -> String {
+    let Some(p) = world.people.get(id) else {
+        return "(nobody)".to_string();
+    };
+    let now = world.now();
+
+    let state = match p.death() {
+        Some((_, cause)) => format!("died of {}", cause.label()),
+        None => match p.intent() {
+            Some(intent) => format!("{}, {} to go", intent.deed.label(), intent.remaining(now)),
+            None => "idle".to_string(),
+        },
+    };
+
+    let (need, pressure) = p.needs().most_pressing();
+    format!(
+        "{} — {}, {} {}, {} — {} (most pressing: {} {:.0}%, health {:.0}%)",
+        p.name,
+        describe_age(world, p),
+        p.stage(now).label(),
+        p.country,
+        p.personality.outlook().label(),
+        state,
+        need,
+        pressure * 100.0,
+        p.health().vitality * 100.0,
+    )
+}
+
+/// The scoring table behind a person's current choice — an early `why()`.
+pub fn reasoning(world: &World, id: person::PersonId) -> Vec<String> {
+    let Some(p) = world.people.get(id) else {
+        return Vec::new();
+    };
+    let Some(planet) = world.planets.get(p.home) else {
+        return Vec::new();
+    };
+
+    let mut situation = person::Situation::plain(planet.phase_at(world.now()));
+    situation.env.stress = p.needs().total_pressure();
+
+    let scores = person::deeds::score_all(
+        &person::Mind {
+            personality: &p.personality,
+            values: &p.values,
+            needs: p.needs(),
+            age_years: p.age(world.now()).years(),
+        },
+        &situation,
+    );
+
+    let mut ranked: Vec<(Deed, f32)> = Deed::ALL
+        .into_iter()
+        .map(|d| (d, scores[d as usize]))
+        .collect();
+    ranked.sort_by(|a, b| b.1.total_cmp(&a.1));
+
+    ranked
+        .into_iter()
+        .map(|(deed, score)| {
+            if score <= 0.0 {
+                format!("  {:<12} unavailable here", deed.label())
+            } else {
+                format!("  {:<12} {score:.3}", deed.label())
+            }
+        })
+        .collect()
 }
 
 /// A compact local-time stamp. The year only appears once there is one.
@@ -108,77 +187,124 @@ mod tests {
     use super::*;
     use sim_core::{Duration, Salience, WorldSeed};
 
-    fn world_with_transcript() -> (World, Vec<String>) {
+    fn a_world() -> World {
         let mut world = World::genesis(WorldSeed::from_u128(1), 1);
-        world.run_for(Duration::from_hours(30));
-        let lines: Vec<String> = world
-            .chronicle
-            .at_least(Salience::Routine)
-            .map(|r| line(&world, r))
-            .collect();
-        (world, lines)
+        world.run_for(Duration::from_days(2));
+        world
     }
 
     #[test]
-    fn the_original_wording_survives_the_port() {
-        let (_world, lines) = world_with_transcript();
-        let spoken: Vec<&str> = lines
+    fn the_planet_still_speaks_as_it_always_did() {
+        let world = a_world();
+        let spoken: Vec<String> = world
+            .chronicle
             .iter()
-            .map(|l| l.split_once("] ").map(|(_, rest)| rest).unwrap_or(l))
+            .map(|r| {
+                let l = line(&world, r);
+                l.split_once("] ")
+                    .map(|(_, rest)| rest.to_string())
+                    .unwrap_or(l)
+            })
             .collect();
 
-        assert_eq!(spoken[1], "Hello, I am planet Earth");
-        assert_eq!(spoken[3], "It is now morning on planet Earth");
-        assert_eq!(spoken[5], "It is now the afternoon on planet Earth");
-        assert_eq!(spoken[7], "It is now evening on planet Earth");
-        assert_eq!(spoken[9], "It is now nighttime on planet Earth");
+        assert!(spoken.contains(&"Hello, I am planet Earth".to_string()));
+        assert!(spoken.contains(&"It is now morning on planet Earth".to_string()));
+        assert!(spoken.contains(&"It is now the afternoon on planet Earth".to_string()));
+        assert!(spoken.contains(&"It is now evening on planet Earth".to_string()));
+        assert!(spoken.contains(&"It is now nighttime on planet Earth".to_string()));
+    }
 
-        assert!(spoken[0].starts_with("Hi! My name is "));
-        assert!(spoken[0].ends_with('.'));
-        assert!(spoken[2].contains("Good morning! I am bored now..."));
-        assert!(spoken[4].contains("It is the afternoon now, I will eat lunch!"));
-        assert!(spoken[6].contains("It is the evening now, I will eat dinner!"));
-        assert!(spoken[8].contains("It is nighttime now... Good night."));
+    #[test]
+    fn a_person_introduces_themselves_with_who_they_are() {
+        let world = a_world();
+        let intro = world
+            .chronicle
+            .iter()
+            .find(|r| matches!(r.kind, Happening::PersonArrives { .. }))
+            .map(|r| line(&world, r))
+            .expect("someone should arrive");
+
+        assert!(intro.contains("Hi! My name is "));
+        assert!(intro.contains("years old"));
+    }
+
+    #[test]
+    fn deeds_read_as_sentences() {
+        let world = a_world();
+        let doings: Vec<String> = world
+            .chronicle
+            .iter()
+            .filter(|r| matches!(r.kind, Happening::PersonDoes { .. }))
+            .map(|r| line(&world, r))
+            .collect();
+
+        assert!(!doings.is_empty());
+        assert!(doings.iter().any(|d| d.contains(" is sleeping")));
+        assert!(doings.iter().all(|d| d.starts_with('[')));
     }
 
     #[test]
     fn events_are_stamped_with_local_time() {
-        let (_world, lines) = world_with_transcript();
-        assert!(
-            lines[0].starts_with("[day 1   00:00]"),
-            "got {:?}",
-            lines[0]
-        );
-        assert!(
-            lines[2].starts_with("[day 1   06:00]"),
-            "got {:?}",
-            lines[2]
-        );
-        assert!(
-            lines[10].starts_with("[day 2   06:00]"),
-            "got {:?}",
-            lines[10]
-        );
+        let world = a_world();
+        let first = line(&world, world.chronicle.iter().next().unwrap());
+        // Worlds are founded with a century of history behind them, so the year shows,
+        // and founding lands on midnight of a year boundary.
+        assert!(first.starts_with("[yr 100 day 1   00:00]"), "got {first:?}");
     }
 
     #[test]
-    fn the_year_appears_once_there_is_one() {
-        let calendar = Calendar::EARTH;
-        let later = Time::ORIGIN + Duration::from_days(400);
-        assert!(timestamp(&calendar, later).starts_with("[yr 1 day 36"));
+    fn a_portrait_says_who_and_how_someone_is() {
+        let world = a_world();
+        let id = world.people.ids().next().unwrap();
+        let portrait = portrait(&world, id);
+
+        assert!(portrait.contains("years old"));
+        assert!(portrait.contains("most pressing:"));
+        assert!(portrait.contains("health"));
+    }
+
+    #[test]
+    fn the_reasoning_is_shown_and_ranked() {
+        let world = a_world();
+        let id = world.people.ids().next().unwrap();
+        let lines = reasoning(&world, id);
+
+        assert_eq!(lines.len(), Deed::COUNT);
+        let scores: Vec<f32> = lines
+            .iter()
+            .filter_map(|l| l.split_whitespace().last()?.parse().ok())
+            .collect();
+        assert!(
+            scores.windows(2).all(|w| w[0] >= w[1]),
+            "should be ranked: {lines:?}"
+        );
     }
 
     #[test]
     fn rendering_survives_a_vanished_subject() {
-        let mut world = World::genesis(WorldSeed::from_u128(5), 1);
-        world.run_for(Duration::from_hours(13));
+        let mut world = a_world();
         let id = world.people.ids().next().unwrap();
         world.people.remove(id);
 
-        // The events they left behind must still render rather than panicking.
         for record in world.chronicle.iter() {
-            let text = line(&world, record);
-            assert!(!text.is_empty());
+            assert!(!line(&world, record).is_empty());
         }
+        assert_eq!(portrait(&world, id), "(nobody)");
+        assert!(reasoning(&world, id).is_empty());
+    }
+
+    #[test]
+    fn a_death_is_narrated() {
+        let mut world = World::genesis(WorldSeed::from_u128(3), 12);
+        world.record_only(Salience::Pivotal);
+        world.run_for(Duration::from_years(40));
+        let obituary = world
+            .chronicle
+            .at_least(Salience::Pivotal)
+            .filter(|r| matches!(r.kind, Happening::PersonDies { .. }))
+            .map(|r| line(&world, r))
+            .next()
+            .expect("40 years should produce a death");
+        assert!(obituary.contains(" dies of "), "got {obituary:?}");
     }
 }

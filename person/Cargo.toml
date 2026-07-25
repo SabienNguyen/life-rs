@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 sim-core = { path = "../sim-core" }
+life = { path = "../life" }
 planet = { path = "../planet" }
 rand = { workspace = true }
 faker_rand = { workspace = true }

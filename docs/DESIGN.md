@@ -2,8 +2,8 @@
 
 > Big-picture architecture — the plan we implement against.
 >
-> **Phase 0 is implemented** (`sim-core`, `sim`, and the port of `planet`/`person`);
-> §19 marks progress. Everything beyond it is still a plan.
+> **Phases 0 and 1 are implemented** — foundations (`sim-core`, `sim`) and person depth
+> (`life`, `person`). §20 marks progress. Everything beyond that is still a plan.
 
 ## 1. The goal
 
@@ -75,7 +75,7 @@ don't write a second system.
 **5. Grounded models, honestly coarse.** Every subsystem borrows a real scientific
 approach — energy-balance climate models, Whittaker biome classification, dynamic
 global vegetation models, Wright–Fisher drift, Airy isostasy. None of them are
-research-grade, and §18 says exactly where the approximations are. "Realistic" here
+research-grade, and §19 says exactly where the approximations are. "Realistic" here
 means *the mechanism is real and the resolution is coarse*, which is very different
 from a plausible-looking fake.
 
@@ -172,7 +172,7 @@ architecture possible:
 
 Randomness that *should* be random still is. Mutation, drift, weather, chance
 encounters, and accidents all draw from these streams, and the sim has fat tails on
-purpose (§18.2) — rare catastrophes and outliers, not smooth averages. Determinism is
+purpose (§19.2) — rare catastrophes and outliers, not smooth averages. Determinism is
 a property of the engine, not of the outcomes.
 
 ### 5.3 The time-scale ladder
@@ -731,7 +731,7 @@ defined and measured **in outcomes**.
 | Height/physiology | 0.80 | 0.10 | 0.10 |
 
 **Outcome-level targets** — these are the actual definition of balance, asserted in
-tests (§20) and tuned against:
+tests (§21) and tuned against:
 
 | Measure | Target | Why |
 | --- | --- | --- |
@@ -781,7 +781,99 @@ the log filtered by participant; a geological history is the same log filtered b
 salience. Storage is tiered — recent verbatim, older compacted into summaries, only
 high-salience kept forever — which is what makes megayears affordable.
 
-## 17. The omniscient view
+## 17. Social intelligence
+
+People in this simulation need to model *each other*, not just react to a world. The
+agent-research field has converged on a useful decomposition of what that involves, and
+it is worth borrowing — while being clear that almost none of its machinery transfers.
+
+### 17.1 What the field decomposes social intelligence into
+
+Humalike, which sells this as behavioural infrastructure for LLM agents, splits it into
+roughly seven primitives: **turn-taking**, **theory of mind**, **norms**, **social
+memory**, **social learning**, **persona**, and **proactiveness**. The generative-agents
+line of work (Stanford's Smallville and its successors) arrives at a similar list from a
+different direction, built on a memory stream with retrieval, reflection, and planning.
+
+The *taxonomy* is the valuable part. The mechanism is not: all of it runs on LLM calls
+per agent per utterance, which is incompatible with a world of millions of people
+running for millions of years, offline and reproducibly.
+
+### 17.2 Two things the design is missing
+
+Checking that list against §14–16 turns up two real gaps, both cheap:
+
+**Theory of mind — beliefs about people, not just feelings about them.** The design has
+`Tie { affinity, trust }` and `impressions`: how someone *feels* about another person.
+It has nothing for what someone *believes about* another person's traits, wants, and
+intentions — and, crucially, nothing that can be **wrong**.
+
+```rust
+struct Belief {                    // A's model of B, stored on the tie
+    traits: Personality,           // what A thinks B is like
+    disposition: f32,              // whether A thinks B likes them
+    intent: Option<Intent>,        // what A thinks B is up to
+    confidence: f32,               // and how sure A is
+    last_revised: Time,
+}
+```
+
+A belief that diverges from the truth is the source of most of what makes social life
+narratively interesting: misunderstanding, mistaken reputation, gossip that mutates as
+it spreads, betrayal, and reconciliation when a belief is finally corrected. It composes
+with the memory model already specified — memory is lossy and salience-weighted (§13.4),
+so beliefs *should* drift from reality, and stale beliefs about people rarely seen are a
+consequence rather than a special case. Cost is one small struct per tie.
+
+**Norms as learned, not ambient.** §14.2's fourth channel reads `norms` off the place, as
+though everyone were equally steeped in them. Humalike's framing — agents pick up hidden
+rules and tone *from a group* — is the better model: each person carries their own
+estimate of local norms, learned by observation, weighted by the developmental windows of
+§14.3. That single change earns three things the ambient version cannot: migrants who
+carry the old country's norms and only partly assimilate, adolescence as the period when
+norm learning runs fastest, and cultural change that is *transmitted* rather than
+imposed by editing a field.
+
+Both belong in Phase 3 (environment) and Phase 4 (chronicle and memory) respectively, not
+in Phase 1 — they need relationships and places to exist first.
+
+### 17.3 Where an LLM belongs, and where it does not
+
+Two independent findings from the scaling literature, pointing the same way.
+
+The first is architectural convergence. Light Society reaches a billion agents with an
+**event queue** plus a **mixture of full models and distilled surrogates** — full fidelity
+for the agents that matter, cheap approximation for everyone else. Hybrid frameworks pair
+LLM agents for a core subset with a cheap generative model for the rest. That is
+precisely the level-of-detail design in §6 and §8, arrived at independently by people who
+had to make planetary scale work. Encouraging, and worth taking as confirmation that
+the LOD tiering is not a compromise but the known solution.
+
+The second is more surprising, and it argues *for* the mechanistic core rather than
+merely excusing it: **LLM agents show 20–300× lower behavioural variability than real
+people**, collapsing toward high-probability responses. Population-scale diversity is
+exactly what this project needs, and it is exactly what an LLM population fails to
+produce. The genes + environment + luck model of §15 generates heterogeneity by
+construction, with the variance split as a tunable. For simulating a *population*, the
+mechanistic model is not the budget option — it is the more accurate one.
+
+So the rule:
+
+- **Never in the tick loop.** Behaviour is utility-scored from traits, needs, and
+  environment (§13.3). Deterministic, offline, microseconds, and more varied than the
+  alternative.
+- **At the observation boundary, optionally.** When you zoom to one person, an LLM may
+  narrate their dossier — turning a scoring table and an event list into prose in their
+  voice. That is §8.3's backfill applied to language: expensive work done once, for the
+  one entity being looked at, cached and keyed by seed so that re-inspecting a person
+  gives the same words. The simulation stays reproducible because nothing the narrator
+  produces feeds back into it.
+
+The line to hold: **language is a view, never a cause.** The moment an LLM's output
+changes what happens, worlds stop being reproducible, deep time stops being computable,
+and the whole architecture in §5–8 unwinds.
+
+## 18. The omniscient view
 
 Read-only, at every scale:
 
@@ -822,11 +914,11 @@ scoring table showing which options were *gated off* rather than merely outscore
 hide a thin one. The globe and phylogeny views need real rendering (`wgpu`) and come
 with deep time in M4; both read the same `Observer` API.
 
-## 18. Fidelity: what's real and what's approximated
+## 19. Fidelity: what's real and what's approximated
 
 Being explicit about this is what separates a coarse simulation from a fake one.
 
-### 18.1 The approximations
+### 19.1 The approximations
 
 | Subsystem | Real approach borrowed | What's given up |
 | --- | --- | --- |
@@ -844,7 +936,7 @@ mechanistically grounded, low resolution. Anywhere the resolution stops matterin
 can refine that row without touching the others — which is the reason for the crate
 boundaries in §4.
 
-### 18.2 Keeping it from feeling fake
+### 19.2 Keeping it from feeling fake
 
 Coarse models tend to produce smooth, averaged, boring worlds. Four countermeasures:
 
@@ -856,12 +948,12 @@ Coarse models tend to produce smooth, averaged, boring worlds. Four countermeasu
   respond smoothly and reversibly feel synthetic because they are.
 - **No global knobs.** Every quantity is local and computed. There is no "civilization
   level" or "world danger" dial — those are the tell of a fake.
-- **Validated against reality.** §20 checks the world against known Earth statistics:
+- **Validated against reality.** §21 checks the world against known Earth statistics:
   land fraction, biome area distribution, species-area relationships, extinction rate
   distributions, demographic pyramids. If a simulated Earth-like planet produces 90%
   desert, the model is wrong regardless of how convincing the mechanism sounded.
 
-## 19. Roadmap
+## 20. Roadmap
 
 Four milestones, each shippable, each independently interesting.
 
@@ -869,7 +961,7 @@ Four milestones, each shippable, each independently interesting.
 | Phase | Deliverable |
 | --- | --- |
 | **0** ✅ | `sim-core`: handles, arenas, seeded RNG, **the full time-scale ladder and scheduler**, event bus. Port existing Person/Planet behavior unchanged onto it |
-| **1** | Person depth: OCEAN, values, continuous needs, utility AI (with §14.2 hooks present but constant), aging, health, mortality |
+| **1** ✅ | Person depth: OCEAN, values, continuous needs, utility AI (with §14.2 hooks present but constant), aging, health, mortality |
 | **2** | Genetics + families: loci, meiosis, pedigree-derived genomes, households, kinship, birth/pairing/death, a population that sustains itself |
 
 The scale ladder lands in Phase 0 even though nothing uses it yet. Retrofitting it
@@ -911,7 +1003,7 @@ deepening any of them. It will be ugly and it will de-risk the entire project, b
 the scale-crossing projections (§5.3) are where this design is most likely to be
 wrong, and that's much cheaper to discover early.
 
-## 20. Validation
+## 21. Validation
 
 Coarse models must be checked against reality or they drift into plausible nonsense.
 
@@ -950,7 +1042,7 @@ Coarse models must be checked against reality or they drift into plausible nonse
 - Demography: stable age pyramid, no orphaned households, population neither exploding
   nor collapsing over 500 years.
 
-## 21. Performance budget
+## 22. Performance budget
 
 Rough estimates to be replaced by benchmarks — stated so they can be falsified.
 
@@ -972,7 +1064,7 @@ The honest risk: Full-LOD agent throughput and the scale-crossing projections ar
 two places these numbers could be wrong by an order of magnitude. Both are exercised
 by the M1 vertical slice for exactly that reason.
 
-## 22. Open questions
+## 23. Open questions
 
 1. **Planet fidelity vs. speed.** Grid level 6 (40k cells, ~112 km) or level 7 (164k,
    ~56 km)? Level 7 is 4× the cost for visibly better coastlines and mountains. Start

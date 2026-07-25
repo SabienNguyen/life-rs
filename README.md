@@ -22,36 +22,63 @@ omniscient observer API, and the phased roadmap from here to there.
 
 ## Status
 
-**Phase 0 (foundations) is in.** `sim-core` provides generational handles and arenas,
-seeded splittable randomness, the time-scale ladder from a 15-minute tick to a megayear,
-a future-event scheduler, and the chronicle. `sim` owns a handle-based `World`; `planet`
-and `person` are ported onto it with their behaviour unchanged.
+**Phases 0 (foundations) and 1 (person depth) are in.**
 
 ```
-cargo run -p main                              # a new world, three days
-cargo run -p main -- --seed 0x2b --days 5      # replay a specific world
-cargo run -p main -- --people 20 --min pivotal # a crowd, only the events that matter
+cargo run -p main                                   # a new world, three days
+cargo run -p main -- --seed 0x2b --days 5           # replay a specific world
+cargo run -p main -- --days 1 --dossier             # end with a close look at someone
+cargo run -p main -- --people 200 --years 60 --min pivotal
 ```
 
-What that bought:
+```
+[yr 100 day 1   00:00] Hi! My name is Dr. Armando Lang and I am from United States.
+                       I am 35 years old, and optimistic.
+[yr 100 day 1   08:00] Dr. Armando Lang is eating
+[yr 100 day 1   10:45] Dr. Armando Lang is working
+
+why they are doing that:
+  sleeping     1.035
+  washing      0.022
+  drinking     0.020
+  ...
+```
+
+**Phase 0** — `sim-core`: generational handles and arenas, seeded splittable randomness,
+the time-scale ladder from a 15-minute tick to a megayear, a future-event scheduler, the
+chronicle. `sim` owns a handle-based `World`.
 
 - **No borrowed references.** A person holds `home: PlanetId`, not `&Planet`. Cycles —
-  families, food webs — are now representable.
+  families, food webs — are representable.
 - **Reproducible worlds.** Every draw descends from the world seed; nothing calls
   `thread_rng()`. Same seed, same world, down to the transcript. A new world draws fresh
   entropy and is genuinely different.
-- **Time that reaches deep.** `Time` counts simulated seconds in integers (no drift over
-  1e13 steps), and day phase is *derived* from the clock rather than stored, so it cannot
-  fall out of step. An empty world advances a million years instantly.
-- **Nothing is polled.** Dormant entities cost nothing until due; ~7.8M events/sec on one
-  core.
+- **Time that reaches deep.** Integer simulated seconds, no drift over 1e13 steps. Day
+  phase is *derived* from the clock, so it cannot fall out of step. An empty world
+  crosses a million years instantly.
+- **Nothing is polled.** ~7.8M events/sec on one core.
 
-Next is Phase 1: needs, OCEAN personality, and utility-scored behaviour in place of the
-state machine.
+**Phase 1** — `life`: needs, aging, health, Siler-model mortality. `person`: OCEAN
+personality, values, and utility-scored behaviour replacing the state machine.
+
+- **Needs are continuous and lazy.** Computed from time elapsed since anyone last
+  looked, so a dormant population costs nothing.
+- **Behaviour is scored, not branched.** Every option is priced by need × temperament ×
+  circadian × the four environment channels, then chosen by softmax. The prices are
+  kept, so the simulation can show its working.
+- **Personality is an output.** Five continuous traits; `Outlook::Pessimistic` is a
+  label read off the vector, not a stored fact. Phase 2 replaces the sampling with
+  inheritance from a genome.
+- **People age and die.** Competing juvenile / baseline / senescent hazards, so life
+  tables have the right bathtub shape — median lifespan ~74, and a closed founding
+  population thins out mostly of old age.
+
+Next is Phase 2: genetics and families — polygenic inheritance, households, kinship,
+birth, and a population that sustains itself instead of only declining.
 
 ## Roadmap
 
-Four milestones, detailed in [`docs/DESIGN.md` §19](docs/DESIGN.md):
+Four milestones, detailed in [`docs/DESIGN.md` §20](docs/DESIGN.md):
 
 1. **A world that lives** — handle-based world, scale ladder, person depth, genetics, families
 2. **A world that has places** — geodesic grid, tectonics, climate, oceans, biomes, ecology, neighborhoods

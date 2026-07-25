@@ -6,5 +6,6 @@ edition = "2024"
 [dependencies]
 sim-core = { path = "../sim-core" }
 sim = { path = "../sim" }
+life = { path = "../life" }
 planet = { path = "../planet" }
 person = { path = "../person" }
