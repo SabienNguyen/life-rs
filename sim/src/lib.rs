@@ -16,7 +16,7 @@ use genetics::{Architecture, FounderPool};
 use person::{Cause, Deed, Person, PersonId, Situation};
 use planet::{DayPhase, Planet, PlanetId};
 use sim_core::{Arena, Chronicle, Domain, Duration, Rng, Salience, Scheduler, Time, WorldSeed};
-use society::Society;
+use society::{Census, Place, PlaceId, Society};
 
 /// Worlds start with a history behind them, so that a founding population can be
 /// adults of varying ages rather than a single cohort of newborns.
@@ -41,6 +41,33 @@ pub const GESTATION: Duration = Duration::from_days(273);
 /// It arrives with resources and an economy. Until then, unchecked slow growth is the
 /// honest failure mode; a knife-edge constant would only look stable until it wasn't.
 const CONCEPTION_PER_YEAR: f32 = 0.16;
+
+/// How much better a neighbourhood has to be before a household will move to it.
+///
+/// Without a threshold, households shuffle endlessly between places that differ in the
+/// third decimal, and churn — which erodes community — becomes an artefact of the
+/// sorting loop rather than a fact about the world.
+const MOVE_THRESHOLD: f32 = 0.05;
+
+/// What a spell of work adds to standing, where there is work worth having.
+///
+/// Derived rather than guessed. Gain saturates and decay is proportional, so standing
+/// settles where `W·g·q = d·s` — with W the roughly four hundred spells of work in a
+/// year, q the local opportunity and d the yearly decay. These values put a typical
+/// worker in a middling neighbourhood near 0.5. Two earlier attempts were wrong in
+/// opposite directions: one implied an equilibrium of 0.99 and turned every world into
+/// an affluent enclave inside a decade, the other left no equilibrium at all.
+const WORK_GAIN: f32 = 0.0017;
+
+/// What a year takes back. Standing is a position needing upkeep, not a hoard.
+const STANDING_DECAY: f32 = 0.15;
+
+/// The share of their parents' standing a child starts from.
+///
+/// The most direct of the three routes by which advantage passes down — the other two
+/// being the genes they inherit and the neighbourhood they grow up in. Turning this to
+/// zero does not abolish inheritance; it just leaves the other two.
+const INHERITED_STANDING: f32 = 0.55;
 
 /// Something that happened, as the simulation records it — structured, not prose.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -72,6 +99,14 @@ pub enum Happening {
         mother: PersonId,
         father: PersonId,
     },
+    PersonMoves {
+        person: PersonId,
+        to: PlaceId,
+    },
+    PlaceChanges {
+        place: PlaceId,
+        into: society::Archetype,
+    },
 }
 
 impl Happening {
@@ -81,7 +116,8 @@ impl Happening {
             Happening::PersonArrives { person }
             | Happening::PersonDoes { person, .. }
             | Happening::PersonDies { person, .. }
-            | Happening::PersonPairs { person, .. } => Some(*person),
+            | Happening::PersonPairs { person, .. }
+            | Happening::PersonMoves { person, .. } => Some(*person),
             Happening::PersonBorn { child, .. } => Some(*child),
             _ => None,
         }
@@ -101,6 +137,9 @@ enum Task {
     PersonAges(PersonId),
     /// A pregnancy coming to term.
     Birth { mother: PersonId, father: PersonId },
+    /// A yearly census: every place reads itself off its residents, and households
+    /// consider moving.
+    Reckoning,
 }
 
 pub struct World {
@@ -108,6 +147,7 @@ pub struct World {
     pub planets: Arena<Planet>,
     pub people: Arena<Person>,
     pub society: Society,
+    pub places: Arena<Place>,
     pub chronicle: Chronicle<Happening>,
     architecture: &'static Architecture,
     pool: FounderPool,
@@ -115,6 +155,13 @@ pub struct World {
     next_stream: u64,
     /// Mothers with a birth already queued. Ordered, so iteration cannot vary.
     expecting: std::collections::BTreeSet<PersonId>,
+    /// What each place read as at the last reckoning, so a change of character is
+    /// noticed rather than merely happening.
+    was: std::collections::BTreeMap<PlaceId, society::Archetype>,
+    /// Households that arrived somewhere since the last reckoning.
+    arrivals: std::collections::BTreeMap<PlaceId, u32>,
+    /// What was done where, since the last reckoning. Norms are read off this.
+    deeds_done: std::collections::BTreeMap<PlaceId, [u32; Deed::COUNT]>,
 }
 
 impl World {
@@ -124,12 +171,16 @@ impl World {
             planets: Arena::new(),
             people: Arena::new(),
             society: Society::new(),
+            places: Arena::new(),
             chronicle: Chronicle::new(),
             architecture: genetics::standard_architecture(),
             pool: FounderPool::uniform(),
             scheduler: Scheduler::starting_at(FOUNDING),
             next_stream: 0,
             expecting: std::collections::BTreeSet::new(),
+            was: std::collections::BTreeMap::new(),
+            arrivals: std::collections::BTreeMap::new(),
+            deeds_done: std::collections::BTreeMap::new(),
         }
     }
 
@@ -192,7 +243,11 @@ impl World {
             .schedule_at(now + offset, Task::PersonAges(id));
     }
 
-    /// Populate a world with an Earth-like planet and a founding population.
+    /// Populate a world with an Earth-like planet, some neighbourhoods, and people.
+    ///
+    /// The neighbourhoods start identical and unremarkable. Everything that
+    /// distinguishes them afterwards — which becomes the enclave, which the slum — comes
+    /// out of who ends up living in them, not out of anything written here.
     pub fn genesis(seed: WorldSeed, population: usize) -> World {
         let mut world = World::new(seed);
         let earth = world.add_planet(Planet::earth());
@@ -200,26 +255,48 @@ impl World {
             .scheduler
             .schedule_at(FOUNDING, Task::PlanetAwakens(earth));
 
-        for _ in 0..population {
+        let quarters = [
+            "Northside",
+            "The Wharf",
+            "Elmhurst",
+            "Kingsfield",
+            "Lowgate",
+        ];
+        let capacity = ((population / 3).max(4)) as u32;
+        for name in quarters {
+            world.places.insert(Place::new(name, capacity));
+        }
+        let place_ids: Vec<PlaceId> = world.places.ids().collect();
+
+        for i in 0..population {
             let mut rng = world.stream(Domain::Genetics);
             // Founders span the adult range, so the population has a shape from the
             // start rather than being one cohort that ages and dies together.
             let age_years = rng.range_f64(18.0, 70.0);
             let born = FOUNDING - Duration::from_secs((age_years * 31_557_600.0) as u64);
-            let upbringing = rng.normal() as f32;
+            let standing = rng.unit_f32();
 
             let architecture = world.architecture;
             let pool = world.pool.clone();
-            let mut inhabitant =
-                person::found(architecture, &pool, &mut rng, earth, born, upbringing);
+            let mut inhabitant = person::found(architecture, &pool, &mut rng, earth, born, 0.0);
             // Their life before the world started was never simulated; do not bill
-            // them for it.
+            // them for it, and treat their upbringing as already behind them.
             inhabitant.assume_settled(FOUNDING);
+            inhabitant.set_standing(standing);
+            inhabitant.mature();
 
             let id = world.add_person(inhabitant);
-            let home = world.society.found_household(FOUNDING, upbringing);
+            let home = world.society.found_household(FOUNDING, 0.0);
             world.society.move_in(id, home);
+            // Spread the founders around; sorting takes it from here.
+            let quarter = place_ids[i % place_ids.len()];
+            world.society.settle(home, quarter);
         }
+
+        // The first reckoning is a year in, once there is a year to read.
+        world
+            .scheduler
+            .schedule_at(FOUNDING + Duration::from_years(1), Task::Reckoning);
         world
     }
 
@@ -264,6 +341,7 @@ impl World {
             Task::PersonActs(id) => self.person_acts(at, id),
             Task::PersonAges(id) => self.person_ages(at, id),
             Task::Birth { mother, father } => self.birth(at, mother, father),
+            Task::Reckoning => self.reckoning(at),
         }
     }
 
@@ -278,6 +356,23 @@ impl World {
         };
         let phase = planet.phase_at(at);
 
+        let where_they_live = self.society.place_of(id);
+        let dependent = self
+            .people
+            .get(id)
+            .is_some_and(|p| p.stage(at).is_dependent());
+
+        // The four channels, filled from the neighbourhood they actually live in.
+        let mut env = where_they_live
+            .and_then(|p| self.places.get(p))
+            .map(|place| place.env.surroundings(dependent))
+            .unwrap_or_else(person::Surroundings::neutral);
+
+        let (job_opportunity, schooling) = where_they_live
+            .and_then(|p| self.places.get(p))
+            .map(|place| (place.env.job_opportunity, place.env.education_access))
+            .unwrap_or((0.5, 0.5));
+
         let mut rng = self.moment_stream(Domain::Behavior, id.to_bits(), at);
         let Some(subject) = self.people.get_mut(id) else {
             return;
@@ -286,20 +381,30 @@ impl World {
             return;
         }
 
-        // Stress is the person's own unmet need for now. Phase 3 adds the
-        // neighbourhood's contribution; the channel is already load-bearing, because it
-        // is what shortens the time horizon and suppresses work under deprivation.
-        let mut situation = Situation::plain(phase);
-        situation.env.stress = subject.needs().total_pressure();
-        if subject.stage(at).is_dependent() {
-            // The opportunity channel doing real work: a child does not decline to
-            // work, the option is not on their menu.
-            situation.env.availability[Deed::Work as usize] = 0.0;
-        }
+        // Their own unmet need adds to whatever the neighbourhood already imposes.
+        env.stress = (env.stress + subject.needs().total_pressure()).clamp(0.0, 1.0);
+        let situation = Situation { phase, env };
 
         let first = subject.first_sighting();
+        let finished = subject.settle_intent_only(at);
         let outcome = subject.step(at, &situation, &mut rng);
         let death = subject.death();
+
+        // Work pays where there is work worth having — the same channel that decided
+        // whether it was on offer decides what it returns.
+        if finished == Some(Deed::Work) {
+            // How much a spell of work is worth depends on the person as well as the
+            // place. Without that, everyone with the same neighbourhood converges on
+            // the same standing and there is no spread for sorting to act on — the
+            // whole world settles into one indistinguishable suburb.
+            //
+            // The two terms are the two inheritances: conscientiousness comes down
+            // through the genome, schooling through the neighbourhood a child grew up
+            // in. Advantage passes along both, and along the transfer at birth.
+            let diligence = (0.6 + 0.5 * subject.personality.conscientiousness).clamp(0.2, 2.0);
+            let taught = 0.5 + schooling;
+            subject.earn(WORK_GAIN * job_opportunity * diligence * taught);
+        }
 
         if first {
             self.chronicle.record(
@@ -311,6 +416,10 @@ impl World {
 
         match outcome {
             Some(choice) => {
+                if let Some(place) = where_they_live {
+                    let counts = self.deeds_done.entry(place).or_insert([0; Deed::COUNT]);
+                    counts[choice.deed as usize] += 1;
+                }
                 self.chronicle.record(
                     at,
                     Salience::Routine,
@@ -323,7 +432,6 @@ impl World {
                     .schedule_at(at + choice.deed.duration(), Task::PersonActs(id));
             }
             None => {
-                // Died catching up — record it and stop scheduling them.
                 if let Some((_, cause)) = death {
                     self.chronicle.record(
                         at,
@@ -365,6 +473,16 @@ impl World {
                 );
             }
             None => {
+                if let Some(person) = self.people.get_mut(id)
+                    && !person.stage(at).is_dependent()
+                {
+                    // Adults only. A child cannot work — the option is gated off — so
+                    // decaying their standing too meant every generation arrived at
+                    // adulthood with nothing, and the whole society ratcheted to zero
+                    // within a few generations. What a child has is their family's
+                    // backing, and that does not erode because they are young.
+                    person.slip(STANDING_DECAY);
+                }
                 self.seek_partner(at, id);
                 self.try_conceive(at, id);
                 self.scheduler
@@ -428,10 +546,16 @@ impl World {
 
         // A new household, with its own character, for the two of them and any
         // children they raise.
-        let upbringing = rng.normal() as f32;
-        let home = self.society.found_household(at, upbringing);
+        let inherited_place = self
+            .society
+            .place_of(id)
+            .or_else(|| self.society.place_of(chosen));
+        let home = self.society.found_household(at, 0.0);
         self.society.move_in(id, home);
         self.society.move_in(chosen, home);
+        if let Some(place) = inherited_place {
+            self.society.settle(home, place);
+        }
         self.society.dissolve_empty();
 
         self.chronicle.record(
@@ -480,6 +604,176 @@ impl World {
         );
     }
 
+    /// The yearly loop that closes people and places together.
+    ///
+    /// Three steps in order, and the order matters: every place first reads itself off
+    /// the people currently in it, then children absorb the place they are growing up
+    /// in, then households reconsider where they live. Sorting last means a household
+    /// moves on this year's reading, not on a stale one.
+    fn reckoning(&mut self, at: Time) {
+        self.take_census(at);
+        self.absorb_upbringings(at);
+        self.sort_households(at);
+        self.scheduler
+            .schedule_at(at + Duration::from_years(1), Task::Reckoning);
+    }
+
+    fn take_census(&mut self, at: Time) {
+        let place_ids: Vec<PlaceId> = self.places.ids().collect();
+        for id in place_ids {
+            let mut census = Census::default();
+
+            for (home, household) in self.society.households_in(id) {
+                census.households += 1;
+                if household.founded.since(at).as_years() < 1.0
+                    && household.founded >= at - Duration::from_years(1)
+                {
+                    census.arrivals += 1;
+                }
+                let _ = home;
+                for member in &household.members {
+                    if let Some(person) = self.people.get(*member)
+                        && person.is_alive()
+                        && !person.stage(at).is_dependent()
+                    {
+                        census.adults += 1;
+                        census.mean_standing += person.standing();
+                    }
+                }
+            }
+            census.arrivals += self.arrivals.get(&id).copied().unwrap_or(0);
+            if census.adults > 0 {
+                census.mean_standing /= census.adults as f32;
+            }
+
+            // Norms are literally what people did here this year.
+            if let Some(counts) = self.deeds_done.get(&id) {
+                census.deeds = *counts;
+            }
+
+            if let Some(place) = self.places.get_mut(id) {
+                let before = place.archetype();
+                place.observe(&census);
+                let after = place.archetype();
+                if self.was.insert(id, after) == Some(before) && before != after {
+                    self.chronicle.record(
+                        at,
+                        Salience::Historic,
+                        Happening::PlaceChanges {
+                            place: id,
+                            into: after,
+                        },
+                    );
+                }
+            }
+        }
+        self.arrivals.clear();
+        self.deeds_done.clear();
+    }
+
+    /// Children take on the character of wherever they are living.
+    fn absorb_upbringings(&mut self, at: Time) {
+        let ids: Vec<PersonId> = self.people.ids().collect();
+        for id in ids {
+            let quality = self
+                .society
+                .place_of(id)
+                .and_then(|p| self.places.get(p))
+                .map(|p| p.env.upbringing())
+                .unwrap_or(0.0);
+
+            let Some(person) = self.people.get_mut(id) else {
+                continue;
+            };
+            if !person.is_alive() || person.has_matured() {
+                continue;
+            }
+            let age = person.age(at).years();
+            person.absorb(quality, age, 1.0);
+            if age >= 20.0 {
+                // The window closes: what was absorbed becomes who they are.
+                person.mature();
+            }
+        }
+    }
+
+    /// Households consider moving somewhere that suits them better.
+    ///
+    /// This is what produces sorting, and sorting is what makes neighbourhoods diverge
+    /// rather than all drifting to the same middling average.
+    fn sort_households(&mut self, at: Time) {
+        let homes: Vec<society::HouseholdId> =
+            self.society.households().map(|(id, _)| id).collect();
+
+        for home in homes {
+            let Some(household) = self.society.household(home) else {
+                continue;
+            };
+            if household.members.is_empty() {
+                continue;
+            }
+            let members = household.members.clone();
+            let current = household.place;
+
+            let standing = {
+                let (sum, count) = members
+                    .iter()
+                    .filter_map(|m| self.people.get(*m))
+                    .filter(|p| p.is_alive() && !p.stage(at).is_dependent())
+                    .fold((0.0, 0), |(s, c), p| (s + p.standing(), c + 1));
+                if count == 0 { 0.0 } else { sum / count as f32 }
+            };
+
+            // The best place that would actually have them. Everyone wants the best
+            // neighbourhood; what sorts people is which ones will take them.
+            let best = self
+                .places
+                .iter()
+                .filter(|(id, place)| {
+                    let occupancy =
+                        self.society.households_in(*id).count() as f32 / place.capacity as f32;
+                    place.admits(standing, occupancy)
+                })
+                .max_by(|(_, a), (_, b)| a.env.quality().total_cmp(&b.env.quality()))
+                .map(|(id, _)| id);
+
+            let Some(best) = best else { continue };
+            if current == Some(best) {
+                continue;
+            }
+
+            // Moving costs something, so only a real improvement is worth it —
+            // otherwise households churn between near-identical places forever.
+            let gain = self
+                .places
+                .get(best)
+                .map(|p| p.env.quality())
+                .unwrap_or(0.0)
+                - current
+                    .and_then(|c| self.places.get(c))
+                    .map(|p| p.env.quality())
+                    .unwrap_or(0.0);
+            if current.is_some() && gain < MOVE_THRESHOLD {
+                continue;
+            }
+
+            self.society.settle(home, best);
+            *self.arrivals.entry(best).or_insert(0) += 1;
+            for member in members {
+                if self.people.get(member).is_some_and(|p| p.is_alive()) {
+                    self.chronicle.record(
+                        at,
+                        Salience::Notable,
+                        Happening::PersonMoves {
+                            person: member,
+                            to: best,
+                        },
+                    );
+                }
+            }
+        }
+    }
+
     fn birth(&mut self, at: Time, mother_id: PersonId, father_id: PersonId) {
         self.expecting.remove(&mother_id);
 
@@ -495,7 +789,20 @@ impl World {
         }
 
         let home = self.society.home_of(mother_id);
-        let upbringing = self.society.upbringing_in(home);
+        let upbringing = self
+            .society
+            .place_of(mother_id)
+            .and_then(|p| self.places.get(p))
+            .map(|place| place.env.upbringing())
+            .unwrap_or(0.0);
+        let inherited = INHERITED_STANDING
+            * (mother.standing()
+                + self
+                    .people
+                    .get(father_id)
+                    .map(|f| f.standing())
+                    .unwrap_or(0.0))
+            / 2.0;
         let mut rng = self.moment_stream(Domain::Genetics, mother_id.to_bits() ^ 0xb0_11, at);
 
         let child = person::born_to(
@@ -507,6 +814,8 @@ impl World {
             upbringing,
         );
 
+        let mut child = child;
+        child.set_standing(inherited);
         let child_id = self.add_person(child);
         self.society.record_birth(child_id, mother_id, father_id);
         if let Some(home) = home {
@@ -535,6 +844,10 @@ mod tests {
     /// Built once: the population grows as it runs, so paying for it per test is what
     /// made the suite unbearable.
     ///
+    /// Serves both the family tests and the neighbourhood ones: seventy years is long
+    /// enough for three generations *and* for identical quarters to pull apart, and one
+    /// world is half the cost of two.
+    ///
     /// Sixty founders, not thirty. Below about fifty the world reliably dwindles, and
     /// that is the simulation being right rather than wrong: the pairing market thins,
     /// and after a few generations close-kin exclusion rules out most of the remaining
@@ -545,7 +858,7 @@ mod tests {
         static WORLD: std::sync::LazyLock<World> = std::sync::LazyLock::new(|| {
             let mut world = World::genesis(WorldSeed::from_u128(0x11), 60);
             world.record_only(Salience::Pivotal);
-            world.run_for(Duration::from_years(65));
+            world.run_for(Duration::from_years(70));
             world
         });
         &WORLD
@@ -966,41 +1279,50 @@ mod tests {
     }
 
     #[test]
-    fn siblings_share_an_upbringing() {
+    fn siblings_share_an_upbringing_without_it_being_identical() {
+        // In Phase 2 full siblings had exactly the same shared term, because it was
+        // fixed at birth from the household. It is now accumulated across a childhood,
+        // so siblings born a decade apart experience the same neighbourhood in
+        // different states — and one may be carried elsewhere partway through. Close,
+        // not equal, is the right claim, and it is the developmental window working.
         let world = lineages();
-        let mut full = 0;
-        let mut half_differing = 0;
+        let mut siblings = Vec::new();
+        let mut unrelated = Vec::new();
 
-        for (id, person) in world.people.iter() {
-            let Some(mine) = world.society.parents_of(id) else {
+        let matured: Vec<(PersonId, f32)> = world
+            .people
+            .iter()
+            .filter(|(_, p)| p.has_matured())
+            .map(|(id, p)| (id, p.absorbed_upbringing()))
+            .collect();
+
+        for (id, mine) in &matured {
+            let Some(parents) = world.society.parents_of(*id) else {
                 continue;
             };
-            for sibling in world.society.siblings_of(id) {
-                let (Some(other), Some(theirs)) =
-                    (world.people.get(sibling), world.society.parents_of(sibling))
-                else {
+            for sibling in world.society.siblings_of(*id) {
+                if world.society.parents_of(sibling) != Some(parents) {
                     continue;
-                };
-                let (a, b) = (
-                    person.origins.openness.shared,
-                    other.origins.openness.shared,
-                );
-
-                if mine == theirs {
-                    // Full siblings are raised by one couple in one household, so the
-                    // shared term is identical by construction — which is exactly what
-                    // makes them resemble each other beyond their genes.
-                    assert_eq!(a, b, "full siblings should share an upbringing");
-                    full += 1;
-                } else if a != b {
-                    // Half-siblings need not: a widowed parent who pairs again founds a
-                    // new household, and the children of the two are raised apart.
-                    half_differing += 1;
+                }
+                if let Some((_, theirs)) = matured.iter().find(|(o, _)| *o == sibling) {
+                    siblings.push((mine - theirs).abs());
+                }
+            }
+            for (other, theirs) in &matured {
+                if *other != *id && world.society.parents_of(*other) != Some(parents) {
+                    unrelated.push((mine - theirs).abs());
                 }
             }
         }
-        assert!(full > 2, "only {full} full-sibling pairs found");
-        let _ = half_differing;
+
+        assert!(siblings.len() > 2, "only {} sibling pairs", siblings.len());
+        let mean = |v: &[f32]| v.iter().sum::<f32>() / v.len() as f32;
+        assert!(
+            mean(&siblings) < mean(&unrelated),
+            "siblings should be raised more alike ({:.3}) than strangers ({:.3})",
+            mean(&siblings),
+            mean(&unrelated)
+        );
     }
 
     #[test]
@@ -1011,9 +1333,13 @@ mod tests {
             let Happening::PersonBorn { child, mother, .. } = record.kind else {
                 continue;
             };
-            // Only children who have not yet left: the dead move out, and anyone who
-            // pairs off founds a household of their own. Both are correct, and both
-            // make a present-day comparison say nothing about where someone was born.
+            // Only recent births, and only children who have not yet left. The dead
+            // move out, anyone who pairs off founds a household of their own, and a
+            // widowed mother who pairs again moves to a new one — all correct, and all
+            // reasons a present-day comparison says nothing about a birth long ago.
+            if record.at < world.now() - Duration::from_years(6) {
+                continue;
+            }
             let Some(hers) = world.society.home_of(mother) else {
                 continue;
             };
@@ -1076,6 +1402,112 @@ mod tests {
             assert!(!worked, "{} worked while still a child", person.name);
         }
         assert!(dependants > 0, "no children were born to check");
+    }
+
+    #[test]
+    fn neighbourhoods_diverge_from_identical_beginnings() {
+        // Every quarter starts unremarkable and identical. Nothing here writes "slum"
+        // or "enclave" anywhere: the spread is what sorting and accumulation produce.
+        let fresh = World::genesis(WorldSeed::from_u128(0x11), 4);
+        let at_founding: Vec<f32> = fresh.places.iter().map(|(_, p)| p.env.affluence).collect();
+        assert!(
+            at_founding.windows(2).all(|w| w[0] == w[1]),
+            "they should begin the same"
+        );
+
+        let world = lineages();
+        let affluence: Vec<f32> = world.places.iter().map(|(_, p)| p.env.affluence).collect();
+        let lowest = affluence.iter().cloned().fold(f32::MAX, f32::min);
+        let highest = affluence.iter().cloned().fold(f32::MIN, f32::max);
+        assert!(
+            highest - lowest > 0.2,
+            "neighbourhoods should pull apart: {affluence:?}"
+        );
+
+        let kinds: std::collections::HashSet<society::Archetype> =
+            world.places.iter().map(|(_, p)| p.archetype()).collect();
+        assert!(
+            kinds.len() > 1,
+            "they should not all read the same: {kinds:?}"
+        );
+    }
+
+    #[test]
+    fn where_a_child_grows_up_shapes_them() {
+        // The developmental window, end to end. Same machinery, two upbringings.
+        let world = lineages();
+        let raised: Vec<(f32, f32)> = world
+            .people
+            .iter()
+            .filter(|(_, p)| p.has_matured() && p.parents.is_some())
+            .map(|(_, p)| (p.absorbed_upbringing(), p.origins.conscientiousness.shared))
+            .collect();
+
+        assert!(raised.len() > 5, "only {} raised here", raised.len());
+        assert!(
+            raised.iter().any(|(a, _)| *a != raised[0].0),
+            "children should not all have absorbed the same place"
+        );
+        // The shared term is that absorption, not a birth-time snapshot.
+        for (absorbed, shared) in &raised {
+            assert!(
+                (shared - absorbed * (0.20f32).sqrt()).abs() < 1e-4,
+                "shared term should be the absorbed upbringing: {shared} vs {absorbed}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_hard_neighbourhood_suppresses_work() {
+        // Channels one to three, together: the same person works less where there is
+        // less to be had, and the gap is structural rather than a matter of character.
+        let world = lineages();
+        let poorest = world
+            .places
+            .iter()
+            .min_by(|(_, a), (_, b)| a.env.affluence.total_cmp(&b.env.affluence))
+            .map(|(_, p)| p.env.clone())
+            .unwrap();
+        let richest = world
+            .places
+            .iter()
+            .max_by(|(_, a), (_, b)| a.env.affluence.total_cmp(&b.env.affluence))
+            .map(|(_, p)| p.env.clone())
+            .unwrap();
+
+        let hard = poorest.surroundings(false);
+        let easy = richest.surroundings(false);
+        assert!(hard.availability[Deed::Work as usize] < easy.availability[Deed::Work as usize]);
+        assert!(hard.payoff[Deed::Work as usize] < easy.payoff[Deed::Work as usize]);
+        assert!(hard.discount_rate() > easy.discount_rate());
+    }
+
+    #[test]
+    fn standing_settles_instead_of_saturating_or_collapsing() {
+        // Two failure modes this went through on the way here: an equilibrium of 0.99
+        // that made every quarter an enclave, and no equilibrium at all, which slid
+        // every world to destitution within two generations.
+        let world = lineages();
+        let standings: Vec<f32> = world
+            .people
+            .iter()
+            .filter(|(_, p)| p.is_alive() && !p.stage(world.now()).is_dependent())
+            .map(|(_, p)| p.standing())
+            .collect();
+        assert!(standings.len() > 20, "not enough adults to judge");
+
+        let mean = standings.iter().sum::<f32>() / standings.len() as f32;
+        assert!(
+            (0.10..0.85).contains(&mean),
+            "mean standing {mean:.3} is a collapse or a saturation"
+        );
+
+        let spread = standings.iter().cloned().fold(f32::MIN, f32::max)
+            - standings.iter().cloned().fold(f32::MAX, f32::min);
+        assert!(
+            spread > 0.2,
+            "everyone ended up the same: spread {spread:.3}"
+        );
     }
 
     #[test]

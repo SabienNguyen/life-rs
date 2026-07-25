@@ -74,6 +74,26 @@ fn sentence(world: &World, happening: Happening) -> String {
             other => format!("{} dies of {}", who(world, person), other.label()),
         },
 
+        Happening::PersonMoves { person, to } => format!(
+            "{} moves to {}",
+            who(world, person),
+            world
+                .places
+                .get(to)
+                .map(|p| p.name.as_str())
+                .unwrap_or("elsewhere")
+        ),
+
+        Happening::PlaceChanges { place, into } => format!(
+            "{} has become {}",
+            world
+                .places
+                .get(place)
+                .map(|p| p.name.as_str())
+                .unwrap_or("somewhere"),
+            into.label()
+        ),
+
         Happening::PersonPairs { person, with } => format!(
             "{} and {} set up house together",
             who(world, person),
@@ -238,6 +258,29 @@ pub fn family(world: &World, id: person::PersonId) -> Vec<String> {
     let descendants = world.society.descendants_of(id).len();
     if descendants > children.len() {
         lines.push(format!("  lineage    {descendants} descendants in all"));
+    }
+    lines
+}
+
+/// Every neighbourhood, as it currently reads.
+pub fn neighbourhoods(world: &World) -> Vec<String> {
+    let mut lines = vec![format!(
+        "  {:<12} {:<18} {:>6} {:>6} {:>6} {:>6} {:>6} {:>5}",
+        "place", "reads as", "afflu", "safety", "bond", "bridge", "jobs", "hholds"
+    )];
+    for (id, place) in world.places.iter() {
+        let households = world.society.households_in(id).count();
+        lines.push(format!(
+            "  {:<12} {:<18} {:>6.2} {:>6.2} {:>6.2} {:>6.2} {:>6.2} {:>5}",
+            place.name,
+            place.archetype().label(),
+            place.env.affluence,
+            place.env.safety,
+            place.env.bonding_capital,
+            place.env.bridging_capital,
+            place.env.job_opportunity,
+            households,
+        ));
     }
     lines
 }

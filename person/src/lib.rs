@@ -193,6 +193,16 @@ pub struct Person {
     pub home: PlanetId,
     pub born: Time,
 
+    /// Accumulated means and position, 0 to 1.
+    ///
+    /// Not currency — a relative standing, grown by work where there is work to be had,
+    /// partly passed on to children, and averaged into the affluence of wherever they
+    /// live. It is the quantity that closes the loop between people and places.
+    standing: f32,
+    /// Childhood exposure, accumulating until maturity: weighted sum and total weight.
+    upbringing: (f32, f32),
+    matured: bool,
+
     needs: Needs,
     health: Health,
     intent: Option<Intent>,
@@ -244,12 +254,80 @@ impl Person {
             parents,
             home,
             born,
+            standing: 0.0,
+            upbringing: (0.0, 0.0),
+            matured: false,
             needs: Needs::rested(),
             health: Health::hale(),
             intent: None,
             died: None,
             updated: born,
             met: false,
+        }
+    }
+
+    pub fn standing(&self) -> f32 {
+        self.standing
+    }
+
+    pub fn set_standing(&mut self, standing: f32) {
+        self.standing = standing.clamp(0.0, 1.0);
+    }
+
+    /// Gain from a spell of work. Saturating, so standing is a position rather than a
+    /// pile that grows without limit.
+    pub fn earn(&mut self, gain: f32) {
+        self.set_standing(self.standing + gain * (1.0 - self.standing));
+    }
+
+    /// Lose ground — the slow drift back that keeps standing from ratcheting.
+    pub fn slip(&mut self, loss: f32) {
+        self.set_standing(self.standing - loss * self.standing);
+    }
+
+    pub fn has_matured(&self) -> bool {
+        self.matured
+    }
+
+    /// Absorb `years` of living somewhere of this quality.
+    ///
+    /// Weighted by age: infancy and adolescence count for far more than adulthood, so
+    /// *where someone grew up* stays legible in them for life while a move at forty
+    /// barely registers. Nothing accumulates after maturity.
+    pub fn absorb(&mut self, quality: f32, age_years: f64, years: f32) {
+        if self.matured || years <= 0.0 {
+            return;
+        }
+        let weight = developmental_weight(age_years) * years;
+        if weight > 0.0 {
+            self.upbringing.0 += quality * weight;
+            self.upbringing.1 += weight;
+        }
+    }
+
+    /// Freeze the upbringing and re-express personality with what was actually absorbed.
+    ///
+    /// Genes and luck are untouched — only the shared term is replaced, with the
+    /// weighted average of everywhere this person spent a childhood.
+    pub fn mature(&mut self) {
+        if self.matured {
+            return;
+        }
+        self.matured = true;
+        if self.upbringing.1 <= 0.0 {
+            return;
+        }
+        let absorbed = self.upbringing.0 / self.upbringing.1;
+        self.origins = self.origins.reshared(absorbed);
+        self.personality = self.origins.personality();
+    }
+
+    /// The upbringing absorbed so far, whether or not it has been applied.
+    pub fn absorbed_upbringing(&self) -> f32 {
+        if self.upbringing.1 <= 0.0 {
+            0.0
+        } else {
+            self.upbringing.0 / self.upbringing.1
         }
     }
 
@@ -390,6 +468,18 @@ impl Person {
         choice
     }
 
+    /// Catch up and settle whatever finished, without deciding anything new.
+    ///
+    /// Split out from [`Person::step`] so a caller can see *what* was completed — work
+    /// has to be paid for, and only the world knows what the pay is.
+    pub fn settle_intent_only(&mut self, now: Time) -> Option<Deed> {
+        self.catch_up(now);
+        if !self.is_alive() {
+            return None;
+        }
+        self.settle_intent(now)
+    }
+
     /// Catch up, finish whatever was in progress, and pick the next thing. The whole
     /// per-person step, in the order it has to happen.
     pub fn step(&mut self, now: Time, situation: &Situation, rng: &mut Rng) -> Option<Choice> {
@@ -519,6 +609,20 @@ fn stature_of(architecture: &Architecture, genome: &Genome) -> Height {
         z if z < -0.6 => Height::Short,
         z if z > 0.6 => Height::Tall,
         _ => Height::Average,
+    }
+}
+
+/// How much a year at this age shapes someone.
+///
+/// The developmental windows: in utero and the first years count most, adolescence
+/// nearly as much, and adulthood not at all. Without the weighting, a person is simply
+/// a reading of wherever they happen to live now, and moving house would rewrite them.
+fn developmental_weight(age_years: f64) -> f32 {
+    match age_years {
+        a if a < 5.0 => 1.5,
+        a if a < 13.0 => 1.0,
+        a if a < 20.0 => 1.2,
+        _ => 0.0,
     }
 }
 

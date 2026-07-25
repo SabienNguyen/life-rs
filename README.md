@@ -22,7 +22,8 @@ omniscient observer API, and the phased roadmap from here to there.
 
 ## Status
 
-**Phases 0 (foundations), 1 (person depth) and 2 (genetics and families) are in.**
+**Phases 0 (foundations), 1 (person depth), 2 (genetics and families) and most of
+3 (neighbourhoods) are in.**
 
 ```
 cargo run -p main                                   # a new world, three days
@@ -100,8 +101,35 @@ where their temperament came from:
   raised badly, conscientiousness would be +0.57; raised well, +1.91 (is +0.43)
 ```
 
-Next is Phase 3: environment and neighbourhoods — places with real properties, the four
-channels by which they change behaviour, and residential sorting.
+**Phase 3** — `society::place`: neighbourhoods whose character is *read off their
+residents*, and the four channels by which a place changes what people do.
+
+- **Nothing is authored.** Quarters start identical and unremarkable. Which becomes the
+  enclave and which the slum comes out of who ends up living there — affluence is what
+  residents have, churn is how often they leave, norms are literally what they did.
+- **Archetypes are readings.** Distressed urban, working-class, suburb, metropolitan
+  core, affluent enclave, rural — the nearest label to a point in the vector space, so
+  a neighbourhood can *become* something else.
+- **Community and reach are separate.** A poor neighbourhood is not socially empty, it
+  is socially enclosed: bonding capital comes from staying put *or from needing each
+  other*, bridging capital needs means. Collapsing them into one number loses the
+  mechanism that actually limits mobility.
+- **Where you grow up sticks.** Childhood exposure accumulates age-weighted and freezes
+  at twenty, so a move at forty barely registers and the street someone was raised on
+  stays legible in them.
+- **Sorting is real.** Households move to the best place that will *have* them, and
+  housing scarcity is what excludes.
+
+```
+  place        reads as            afflu safety   bond bridge   jobs hholds
+  Northside    working-class        0.14   0.23   0.87   0.18   0.40    31
+  The Wharf    working-class        0.43   0.35   0.74   0.51   0.65    89
+  Elmhurst     rural                0.03   0.25   0.93   0.07   0.31     0
+```
+
+Still outstanding from Phase 3: the balance harness of §15 — measuring intergenerational
+elasticity and mobility, and tuning against them. Next after that is Phase 4: the
+geodesic grid and tectonics beneath these places.
 
 ## Roadmap
 

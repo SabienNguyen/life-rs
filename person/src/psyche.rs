@@ -184,6 +184,30 @@ impl Origins {
         }
     }
 
+    /// The same five factors with a different upbringing substituted in.
+    ///
+    /// Genes and luck are untouched, so this is the mechanism behind both the
+    /// counterfactual and the developmental window: what someone absorbs over a
+    /// childhood is not known at birth, and replacing the term later costs nothing
+    /// because the contributions were never merged.
+    pub fn reshared(&self, shared: f32) -> Origins {
+        let of = |e: Expression, t: Trait| {
+            let (_, c2) = t.variance();
+            Expression {
+                genetic: e.genetic,
+                shared: c2.sqrt() * shared,
+                unique: e.unique,
+            }
+        };
+        Origins {
+            openness: of(self.openness, FACTORS[0]),
+            conscientiousness: of(self.conscientiousness, FACTORS[1]),
+            extraversion: of(self.extraversion, FACTORS[2]),
+            agreeableness: of(self.agreeableness, FACTORS[3]),
+            neuroticism: of(self.neuroticism, FACTORS[4]),
+        }
+    }
+
     /// The same person, raised in a household of a different quality.
     ///
     /// Nearly free, because the contributions were never merged: swap the shared term

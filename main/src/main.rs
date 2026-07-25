@@ -100,6 +100,14 @@ fn main() -> ExitCode {
         println!();
     }
 
+    if world.places.len() > 1 {
+        println!("── neighbourhoods ──");
+        for line in render::neighbourhoods(&world) {
+            println!("{line}");
+        }
+        println!();
+    }
+
     if options.dossier {
         print_dossier(&mut world);
     }

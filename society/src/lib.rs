@@ -8,7 +8,10 @@
 //! Everything here uses ordered maps. Hash iteration order varies between runs, and any
 //! system that iterates one would quietly break the promise that a seed replays exactly.
 
+pub mod place;
+
 use person::PersonId;
+pub use place::{Archetype, Census, EnvironmentVector, Place, PlaceId};
 use sim_core::{Arena, Id, Time};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -18,6 +21,8 @@ pub type HouseholdId = Id<Household>;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Household {
     pub members: Vec<PersonId>,
+    /// Which neighbourhood they live in.
+    pub place: Option<PlaceId>,
     pub founded: Time,
     /// This household's contribution to the personality of everyone raised in it.
     ///
@@ -57,6 +62,7 @@ impl Society {
     pub fn found_household(&mut self, founded: Time, upbringing: f32) -> HouseholdId {
         self.households.insert(Household {
             members: Vec::new(),
+            place: None,
             founded,
             upbringing,
         })
@@ -76,6 +82,24 @@ impl Society {
 
     pub fn home_of(&self, person: PersonId) -> Option<HouseholdId> {
         self.lives_in.get(&person).copied()
+    }
+
+    /// Which neighbourhood someone lives in, if any.
+    pub fn place_of(&self, person: PersonId) -> Option<PlaceId> {
+        self.households.get(self.home_of(person)?)?.place
+    }
+
+    /// Move a household to a neighbourhood. Returns the place it left.
+    pub fn settle(&mut self, home: HouseholdId, place: PlaceId) -> Option<PlaceId> {
+        let household = self.households.get_mut(home)?;
+        let previous = household.place.replace(place);
+        previous.filter(|old| *old != place)
+    }
+
+    pub fn households_in(&self, place: PlaceId) -> impl Iterator<Item = (HouseholdId, &Household)> {
+        self.households
+            .iter()
+            .filter(move |(_, h)| h.place == Some(place))
     }
 
     /// The upbringing a child raised here would receive. Zero if they have no home.

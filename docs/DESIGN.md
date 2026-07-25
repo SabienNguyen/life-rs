@@ -2,9 +2,10 @@
 
 > Big-picture architecture — the plan we implement against.
 >
-> **Phases 0–2 are implemented** — foundations (`sim-core`, `sim`), person depth
-> (`life`, `person`), and genetics with families (`genetics`, `society`). §20 marks
-> progress. Everything beyond that is still a plan.
+> **Phases 0–3 are implemented** — foundations (`sim-core`, `sim`), person depth
+> (`life`, `person`), genetics with families (`genetics`, `society`), and neighbourhoods
+> with the four behaviour channels live. §20 marks progress; the §15 balance harness is
+> the one part of Phase 3 still outstanding. Everything beyond that is still a plan.
 
 ## 1. The goal
 
@@ -968,14 +969,21 @@ Four milestones, each shippable, each independently interesting.
 The scale ladder lands in Phase 0 even though nothing uses it yet. Retrofitting it
 later means rewriting every system, and it's cheap to build before there are systems.
 
-### M2 — A world that has places (the planet and its biosphere)
+### M2 — A world that has places (neighbourhoods, then the planet under them)
 | Phase | Deliverable |
 | --- | --- |
-| **3** | `geo`: geodesic grid, plates, elevation, isostasy, erosion, bathymetry |
-| **4** | `climate` + `ocean`: energy balance, insolation, moisture, ice, currents, sea level, carbon cycle |
-| **5** | `biome` + vegetation: Whittaker classification, PFT fields, NPP, fire and disturbance |
-| **6** | `ecology`: animal demes, trophic web, dispersal, habitat suitability |
-| **7** | Environment & neighborhoods: environment vectors on real places, the four channels, sorting, the §15 balance harness |
+| **3** ◑ | Environment & neighbourhoods: environment vectors on places, archetypes derived from them, the four channels live, developmental windows, standing, residential sorting, the §15 balance harness |
+| **4** | `geo`: geodesic grid, plates, elevation, isostasy, erosion, bathymetry |
+| **5** | `climate` + `ocean`: energy balance, insolation, moisture, ice, currents, sea level, carbon cycle |
+| **6** | `biome` + vegetation: Whittaker classification, PFT fields, NPP, fire and disturbance |
+| **7** | `ecology`: animal demes, trophic web, dispersal, habitat suitability |
+
+Neighbourhoods come before geography, which is the reverse of the obvious order and
+deliberate. The four channels are already wired into behaviour and sitting neutral, so
+filling them needs households and places with properties — not tectonics. Places start
+abstract and acquire a grid cell in Phase 4; nothing about §14 depends on where a
+neighbourhood physically sits. Doing it the other way round would mean a planet with a
+climate and no one whose life it changes.
 
 ### M3 — A world you can watch
 | Phase | Deliverable |

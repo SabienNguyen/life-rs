@@ -170,6 +170,11 @@ impl Surroundings {
         }
     }
 
+    /// The stress this place imposes. Named for symmetry with `discount_rate`.
+    pub fn env_stress(&self) -> f32 {
+        self.stress
+    }
+
     /// How steeply this person discounts a delayed reward.
     ///
     /// Rises with stress: under scarcity, a payoff a week away is worth much less, so
