@@ -1,7 +1,9 @@
 [package]
-name = "planet"
+name = "sim"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 sim-core = { path = "../sim-core" }
+planet = { path = "../planet" }
+person = { path = "../person" }

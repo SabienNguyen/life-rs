@@ -3,6 +3,8 @@ members = [
     "main",
     "person",
     "planet",
+    "sim",
+    "sim-core",
 ]
 resolver = "3"
 

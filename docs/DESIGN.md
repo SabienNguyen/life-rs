@@ -1,7 +1,9 @@
 # life-rs — Universe Simulation Design
 
-> Big-picture architecture. Nothing here is implemented yet; this document is the
-> plan we implement against. Phase 0 is the only part that touches existing code.
+> Big-picture architecture — the plan we implement against.
+>
+> **Phase 0 is implemented** (`sim-core`, `sim`, and the port of `planet`/`person`);
+> §19 marks progress. Everything beyond it is still a plan.
 
 ## 1. The goal
 
@@ -866,7 +868,7 @@ Four milestones, each shippable, each independently interesting.
 ### M1 — A world that lives (foundations + people)
 | Phase | Deliverable |
 | --- | --- |
-| **0** | `sim-core`: handles, arenas, seeded RNG, **the full time-scale ladder and scheduler**, event bus. Port existing Person/Planet behavior unchanged onto it |
+| **0** ✅ | `sim-core`: handles, arenas, seeded RNG, **the full time-scale ladder and scheduler**, event bus. Port existing Person/Planet behavior unchanged onto it |
 | **1** | Person depth: OCEAN, values, continuous needs, utility AI (with §14.2 hooks present but constant), aging, health, mortality |
 | **2** | Genetics + families: loci, meiosis, pedigree-derived genomes, households, kinship, birth/pairing/death, a population that sustains itself |
 

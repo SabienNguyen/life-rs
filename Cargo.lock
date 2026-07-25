@@ -52,10 +52,10 @@ checksum = "2874a2af47a2325c2001a6e6fad9b16a53b802102b528163885171cf92b15976"
 name = "main"
 version = "0.1.0"
 dependencies = [
- "faker_rand",
  "person",
  "planet",
- "rand",
+ "sim",
+ "sim-core",
 ]
 
 [[package]]
@@ -65,11 +65,15 @@ dependencies = [
  "faker_rand",
  "planet",
  "rand",
+ "sim-core",
 ]
 
 [[package]]
 name = "planet"
 version = "0.1.0"
+dependencies = [
+ "sim-core",
+]
 
 [[package]]
 name = "ppv-lite86"
@@ -126,6 +130,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
 dependencies = [
  "getrandom",
+]
+
+[[package]]
+name = "sim"
+version = "0.1.0"
+dependencies = [
+ "person",
+ "planet",
+ "sim-core",
+]
+
+[[package]]
+name = "sim-core"
+version = "0.1.0"
+dependencies = [
+ "rand",
 ]
 
 [[package]]

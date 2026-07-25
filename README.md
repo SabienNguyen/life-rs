@@ -22,16 +22,32 @@ omniscient observer API, and the phased roadmap from here to there.
 
 ## Status
 
-Early. The workspace has three crates — `planet`, `person`, `main` — running a single
-planet and a single person, each on a hand-written state machine, printing to stdout.
+**Phase 0 (foundations) is in.** `sim-core` provides generational handles and arenas,
+seeded splittable randomness, the time-scale ladder from a 15-minute tick to a megayear,
+a future-event scheduler, and the chronicle. `sim` owns a handle-based `World`; `planet`
+and `person` are ported onto it with their behaviour unchanged.
 
 ```
-cargo run -p main
+cargo run -p main                              # a new world, three days
+cargo run -p main -- --seed 0x2b --days 5      # replay a specific world
+cargo run -p main -- --people 20 --min pivotal # a crowd, only the events that matter
 ```
 
-Next up is Phase 0 of the design: a handle-based `World`, seeded RNG, and the
-time-scale ladder. It removes the borrowed references that currently make families
-impossible to represent, and puts in the scheduling foundation that deep time needs.
+What that bought:
+
+- **No borrowed references.** A person holds `home: PlanetId`, not `&Planet`. Cycles —
+  families, food webs — are now representable.
+- **Reproducible worlds.** Every draw descends from the world seed; nothing calls
+  `thread_rng()`. Same seed, same world, down to the transcript. A new world draws fresh
+  entropy and is genuinely different.
+- **Time that reaches deep.** `Time` counts simulated seconds in integers (no drift over
+  1e13 steps), and day phase is *derived* from the clock rather than stored, so it cannot
+  fall out of step. An empty world advances a million years instantly.
+- **Nothing is polled.** Dormant entities cost nothing until due; ~7.8M events/sec on one
+  core.
+
+Next is Phase 1: needs, OCEAN personality, and utility-scored behaviour in place of the
+state machine.
 
 ## Roadmap
 
