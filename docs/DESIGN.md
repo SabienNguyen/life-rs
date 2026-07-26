@@ -1352,35 +1352,63 @@ about two hundred lives each:
 | Mobility | 0.40–0.90 | 0.63–0.73 | met |
 | Upbringing gap | 0.30–1.20 | 0.53–1.38 | mostly met |
 
-The cause was measured rather than guessed, and it is the opposite of the obvious
-explanation. Regressing attainment on its inputs over two hundred and eleven lives:
+**The measurement was most of it.** The bands come from twin and adoption studies, and the
+heritability such a study reports is the *whole* genetic contribution — gene–environment
+correlation included, because the design cannot separate it either. A conscientious child
+raised by conscientious parents shows up inside the A component. This harness *can*
+separate it, into an `entangled` bucket its own report describes as "inseparable — parents
+supply both", and it was then comparing only the separated remainder against a figure that
+never was separated. That marks the model wrong for being more careful than the measurement
+it is checked against. Counting entangled towards both causes, which is what the studies
+do, the same worlds read:
 
-| Predictor of peak standing | R² |
-| --- | --- |
-| Conscientiousness (the whole trait) | **0.70** |
-| — of which, its genetic part alone | 0.24 |
-| Opportunity where they worked | 0.32 |
-| The neighbourhood they grew up in | 0.07 |
+| Quantity | Target | Measured, eight seeds | Verdict |
+| --- | --- | --- | --- |
+| Heritable share of outcome | 0.15–0.45 | 0.31 | **met** |
+| Shared environment | 0.20–0.55 | 0.41 | **met** |
+| Chance's share | 0.15–0.45 | 0.46 | marginally high |
+| Intergenerational elasticity | 0.20–0.50 | 0.63 | high |
+| Mobility | 0.40–0.90 | 0.63–0.73 | met |
 
-So it is not that personality has too little leverage over attainment. It has **far too
-much**: one trait explains seventy per cent of where people end up. Real conscientiousness–
-income correlations are around 0.2, which is an R² near 0.04.
+**Four real defects behind what remains, each measured and none yet fixed.** An attempt at
+all four together is recorded in this section rather than in the code, because every
+configuration tried either traded one target for another or halved the population, and a
+half-tuned core mechanism is worse than a documented one.
 
-That single number explains both misses at once. Because attainment is very nearly a
-readout of conscientiousness, it inherits conscientiousness's *variance structure* — and a
-personality trait is roughly forty per cent heritable, five per cent shared environment and
-fifty-five per cent non-shared. Those are the right proportions for a personality trait and
-the wrong ones for an income: the residual that behaviour genetics calls non-shared
-environment arrives in the outcome as "chance", and the shared-environment share stays as
-small as it is for the trait. The decomposition is not wrong — genes plus entangled comes
-to 0.24, exactly the measured R² of the genetic component — it is faithfully reporting a
-world in which circumstance barely matters.
+*Patronage is the largest single fact about a life.* A mentor multiplies the rate work pays
+by 2.1, for life, on a coin flip that about half the population wins. Regressing attainment
+on it: **R² = 0.61**, more than every other input combined. The chance of it scales with
+local bonding capital so it looks like circumstance, but the draw is a coin flip, so its
+variance lands in *luck*. Cutting it to 1.3 drops its R² to 0.02 and lifts the heritable
+share from 0.13 to 0.26.
 
-The fix is therefore to weaken the personality channel and strengthen circumstance in how
-work pays, not to strengthen personality. That is a deliberate rebalance of the mechanism
-the whole of §15 rests on, with a dozen dependent tests to re-establish, and it is left
-undone rather than attempted in passing. It long predates the ground and the star — the
-same measurement at the start of the geography work read 0.08 and 0.52.
+*Pay and availability disagree about the same fact.* The channel deciding whether work is
+worth doing floors at 0.35 — "subsistence work exists nearly everywhere" — while the channel
+deciding what it pays uses the raw figure and runs to nothing. Unfloored, the best place to
+work pays five times the worst, for life.
+
+*Schooling is read from the wrong place.* The earn path multiplies by the education
+available where somebody lives *now*. Schooling is a childhood investment that pays out for
+the rest of a life; read from the present, childhood circumstance can only reach an outcome
+through the shared term of a personality, which is why it explains seven per cent of
+attainment while temperament explains seventy.
+
+*An emptying quarter can never recover.* Appeal is what a place offers less how packed it
+is, so a quarter whose character freezes as its last residents leave — poor, because poor is
+why they left — is unattractive forever. Nothing in the model makes anywhere attractive for
+being *cheap*. Worlds end with two of five quarters occupied and the others standing empty
+with room to spare: forty-four households in a place holding forty-seven, beside three
+holding nobody between them.
+
+**And the tension that makes this hard.** The last two are the same knob. Fixing emptiness —
+by letting a household prefer somewhere it can afford — keeps all five quarters occupied and
+raises the shared-environment share from 0.19 to 0.53, because people finally have different
+childhoods to be shaped by. It also sorts households by means almost exactly, which pushes
+the intergenerational elasticity from 0.37 to 0.75 and, at the strengths that fix the
+environment share, collapses the population in three worlds out of eight. Differentiated
+neighbourhoods and weak inheritance pull against each other, and closing the gap means
+finding what decouples them — most likely something that mixes people across places for
+reasons unrelated to means. That is the work, and it is not a coefficient.
 
 These are *reported* rather than asserted. A unit test that fails on a known, documented
 gap makes the suite permanently red and useless as a regression signal; the `--balance`
