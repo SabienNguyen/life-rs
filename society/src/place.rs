@@ -258,7 +258,7 @@ impl Archetype {
 }
 
 /// What a year of living here looked like, gathered from the residents themselves.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct Census {
     pub households: u32,
     pub adults: u32,
@@ -268,6 +268,33 @@ pub struct Census {
     pub arrivals: u32,
     /// How often each deed was chosen here.
     pub deeds: [u32; Deed::COUNT],
+    /// How prosperous the place's own economy made it this year, 0 to 1.
+    ///
+    /// The outside of the loop. Everything else in a census is read off the residents, so
+    /// a place's character could only ever be a restatement of who lived in it; this is
+    /// what the *land and the position* produced, and it is the one term that does not
+    /// come back round. Computed by `economy` and handed in, because a neighbourhood
+    /// should not need to know what a Cobb–Douglas is.
+    pub prosperity: f32,
+}
+
+impl Default for Census {
+    /// An empty year in a place with an unremarkable economy.
+    ///
+    /// Prosperity defaults to the middle rather than to zero, which the derived `Default`
+    /// would have given it. Zero is a claim — that the place produced nothing — and a
+    /// census nobody filled in should make no claims. Getting this wrong would have set
+    /// every neighbourhood's opportunity by an economy that was never computed.
+    fn default() -> Census {
+        Census {
+            households: 0,
+            adults: 0,
+            mean_standing: 0.0,
+            arrivals: 0,
+            deeds: [0; Deed::COUNT],
+            prosperity: 0.5,
+        }
+    }
 }
 
 /// A neighbourhood.
@@ -380,9 +407,15 @@ impl Place {
             // has no more work in it than an empty one; a crowded rich one has a great
             // deal. Letting occupancy add opportunity on its own would quietly make
             // slums the best places in the world to look for a job.
-            job_opportunity: (0.30
-                + 0.50 * census.mean_standing
-                + 0.20 * occupancy * census.mean_standing)
+            // Work is what the place's economy has for people to do, plus what its
+            // residents make for each other. The first term is the correction: before it,
+            // opportunity was read entirely off the standing of the people already here,
+            // so a place had work because it was well off and was well off because it had
+            // work. A surplus is where work actually comes from.
+            job_opportunity: (0.26
+                + 0.46 * census.prosperity
+                + 0.24 * census.mean_standing
+                + 0.10 * occupancy * census.mean_standing)
                 .clamp(0.0, 1.0),
             services: (0.1 + 0.8 * census.mean_standing).clamp(0.0, 1.0),
             pollution: (0.15 + 0.5 * occupancy - 0.2 * census.mean_standing).clamp(0.0, 1.0),
@@ -521,6 +554,20 @@ fn blend(from: &EnvironmentVector, to: &EnvironmentVector, rate: f32) -> Environ
 mod tests {
     use super::*;
 
+    /// A year in a place whose economy matches the rest of what is being described.
+    ///
+    /// The plain `census` leaves prosperity in the middle, which is right for a fixture
+    /// that is not saying anything about an economy. These two are: a crowded quarter on
+    /// worked-out land has no surplus, and a spacious well-off one does. Leaving them at
+    /// the middle would describe two places with *identical* economies and then ask why
+    /// their opportunity differed — which is the world as it was before `economy` existed.
+    fn census_of(households: u32, standing: f32, arrivals: u32, prosperity: f32) -> Census {
+        Census {
+            prosperity,
+            ..census(households, standing, arrivals)
+        }
+    }
+
     fn census(households: u32, standing: f32, arrivals: u32) -> Census {
         Census {
             households,
@@ -528,6 +575,9 @@ mod tests {
             mean_standing: standing,
             arrivals,
             deeds: [0; Deed::COUNT],
+            // An unremarkable economy, so every test written before there was one keeps
+            // meaning what it meant.
+            prosperity: 0.5,
         }
     }
 
@@ -542,8 +592,8 @@ mod tests {
 
     #[test]
     fn a_hard_place_shuts_doors_rather_than_discouraging() {
-        let slum = settled(20, &census(30, 0.05, 18));
-        let enclave = settled(40, &census(12, 0.95, 0));
+        let slum = settled(20, &census_of(30, 0.05, 18, 0.05));
+        let enclave = settled(40, &census_of(12, 0.95, 0, 0.85));
 
         let poor = slum.env.surroundings(false);
         let rich = enclave.env.surroundings(false);
@@ -617,7 +667,7 @@ mod tests {
     fn poverty_and_crowding_read_as_a_distressed_neighbourhood() {
         // Nobody wrote "slum" anywhere: this is what low standing, high occupancy and
         // heavy turnover add up to.
-        let place = settled(20, &census(28, 0.1, 18));
+        let place = settled(20, &census_of(28, 0.1, 18, 0.05));
         assert_eq!(place.archetype(), Archetype::DistressedUrban);
 
         // And the mechanism that matters is present: community without reach.

@@ -45,8 +45,11 @@ pub const GESTATION: Duration = Duration::from_days(273);
 ///
 /// Real populations are steady because fertility *responds* to conditions — density,
 /// food, child mortality — and that negative feedback is what a constant cannot supply.
-/// It arrives with resources and an economy. Until then, unchecked slow growth is the
-/// honest failure mode; a knife-edge constant would only look stable until it wasn't.
+/// It arrives with resources and an economy. `economy` is now here and the feedback is
+/// still not — wiring local surplus into this was tried and overshot badly, taking the
+/// mean surviving population from a hundred and eighty to eighty-two and emptying three
+/// worlds in eight. A demographic response is the right mechanism and needs its own pass
+/// with its own calibration, not a coefficient bolted to the end of an economy one.
 const CONCEPTION_PER_YEAR: f32 = 0.16;
 
 /// How far below a neighbourhood's average a household can fall before being priced
@@ -1368,7 +1371,40 @@ impl World {
             .schedule_at(at + Duration::from_years(1), Task::Reckoning);
     }
 
+    /// What every place produced this year, before anybody is asked about anything.
+    ///
+    /// Computed first and separately from the census that reads places off their
+    /// residents, because the whole point is that it does not depend on them: land,
+    /// position and headcount, and none of those is an opinion. It is the one term in a
+    /// neighbourhood's character that comes from outside the loop.
+    fn economies(&self) -> std::collections::BTreeMap<PlaceId, economy::Ledger> {
+        let mut on_the_map: Vec<(PlaceId, society::Terrain, f32)> = Vec::new();
+        for (id, place) in self.places.iter() {
+            let Some(terrain) = place.terrain.clone() else {
+                continue;
+            };
+            let hands = self
+                .society
+                .households_in(id)
+                .flat_map(|(_, h)| h.members.iter())
+                .filter(|m| self.people.get(**m).is_some_and(|p| p.is_alive()))
+                .count() as f32;
+            on_the_map.push((id, terrain, hands));
+        }
+        let inputs: Vec<(society::Terrain, f32)> = on_the_map
+            .iter()
+            .map(|(_, t, w)| (t.clone(), *w))
+            .collect();
+        let ledgers = economy::year(&inputs);
+        on_the_map
+            .into_iter()
+            .map(|(id, _, _)| id)
+            .zip(ledgers)
+            .collect()
+    }
+
     fn take_census(&mut self, at: Time) {
+        let economies = self.economies();
         let place_ids: Vec<PlaceId> = self.places.ids().collect();
         for id in place_ids {
             let mut census = Census::default();
@@ -1400,6 +1436,14 @@ impl World {
             if let Some(counts) = self.deeds_done.get(&id) {
                 census.deeds = *counts;
             }
+
+            // What the land and the position produced, which is the one term in a census
+            // not read off the residents. A place with no ground under it has no economy
+            // to speak of and keeps the unremarkable middle.
+            census.prosperity = economies
+                .get(&id)
+                .map(|ledger: &economy::Ledger| ledger.prosperity())
+                .unwrap_or(0.5);
 
             if let Some(place) = self.places.get_mut(id) {
                 let before = place.archetype();

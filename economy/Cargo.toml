@@ -1,0 +1,7 @@
+[package]
+name = "economy"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+society = { path = "../society" }

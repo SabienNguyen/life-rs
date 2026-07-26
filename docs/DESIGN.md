@@ -124,7 +124,8 @@ genetics/    Loci, trait specs, meiosis, phenotype expression, allele-frequency 
 ecology/     Vegetation fields, animal demes, trophic web, dispersal, disturbance
 evolution/   Selection, drift, mutation, gene flow, speciation, extinction, phylogeny
 person/      Humans: identity, personality, skills, memory, intent
-society/     Households, kinship, places, environment vectors, settlements, economy
+society/     Households, kinship, places, environment vectors, settlements
+economy/     Land and labour, subsistence, surplus, trade — the outside of the loop
 settlement/  The join: habitability, where people found towns, and what the ground does
 chronicle/   Append-only event log, indices, compaction, biography & history assembly
 observer/    Read-only query API at every scale
@@ -1238,7 +1239,7 @@ only after the fact; all three were found by drawing the planet and looking at i
 | **11** ◑ | `evolution`: adaptation with a tracking speed limit, allopatric speciation, diversity-dependent diversification, extinction, phylogeny. Gene flow and molecular drift are not modelled — species traits move by a rule rather than by inheritance from individuals |
 | **12** ◑ | Deep-time integration: adaptive stepping ✓ (the lithosphere subdivides its own step so no plate ever jumps a cell), supercontinent cycle ✓, orbital forcing ✓ as machinery — obliquity varies on its 41 kyr cycle, which megayear steps cannot resolve and honestly return the mean of. **The join ✓** — `settlement` puts neighbourhoods on real grid cells and the ground shapes them; the planet under a populated world is a still frame, and people at deep-time resolution is what remains. Keyframing and a named mass-extinction mechanism are not built; extinction pulses do emerge from climate shocks |
 | **13** ✗ | Globe + phylogeny rendering (`wgpu`), timeline scrubbing, continuous zoom. **Superseded.** The self-contained HTML viewer does the job better in every way that matters here — five layers, a time scrubber, hover readout, and a file anybody can open — and it is what actually found four of the modelling bugs in Phase 4. A `wgpu` client would be a second renderer for the same data |
-| **14** ◑ | `cosmos` ✓ — stars, orbits, habitable zones, and an anthropic search for a world worth founding on. Save/load ✓ — as a *derivation* rather than a format: a world is a pure function of five numbers, so the save file is those numbers and loading re-runs. Exact, no schema to rot, and it costs the time being opened, which is the whole trade and is written down. Economy, culture and technology are not built. Determinism goldens exist in the form that survives: every subsystem tests that the same seed produces the same result, self-comparing rather than pinned to a constant, so a legitimate change does not require re-blessing a hash |
+| **14** ◑ | `cosmos` ✓ — stars, orbits, habitable zones, and an anthropic search for a world worth founding on. Save/load ✓ — as a *derivation* rather than a format: a world is a pure function of five numbers, so the save file is those numbers and loading re-runs. Exact, no schema to rot, and it costs the time being opened, which is the whole trade and is written down. Economy ✓ — `economy`: Cobb–Douglas on land and labour, subsistence taken out first, and trade weighted by reach. Culture and technology are not built. Determinism goldens exist in the form that survives: every subsystem tests that the same seed produces the same result, self-comparing rather than pinned to a constant, so a legitimate change does not require re-blessing a hash |
 
 **Sequencing note.** Deep time is what you most want and it lands last, for a real
 reason: there's nothing to evolve until there's a planet and a biosphere to evolve on,
@@ -1414,6 +1415,32 @@ why they left — is unattractive forever. Nothing in the model makes anywhere a
 being *cheap*. Worlds end with two of five quarters occupied and the others standing empty
 with room to spare: forty-four households in a place holding forty-seven, beside three
 holding nobody between them.
+
+**The economy, in the event.** Design principle one says a neighbourhood is poor "because
+of what happened to its economy", and until now that was simply false: a place's prosperity
+was read off the standing of its residents and nothing else, a loop with no outside. It
+sustained whatever level it reached and had nothing to say about why that level.
+
+`economy` is the outside. Output is `land^0.35 · labour^0.65` — neither factor substitutes
+for the other, and returns to labour on fixed land diminish, which is the Malthusian core
+and was entirely absent. Subsistence comes out before there is a surplus, so a poor place
+with many mouths has *nothing* spare rather than a little less. Trade carries a third of a
+neighbour's surplus, weighted at both ends, so a road is worth having and cannot abolish
+geography.
+
+Wiring it into opportunity is a real trade and both sides are worth stating. It fixed the
+thing the last section could not: **four or five of five quarters stay occupied, where
+before two or three did**, because crowding now costs something economically rather than
+only as a nuisance. The intergenerational elasticity fell from 0.63 to 0.56. Against that,
+the shared-environment share fell from 0.41 to 0.20 — still in band, but only just — chance
+rose from 0.46 to 0.53, and the mean surviving population fell from 208 to 180.
+
+The missing piece is the one Phase 2 named and could not have: **fertility does not respond
+to the economy**, so population runs to the Malthusian ceiling everywhere and levels the
+differences between places by hunger. Wiring surplus into conception was tried and
+overshot — the mean surviving population went from 180 to 82 and three worlds in eight
+emptied. A demographic response is the right mechanism and needs its own pass with its own
+calibration, not a coefficient bolted to the end of an economy one.
 
 **And the tension that makes this hard.** The last two are the same knob. Fixing emptiness —
 by letting a household prefer somewhere it can afford — keeps all five quarters occupied and

@@ -10,6 +10,7 @@ planet = { path = "../planet" }
 person = { path = "../person" }
 genetics = { path = "../genetics" }
 society = { path = "../society" }
+economy = { path = "../economy" }
 geo = { path = "../geo" }
 cosmos = { path = "../cosmos" }
 climate = { path = "../climate" }
