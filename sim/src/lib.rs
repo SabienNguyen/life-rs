@@ -179,7 +179,18 @@ pub const FULL_DETAIL_BUDGET: usize = 400;
 /// Calibrated against the fine simulation rather than chosen — the coarse tier has to
 /// produce the year the fine tier would have produced, and this is the number that makes
 /// the two agree. See the equivalence test.
-const WORK_SPELLS_PER_YEAR: f32 = 300.0;
+///
+/// It was 300, and that was a fifth of a lifetime's standing too little. The gap did not
+/// show because the equivalence test allowed a tenth of absolute standing at thirty years,
+/// while the shortfall is *proportional* and so grows with the span: at sixty years an
+/// unwatched adult reached 0.374 against a watched one's 0.476, and everything standing
+/// feeds — affluence, a quarter's character, who is admitted where, every §15 measurement —
+/// was quietly lower wherever nobody was looking.
+///
+/// At 380 the same comparison gives 0.472 against 0.476, and across three seeds the
+/// remaining gaps are +0.004, −0.020 and −0.007: no longer one-directional, so what is left
+/// is noise rather than bias.
+const WORK_SPELLS_PER_YEAR: f32 = 380.0;
 
 /// Something that happened, as the simulation records it — structured, not prose.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -3086,8 +3097,12 @@ mod tests {
         };
 
         let (a, b) = (mean_standing(&fine), mean_standing(&coarse));
+        // Tight, because a loose bound here hides exactly the kind of fault it exists to
+        // catch: at a tenth of absolute standing this passed for a long time while the
+        // coarse tier was paying a fifth too little, since the shortfall is proportional
+        // and only opens up over a lifetime.
         assert!(
-            (a - b).abs() < 0.10,
+            (a - b).abs() < 0.04,
             "coarse living drifted from fine: {a:.3} finely, {b:.3} coarsely"
         );
 
@@ -3710,6 +3725,79 @@ mod detail_neutrality {
     //! *household* moved out of a coarse quarter into an already-fine one.
 
     use super::*;
+
+    /// How many spells of work a finely simulated adult actually does in a year, against
+    /// what the coarse tier assumes on their behalf.
+    #[test]
+    #[ignore]
+    fn measure_the_working_year() {
+        let years = 30u64;
+        let mut world = World::genesis(WorldSeed::from_u128(0x240), 40);
+        world.set_detail_budget(usize::MAX);
+        world.run_for(Duration::from_years(years));
+
+        let worked = world
+            .chronicle
+            .iter()
+            .filter(|r| matches!(r.kind, Happening::PersonDoes { deed: Deed::Work, .. }))
+            .count();
+        let now = world.now();
+        // Adult-years lived, near enough: everybody alive now who is grown, times the span
+        // they were grown for.
+        let adult_years: f64 = world
+            .people
+            .iter()
+            .filter(|(_, p)| p.is_alive() && !p.stage(now).is_dependent())
+            .map(|(_, p)| p.age(now).years().min(years as f64 - 18.0).max(0.0))
+            .sum();
+        println!(
+            "finely: {worked} spells of work over {adult_years:.0} adult-years = {:.0} a year",
+            worked as f64 / adult_years.max(1.0),
+        );
+
+        let availability: Vec<f32> = world
+            .places
+            .iter()
+            .filter(|(id, _)| world.society.households_in(*id).count() > 0)
+            .map(|(_, p)| p.env.surroundings(false).availability[Deed::Work as usize])
+            .collect();
+        let mean = availability.iter().sum::<f32>() / availability.len().max(1) as f32;
+        println!(
+            "coarsely: WORK_SPELLS_PER_YEAR {WORK_SPELLS_PER_YEAR} x availability {mean:.3} = {:.0} a year",
+            WORK_SPELLS_PER_YEAR * mean,
+        );
+    }
+
+    /// What being unwatched still costs, if anything.
+    #[test]
+    #[ignore]
+    fn measure_what_is_left_of_the_gap() {
+        for (seed, budget) in [
+            (0x211u128, 12usize), (0x211, 4_000),
+            (0x212, 12), (0x212, 4_000),
+            (0x213, 12), (0x213, 4_000),
+        ] {
+            let mut world = World::genesis(WorldSeed::from_u128(seed), 40);
+            world.set_detail_budget(budget);
+            world.run_for(Duration::from_years(60));
+            let now = world.now();
+            let adults: Vec<&person::Person> = world
+                .people
+                .iter()
+                .map(|(_, p)| p)
+                .filter(|p| p.is_alive() && !p.stage(now).is_dependent())
+                .collect();
+            let n = adults.len().max(1) as f32;
+            println!(
+                "seed {seed:x} budget {budget:>5}: living {:>4} ever {:>4} standing {:.3} vitality {:.3} starved {}",
+                world.living(),
+                world.people.len(),
+                adults.iter().map(|p| p.standing()).sum::<f32>() / n,
+                adults.iter().map(|p| p.health().vitality).sum::<f32>() / n,
+                starved(&world),
+            );
+        }
+    }
 
     fn starved(world: &World) -> usize {
         world

@@ -1496,6 +1496,24 @@ the level is ever raised — but at level three a "country" is a handful of adja
 not anywhere anybody walked across. §23's first open question is load-bearing for more than
 coastline fidelity.
 
+### 21.4 The last of the observer's thumb on the scale
+
+With §21.1 fixed, being unwatched no longer changed whether you lived. It still changed how
+well you did. A coarse year approximates work as `WORK_SPELLS_PER_YEAR x availability`, and
+that constant was 300 against a fine tier that works closer to five hundred times a year, so
+an unwatched adult reached mean standing 0.374 where a watched one reached 0.476 — a fifth of
+a lifetime's advantage, lost to nobody looking.
+
+The equivalence test did not catch it because it allowed a tenth of *absolute* standing at
+thirty years, while the shortfall is proportional and only opens over a lifetime. Standing
+feeds affluence, a quarter's character, who is admitted where, and every §15 measurement, so
+this was a systematic bias in the balance harness with the observer's budget as its cause.
+
+At 380 the same comparison gives 0.472 against 0.476, and across three seeds the residual
+gaps are +0.004, −0.020 and −0.007 — no longer one-directional, so what remains is noise.
+Demography matches too: 42/42, 45/45 and 51/54 living. The test's tolerance is now 0.04,
+which would have caught the original.
+
 **Where the model misses its targets, measured.** §15's bands come from the
 behaviour-genetics literature and the model does not meet two of them. Across four seeds at
 about two hundred lives each:
