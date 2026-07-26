@@ -448,10 +448,15 @@ mod tests {
         // `targets::LUCK` says a fifth to a half, from the behaviour-genetics literature,
         // and this model does not meet it: measured across four seeds at two hundred lives
         // each, luck takes 0.41, 0.52, 0.57 and 0.66, and the heritable share takes 0.08 to
-        // 0.27 against a floor of 0.15. That is systematic rather than noise and it long
-        // predates the ground and the star — personality has too little leverage over
-        // attainment, and closing that is a change to how standing is earned rather than a
-        // number to nudge.
+        // 0.27 against a floor of 0.15. That is systematic rather than noise.
+        //
+        // The cause is measured in §21 and is the opposite of the obvious one. Attainment
+        // regresses on conscientiousness at R² = 0.70 — one trait explains seventy per
+        // cent of where people end up, against a real-world figure nearer 0.04. So
+        // attainment is very nearly a readout of a personality trait, and it inherits that
+        // trait's variance structure: heavily non-shared, lightly shared. Those are the
+        // right proportions for a temperament and the wrong ones for an income. Personality
+        // does not have too little leverage here; it has far too much.
         //
         // Asserting the band here would make the suite permanently red on a known gap,
         // which destroys it as a regression signal. The gap is *reported* instead: the

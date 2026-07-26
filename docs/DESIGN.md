@@ -1352,11 +1352,35 @@ about two hundred lives each:
 | Mobility | 0.40–0.90 | 0.63–0.73 | met |
 | Upbringing gap | 0.30–1.20 | 0.53–1.38 | mostly met |
 
-The first two are the same fact stated twice: **personality has too little leverage over
-attainment**, so what is left over reads as chance. Closing it means changing how standing
-is earned rather than nudging a coefficient, and it is the most substantial piece of
-unfinished work in §15. It long predates the ground and the star — the same measurement at
-the start of the geography work read 0.08 and 0.52.
+The cause was measured rather than guessed, and it is the opposite of the obvious
+explanation. Regressing attainment on its inputs over two hundred and eleven lives:
+
+| Predictor of peak standing | R² |
+| --- | --- |
+| Conscientiousness (the whole trait) | **0.70** |
+| — of which, its genetic part alone | 0.24 |
+| Opportunity where they worked | 0.32 |
+| The neighbourhood they grew up in | 0.07 |
+
+So it is not that personality has too little leverage over attainment. It has **far too
+much**: one trait explains seventy per cent of where people end up. Real conscientiousness–
+income correlations are around 0.2, which is an R² near 0.04.
+
+That single number explains both misses at once. Because attainment is very nearly a
+readout of conscientiousness, it inherits conscientiousness's *variance structure* — and a
+personality trait is roughly forty per cent heritable, five per cent shared environment and
+fifty-five per cent non-shared. Those are the right proportions for a personality trait and
+the wrong ones for an income: the residual that behaviour genetics calls non-shared
+environment arrives in the outcome as "chance", and the shared-environment share stays as
+small as it is for the trait. The decomposition is not wrong — genes plus entangled comes
+to 0.24, exactly the measured R² of the genetic component — it is faithfully reporting a
+world in which circumstance barely matters.
+
+The fix is therefore to weaken the personality channel and strengthen circumstance in how
+work pays, not to strengthen personality. That is a deliberate rebalance of the mechanism
+the whole of §15 rests on, with a dozen dependent tests to re-establish, and it is left
+undone rather than attempted in passing. It long predates the ground and the star — the
+same measurement at the start of the geography work read 0.08 and 0.52.
 
 These are *reported* rather than asserted. A unit test that fails on a known, documented
 gap makes the suite permanently red and useless as a regression signal; the `--balance`
