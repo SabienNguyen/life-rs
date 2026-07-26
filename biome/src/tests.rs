@@ -275,21 +275,61 @@ fn the_same_world_reads_the_same_biosphere() {
 }
 
 #[test]
-fn a_snowball_has_almost_nothing_living_on_it() {
+fn a_frozen_world_goes_quiet_on_land_and_not_at_sea() {
+    // This test used to be called `a_snowball_has_almost_nothing_living_on_it` and it
+    // asserted that the whole biosphere collapses. It was passing for the wrong reason.
+    //
+    // The planet is not a snowball: under the faintest sun the thermostat can answer, it
+    // settles at about six below with a third of the surface iced and most of its ocean
+    // still liquid. And a cold ocean is a *productive* ocean — cold surface water is dense,
+    // the column turns over every winter, and nutrients come up. The old marine model got
+    // the collapse it was asked for by punishing cold water directly, which is the thing
+    // that is not true; with the sea's productivity where it belongs, in the nutrient
+    // supply, a cold world's sea is better fed than a warm one's.
+    //
+    // So what the test asserts now is what actually happens, and it is a sharper claim:
+    // **the land goes quiet and the sea does not**. That is the Cryogenian pattern, and
+    // it is why the aftermath of a glaciation is a bloom rather than a desert.
     let mut rng = WorldSeed::from_u128(0x9).stream(Domain::Terrain, 0, 0);
     let mut planet = Lithosphere::genesis(4, 9, 0.42, &mut rng);
     planet.step_myr(4.0, &mut rng);
-    // A sun faint enough that the thermostat cannot save it.
-    let climate = Climate::genesis(&planet, 1.0, insolation::EARTH_OBLIQUITY);
-    let life = Biosphere::read(&planet, &climate);
+    let cold = Climate::genesis(&planet, 1.0, insolation::EARTH_OBLIQUITY);
+    let temperate = Climate::genesis(&planet, 4.57, insolation::EARTH_OBLIQUITY);
 
-    let total = life.total_production_gt(&planet);
-    let warm = {
-        let sunlit = Climate::genesis(&planet, 4.57, insolation::EARTH_OBLIQUITY);
-        Biosphere::read(&planet, &sunlit).total_production_gt(&planet)
-    };
+    let frozen = Biosphere::read(&planet, &cold);
+    let living = Biosphere::read(&planet, &temperate);
+
     assert!(
-        total < warm * 0.35,
-        "a snowball made {total:.0} Gt against a temperate planet's {warm:.0}"
+        cold.mean_temperature_c(&planet) < 0.0,
+        "the cold planet was not cold: {:.1} °C",
+        cold.mean_temperature_c(&planet)
+    );
+
+    let land_then = frozen.land_production_gt(&planet);
+    let land_now = living.land_production_gt(&planet);
+    assert!(
+        land_then < land_now * 0.35,
+        "the land made {land_then:.0} Gt frozen against {land_now:.0} Gt temperate"
+    );
+
+    // And the sea, which is the counter-intuitive half. It does fall, because a third of
+    // it is under ice and the rest is dim and cold — but it falls a fraction as far as the
+    // land does, because the cold is also what feeds it.
+    let sea_then = frozen.total_production_gt(&planet) - land_then;
+    let sea_now = living.total_production_gt(&planet) - land_now;
+    assert!(
+        sea_then / sea_now > 3.0 * (land_then / land_now),
+        "the sea held {:.0}% of its production and the land {:.0}% — the sea should be \
+         far the more robust of the two",
+        100.0 * sea_then / sea_now,
+        100.0 * land_then / land_now
+    );
+    // The mechanism, stated separately from its consequence: a cold ocean turns its water
+    // over, so nearly all of it is fed rather than a sixth of it.
+    let fed_then = frozen.sea().fertile_share(&planet);
+    let fed_now = living.sea().fertile_share(&planet);
+    assert!(
+        fed_then > fed_now * 2.0,
+        "the cold ocean was {fed_then:.2} fertile against the warm one's {fed_now:.2}"
     );
 }

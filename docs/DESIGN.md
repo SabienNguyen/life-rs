@@ -117,7 +117,7 @@ from a plausible-looking fake.
 sim-core/    Ids, arenas, TimeScale ladder, seeded RNG, event bus, LOD policy
 geo/         Geodesic grid, plates, tectonics, isostasy, erosion, bathymetry
 climate/     Energy balance, insolation & orbital forcing, hydrology, ice, carbon cycle
-ocean/       Basins, currents, temperature/salinity, upwelling, sea level
+ocean/       Wind belts, Ekman transport, upwelling, basins, nutrient supply
 biome/       Derived terrestrial + marine classification from climate & substrate
 life/        Shared substrate: Organism, Phenotype, Needs, aging, death
 genetics/    Loci, trait specs, meiosis, phenotype expression, allele-frequency pools
@@ -1038,7 +1038,7 @@ later means rewriting every system, and it's cheap to build before there are sys
 | --- | --- |
 | **3** ✅ | Environment & neighbourhoods: environment vectors on places, archetypes derived from them, the four channels live, developmental windows, standing, residential sorting, the §15 balance harness |
 | **4** ✓ | `geo`: geodesic grid, plates, elevation, isostasy, erosion, bathymetry |
-| **5** ◑ | `climate`: energy balance, insolation, moisture, ice, carbon cycle. Ocean circulation — gyres, overturning, upwelling, nutrients — deferred to Phase 7, where something finally reads it |
+| **5** ◑ | `climate`: energy balance, insolation, moisture, ice, carbon cycle. Ocean circulation — wind belts, Ekman transport, upwelling, overturning, nutrients — now in `ocean`, and read by `biome` |
 | **6** ◑ | `biome`: Whittaker classification, NPP. Plant functional types with populations of their own — and therefore lag, and fire — deferred to Phase 7 |
 | **7** ✓ | `ecology`: animal demes, trophic web, dispersal, habitat suitability |
 
@@ -1084,6 +1084,39 @@ wore down as fast as a rainforest, land fell from a third of the surface to thre
 over a gigayear, and the carbon thermostat then lost the rock it regulates with and let
 carbon dioxide climb to six percent of the atmosphere. With it the same planet holds a
 tenth of its surface dry and stays temperate throughout.
+
+**The sea, in the event.** Marine productivity was a placeholder and said so: a flat
+multiplier — one on the shelf, a bit over a quarter everywhere else — standing in for a
+nutrient budget that did not exist. It got the pattern roughly right by accident, because
+shelves really are better fed, and it got the reason wrong, which meant it could produce
+none of the consequences.
+
+The reason is that **everything which grows in the sunlit layer sinks when it dies**. The
+surface is stripped and the depths are rich, so the productive sea is wherever deep water
+is being brought back up — which makes the whole crate really about one quantity,
+upwelling, with the circulation existing to produce it. Wind belts are a function of
+latitude (the three-cell circulation, which is not a choice), Ekman transport is the wind
+turned ninety degrees, and coastal upwelling is wherever that rotation points away from a
+shore. Plus equatorial divergence, winter mixing where the water is cold enough to turn
+over, and river supply on shelves below wet land.
+
+Nothing in it knows the word "eastern", and the eastern-boundary fisheries come out
+anyway — Peru, California, Benguela, the Canaries. That is the test the crate exists to
+pass, and drawing it settles the matter: the nutrient map has blue subtropical gyres in
+two bands, a bright line along the equator, green at the mixing latitudes and bright
+fringes on the upwelling coasts. It reads like a satellite chlorophyll image because it
+was arrived at the same way the real pattern is.
+
+Two corrections came out of wiring it in, and both were mine. The temperature term still
+peaked in the mid-latitudes, which had been standing in for stratification; moving
+stratification to the nutrient supply and leaving Eppley's exponential in its place made a
+starved tropical gyre out-produce well-fed temperate water. The residual temperature
+effect on *annual* production is weak, and Eppley bounds a maximum growth rate rather than
+a realised one. And a test asserting that a frozen planet's biosphere collapses turned out
+to have been passing for the wrong reason — the planet in it is a cold world rather than a
+snowball, and a cold ocean is *better* fed than a warm one, because cold surface water is
+dense and the column turns over. What collapses is the land. That is the Cryogenian
+pattern and the test says so now.
 
 **Phase 6, in the event.** Almost nothing to report, which is the point: a biome turned
 out to be sixty lines of `if` and the whole crate has no state at all. That is principle

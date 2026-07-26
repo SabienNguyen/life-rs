@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 climate = { path = "../climate" }
 geo = { path = "../geo" }
+ocean = { path = "../ocean" }
 
 [dev-dependencies]
 sim-core = { path = "../sim-core" }

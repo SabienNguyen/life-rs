@@ -8,6 +8,7 @@ version = "0.1.0"
 dependencies = [
  "climate",
  "geo",
+ "ocean",
  "sim-core",
 ]
 
@@ -133,6 +134,15 @@ dependencies = [
  "sim",
  "sim-core",
  "society",
+]
+
+[[package]]
+name = "ocean"
+version = "0.1.0"
+dependencies = [
+ "climate",
+ "geo",
+ "sim-core",
 ]
 
 [[package]]

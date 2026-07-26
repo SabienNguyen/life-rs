@@ -314,6 +314,7 @@
         <button id="view-wet" aria-pressed="false">Rainfall</button>
         <button id="view-life" aria-pressed="false">Biomes</button>
         <button id="view-fauna" aria-pressed="false">Animals</button>
+        <button id="view-sea" aria-pressed="false">Sea</button>
         <button id="view-plates" aria-pressed="false">Boundaries</button>
       </div>
     </div>
@@ -356,6 +357,19 @@
         <span class="key" style="color:var(--muted)">Many</span>
       </div>
       <div class="ends"><span>no animals</span><span>kinds of animal sharing a place</span><span id="fauna-top">most</span></div>
+    </div>
+
+    <div class="legend hidden" id="legend-sea">
+      <div class="ramp">
+        <span class="key" style="color:var(--muted)">Barren</span>
+        <span class="bar" id="ramp-sea"></span>
+        <span class="key" style="color:var(--muted)">Teeming</span>
+      </div>
+      <div class="ends">
+        <span>a subtropical gyre</span>
+        <span>nutrient supply — what the sunlit layer has to eat</span>
+        <span>an upwelling shore</span>
+      </div>
     </div>
 
     <div class="legend hidden" id="legend-plates">
@@ -405,6 +419,7 @@ for (const frame of DATA.frames) {
   frame.w = bytesOf(frame.warmth);   // half-degrees from −64 °C
   frame.r = bytesOf(frame.wet);      // twenty-millimetre steps
   frame.k = bytesOf(frame.kinds);
+  frame.food = bytesOf(frame.food);
   frame.tempAt = i => frame.w[i] / 2 - 64;
   frame.rainAt = i => frame.r[i] * 20;
 }
@@ -454,6 +469,21 @@ const FAUNA = [
   [18, [ 92, 146, 122]],
   [28, [ 44, 104,  94]],
   [44, [ 20,  58,  58]],
+];
+
+// Nutrient supply in the sea: sequential, one hue, dark to light. Dark at the barren end
+// rather than light, which is the opposite of the other ramps here and is deliberate — a
+// starved ocean *is* the deep blue of an open gyre, and a fed one is the pale green of
+// water thick with plankton. Reading it against a satellite chlorophyll image should feel
+// like the same picture.
+const FOOD = [
+  [0.00, [ 16,  38,  74]],
+  [0.15, [ 22,  70, 108]],
+  [0.32, [ 26, 108, 126]],
+  [0.50, [ 46, 142, 126]],
+  [0.70, [104, 172, 114]],
+  [0.85, [168, 198, 116]],
+  [1.00, [226, 228, 158]],
 ];
 
 // Rainfall: sequential, one hue, light to dark. Never a rainbow — a magnitude has an
@@ -563,6 +593,11 @@ function draw() {
       [r, g, b] = ramp(WET, frame.rainAt(i));
     } else if (view === 'fauna') {
       [r, g, b] = ramp(FAUNA, frame.k[i]);
+    } else if (view === 'sea') {
+      // Land is drawn as land: a nutrient map with the continents blanked out is
+      // unreadable, and the whole point of this layer is *where* on the coast the
+      // upwelling is.
+      [r, g, b] = frame.h[i] > 0 ? [58, 62, 58] : ramp(FOOD, frame.food[i] / 255);
     } else if (view === 'life') {
       [r, g, b] = BIOMES[frame.t[i] >> 4][1];
     } else {
@@ -573,7 +608,7 @@ function draw() {
 
     // The coastline, drawn on every view that is not the relief map itself, because a
     // temperature field with no land in it is unreadable.
-    if (view === 'warmth' || view === 'wet' || view === 'fauna') {
+    if (view === 'warmth' || view === 'wet' || view === 'fauna' || view === 'sea') {
       const land = frame.h[i] > 0;
       const row = (i / WIDE) | 0, col = i % WIDE;
       const west = frame.h[row * WIDE + (col - 1 + WIDE) % WIDE] > 0;
@@ -635,6 +670,10 @@ const MEASURES = [
     blurb: 'Desert and cold desert, as a share of the land' },
   { key: 'biomass', label: 'Growth',            unit: 'Gt',  scale: 1,   digits: 0,
     blurb: 'Dry matter the whole biosphere fixes in a year' },
+  { key: 'fedsea',  label: 'Sea worth fishing', unit: '%',   scale: 100, digits: 0,
+    blurb: 'Where deep water reaches the light, which is most of what limits the ocean' },
+  { key: 'upwell',  label: 'Upwelling',         unit: '',    scale: 1,   digits: 2,
+    blurb: 'Driven by how cold the coldest water is, so a hothouse ocean is a still one' },
   { key: 'species', label: 'Kinds of animal',  unit: '',    scale: 1,   digits: 0,
     blurb: 'Still living, as extinction and origination trade off' },
   { key: 'arose',   label: 'Lineages split',   unit: '',    scale: 1,   digits: 0,
@@ -725,7 +764,7 @@ const slider = document.getElementById('time');
 slider.max = DATA.frames.length - 1;
 slider.addEventListener('input', () => { at = +slider.value; stop(); draw(); });
 
-const VIEWS = ['relief', 'warmth', 'wet', 'life', 'fauna', 'plates'];
+const VIEWS = ['relief', 'warmth', 'wet', 'life', 'fauna', 'sea', 'plates'];
 function setView(next) {
   view = next;
   for (const name of VIEWS) {
@@ -762,6 +801,7 @@ gradient('ramp-warmth', [-45, -35, -25, -15, -5, 0, 5, 15, 25, 35, 42], v => ram
 gradient('ramp-wet', [0, 150, 350, 600, 900, 1300, 1800, 2400, 3200], v => ramp(WET, v));
 
 gradient('ramp-fauna', [0, 3, 6, 10, 15, 21, 28, 36, 46], v => ramp(FAUNA, v));
+gradient('ramp-sea', [0, 0.12, 0.25, 0.4, 0.55, 0.7, 0.85, 1], v => ramp(FOOD, v));
 document.getElementById('fauna-top').textContent =
   `${Math.max(...DATA.frames.map(f => Math.max(...f.k)))} kinds`;
 

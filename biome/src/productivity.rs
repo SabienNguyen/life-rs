@@ -12,11 +12,12 @@
 //! which is unsurprising, because the thing it captures is that a plant needs both warmth
 //! and water and cannot trade one for the other.
 //!
-//! At sea the limit is different and the honest answer is thinner. What bounds ocean
-//! productivity is nutrient supply, and nutrients come from rivers and from upwelling —
-//! neither of which is modelled yet. What is here uses light and temperature, with the
-//! shelf standing in for river-fed nutrients, and it should be read as a placeholder that
-//! puts productivity roughly where it belongs rather than as a nutrient budget.
+//! At sea the limit is different, and it is the one that used to be missing. What bounds
+//! ocean productivity is **nutrient supply** — not light and not warmth, which is why the
+//! sunlit tropical ocean is one of the emptiest places on the planet. Everything that
+//! grows in the sunlit layer sinks when it dies, so the surface is stripped and the depths
+//! are rich, and the productive sea is wherever deep water is being brought back up. That
+//! supply comes from `ocean`, and this crate multiplies by it.
 
 use crate::whittaker::Biome;
 
@@ -42,29 +43,61 @@ pub fn on_land(mean_c: f32, rain_mm: f32) -> f32 {
 /// An order of magnitude below a forest per unit area, which is right: the ocean and the
 /// land fix roughly the same amount of carbon a year, and the ocean is two and a half
 /// times the area with all of its production in a thin sunlit layer.
-pub fn at_sea(mean_c: f32, sunlight: f32, shelf: bool, frozen: bool) -> f32 {
+///
+/// The limiting term is `nutrients`, and that is the correction the `ocean` crate exists
+/// to make. This used to carry a flat multiplier — one on the shelf, a bit over a quarter
+/// everywhere else — with a comment admitting it was a placeholder for a nutrient budget
+/// that did not exist. It got the *pattern* roughly right by accident, because shelves
+/// really are better fed, and it got the reason wrong, which meant it could not produce
+/// any of the consequences: no eastern-boundary fisheries, no equatorial cold tongue, no
+/// difference between a shelf below a rainforest and a shelf below a desert.
+pub fn at_sea(mean_c: f32, sunlight: f32, shelf: bool, frozen: bool, nutrients: f32) -> f32 {
     if frozen {
         // Under ice there is very little light and very little mixing. Not nothing —
         // the ice edge is one of the most productive places on the planet — but that
         // belongs to the edge rather than to the middle.
         return 12.0;
     }
-    // Warm water is more productive per unit of light up to a point, then stratifies and
-    // starves itself of nutrients from below, which is why the tropical open ocean is a
-    // desert. The peak is around the temperate latitudes.
-    let by_heat = (-((mean_c - 12.0) / 16.0).powi(2)).exp();
+    // Water below its freezing point is not water. Seawater freezes near −1.8 °C, and
+    // there is no smooth roll-off to be had below that — either the cell is liquid or it
+    // is the ice case above.
+    if mean_c <= -1.8 {
+        return 0.0;
+    }
+    // What warmth does on its own, which is **monotone and weak**. The old form peaked in
+    // the mid-latitudes and fell away in the tropics, which put the tropical ocean's
+    // emptiness in the temperature term — where it does not belong. It is stratification,
+    // and stratification is now in the nutrient supply.
+    //
+    // Weak because the strong exponential everyone quotes — Eppley's, a doubling per ten
+    // degrees — bounds the *maximum* growth rate of a cell that has everything it needs.
+    // Annual production in a nutrient-limited ocean is nothing like that sensitive to
+    // temperature, and using Eppley directly made a 28 °C gyre out-produce temperate water
+    // by half again despite being starved. What is left here is the residual: about a
+    // third more production across the whole liquid range, normalised at fifteen degrees.
+    let by_heat = (0.025 * (mean_c - 15.0)).exp().min(1.5);
     let by_light = (sunlight / 400.0).clamp(0.0, 1.2);
-    // A shelf is fed by rivers and stirred by the bottom; the open ocean is neither.
-    let feeding = if shelf { 1.0 } else { 0.28 };
-    360.0 * by_heat * by_light * feeding
+    let by_food = ocean::nutrients::realised(nutrients);
+    // A shelf still gets a little for being a shelf, over and above what its rivers bring:
+    // the bottom is inside the mixed layer, so what sinks is stirred back up rather than
+    // lost to the deep.
+    let benthic = if shelf { 1.25 } else { 1.0 };
+    620.0 * by_heat * by_light * by_food * benthic
 }
 
 /// Production for a cell, whichever kind of place it is.
-pub fn of(biome: Biome, mean_c: f32, rain_mm: f32, sunlight: f32, shelf: bool) -> f32 {
+pub fn of(
+    biome: Biome,
+    mean_c: f32,
+    rain_mm: f32,
+    sunlight: f32,
+    shelf: bool,
+    nutrients: f32,
+) -> f32 {
     match biome {
         Biome::Glacier => 0.0,
-        Biome::SeaIce => at_sea(mean_c, sunlight, shelf, true),
-        Biome::Shelf | Biome::Pelagic => at_sea(mean_c, sunlight, shelf, false),
+        Biome::SeaIce => at_sea(mean_c, sunlight, shelf, true, nutrients),
+        Biome::Shelf | Biome::Pelagic => at_sea(mean_c, sunlight, shelf, false, nutrients),
         _ => on_land(mean_c, rain_mm),
     }
 }
@@ -142,44 +175,83 @@ mod tests {
 
     #[test]
     fn nothing_grows_on_a_glacier() {
-        assert_eq!(of(Biome::Glacier, -30.0, 500.0, 200.0, false), 0.0);
+        assert_eq!(of(Biome::Glacier, -30.0, 500.0, 200.0, false, 0.5), 0.0);
     }
 
     #[test]
-    fn a_shelf_out_produces_the_open_ocean() {
-        let shelf = at_sea(12.0, 350.0, true, false);
-        let open = at_sea(12.0, 350.0, false, false);
+    fn a_well_fed_shelf_out_produces_a_starved_open_ocean() {
+        // Same water, same light. What separates them is what is in it — which is now
+        // where the difference actually comes from rather than a flag standing in for it.
+        let shelf = at_sea(12.0, 350.0, true, false, 0.9);
+        let open = at_sea(12.0, 350.0, false, false, 0.1);
+        assert!(shelf > open * 2.0, "shelf {shelf:.0} against open {open:.0}");
+    }
+
+    #[test]
+    fn feeding_the_open_ocean_makes_it_produce() {
+        // The other side of the same claim, and the one that matters: an upwelling zone
+        // in open water out-produces a shelf that nothing feeds. Peru is not a shelf sea.
+        let upwelling = at_sea(16.0, 380.0, false, false, 0.95);
+        let barren_shelf = at_sea(16.0, 380.0, true, false, 0.05);
         assert!(
-            shelf > open * 2.0,
-            "shelf {shelf:.0} against open {open:.0}"
+            upwelling > barren_shelf,
+            "an upwelling zone made {upwelling:.0} against {barren_shelf:.0} on dead shelf"
         );
     }
 
     #[test]
     fn the_tropical_open_ocean_is_a_desert() {
-        // One of the more counter-intuitive facts about the sea, and a real one: the
-        // warm open ocean stratifies, nothing brings nutrients up from below, and it is
-        // among the least productive water on the planet despite all the light.
-        let tropics = at_sea(28.0, 420.0, false, false);
-        let temperate = at_sea(12.0, 300.0, false, false);
+        // One of the more counter-intuitive facts about the sea, and a real one: the warm
+        // open ocean stratifies, nothing brings nutrients up from below, and it is among
+        // the least productive water on the planet despite having all the light. The
+        // stratification now lives in the nutrient supply, so the two cells differ in what
+        // they are fed as well as in how warm they are — which is the point.
+        let tropics = at_sea(28.0, 420.0, false, false, 0.05);
+        let temperate = at_sea(12.0, 300.0, false, false, 0.55);
         assert!(
-            temperate > tropics,
+            temperate > tropics * 1.5,
             "the tropics made {tropics:.0} and the mid-latitudes {temperate:.0}"
         );
     }
 
     #[test]
+    fn food_is_what_limits_the_sea() {
+        // Monotone in nutrients, and steeply so at the bottom of the range: the whole
+        // claim of this crate’s marine half.
+        let at = |n| at_sea(14.0, 350.0, false, false, n);
+        let mut last = f32::MIN;
+        for i in 0..=20 {
+            let now = at(i as f32 / 20.0);
+            assert!(now >= last, "production fell as food increased");
+            last = now;
+        }
+        assert!(at(1.0) > at(0.0) * 4.0, "food barely mattered");
+    }
+
+    #[test]
     fn the_sea_makes_far_less_per_square_metre_than_a_forest() {
-        let best_sea = at_sea(12.0, 400.0, true, false);
+        let best_sea = at_sea(12.0, 400.0, true, false, 1.0);
         let forest = on_land(20.0, 1500.0);
         assert!(
-            forest > best_sea * 3.0,
+            forest > best_sea * 2.0,
             "sea {best_sea:.0} against forest {forest:.0}"
         );
     }
 
     #[test]
+    fn the_richest_sea_is_in_the_range_a_rich_sea_is_measured_at() {
+        // An upwelling zone fixes three hundred to five hundred grams a square metre a
+        // year, which is a wet grassland rather than a forest. A model that puts it at a
+        // forest’s rate has the ocean carrying more carbon than it does.
+        let peru = at_sea(16.0, 380.0, true, false, 1.0);
+        assert!(
+            (250.0..700.0).contains(&peru),
+            "the richest sea made {peru:.0} g/m²/yr"
+        );
+    }
+
+    #[test]
     fn under_ice_there_is_almost_nothing() {
-        assert!(at_sea(-5.0, 100.0, false, true) < 30.0);
+        assert!(at_sea(-5.0, 100.0, false, true, 0.8) < 30.0);
     }
 }

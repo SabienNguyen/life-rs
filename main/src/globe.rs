@@ -46,6 +46,10 @@ pub struct Frame {
     pub rain: Vec<u8>,
     /// How many species live in each pixel.
     pub richness: Vec<u8>,
+    /// How well fed the sea is, 0 to 255 over a supply index of 0 to 1. Land reads zero,
+    /// which is also what the emptiest ocean reads — the coastline is drawn separately, so
+    /// nothing is lost by sharing the value.
+    pub food: Vec<u8>,
     pub sea_level_m: f32,
     pub land_fraction: f32,
     pub continental_fraction: f32,
@@ -65,6 +69,9 @@ pub struct Frame {
     pub extinctions: usize,
     pub speciations: usize,
     pub deepest_lineage: usize,
+    /// The share of the sea fed well enough to be worth fishing.
+    pub fertile_sea: f32,
+    pub mean_upwelling: f32,
 }
 
 /// Sample the planet onto an equirectangular grid.
@@ -85,6 +92,8 @@ pub fn sample(
     let mut temperature = Vec::with_capacity(WIDE * TALL);
     let mut rain = Vec::with_capacity(WIDE * TALL);
     let mut richness = Vec::with_capacity(WIDE * TALL);
+    let mut food = Vec::with_capacity(WIDE * TALL);
+    let sea = life.sea();
     let mut hint: CellId = 0;
 
     for row in 0..TALL {
@@ -106,6 +115,7 @@ pub fn sample(
             temperature.push(((climate.temperature_c(cell) + 64.0) * 2.0).clamp(0.0, 255.0) as u8);
             rain.push((climate.rain_mm(cell) / 20.0).clamp(0.0, 255.0) as u8);
             richness.push(fauna.richness_at(cell).min(255) as u8);
+            food.push((sea.nutrients(cell) * 255.0).clamp(0.0, 255.0) as u8);
         }
     }
 
@@ -116,6 +126,7 @@ pub fn sample(
         temperature,
         rain,
         richness,
+        food,
         sea_level_m: planet.sea_level_m(),
         land_fraction: planet.land_fraction(),
         continental_fraction: planet.continental_fraction(),
@@ -139,6 +150,8 @@ pub fn sample(
         extinctions: fauna.lost,
         speciations: tree.speciations,
         deepest_lineage: fauna.living().map(|id| tree.depth(id)).max().unwrap_or(0),
+        fertile_sea: sea.fertile_share(planet),
+        mean_upwelling: sea.mean_upwelling(planet),
     }
 }
 
@@ -170,7 +183,9 @@ fn data(seed: &str, level: u8, frames: &[Frame]) -> String {
              \"co2\":{:.0},\"ice\":{:.4},\"temperate\":{:.4},\"rainfall\":{:.0},\
              \"forest\":{:.4},\"arid\":{:.4},\"biomass\":{:.1},\
              \"species\":{},\"animals\":{:.1},\"extinct\":{},\"arose\":{},\"lineage\":{},\
-             \"height\":\"{}\",\"tenure\":\"{}\",\"warmth\":\"{}\",\"wet\":\"{}\",\"kinds\":\"{}\"}}",
+             \"fedsea\":{:.4},\"upwell\":{:.4},\
+             \"height\":\"{}\",\"tenure\":\"{}\",\"warmth\":\"{}\",\"wet\":\"{}\",\"kinds\":\"{}\",\
+             \"food\":\"{}\"}}",
             frame.myr,
             frame.sea_level_m,
             frame.land_fraction,
@@ -191,11 +206,14 @@ fn data(seed: &str, level: u8, frames: &[Frame]) -> String {
             frame.extinctions,
             frame.speciations,
             frame.deepest_lineage,
+            frame.fertile_sea,
+            frame.mean_upwelling,
             base64(&as_bytes(&frame.height)),
             base64(&frame.tenure),
             base64(&frame.temperature),
             base64(&frame.rain),
             base64(&frame.richness),
+            base64(&frame.food),
         );
     }
     out.push_str("\n  ]\n}");

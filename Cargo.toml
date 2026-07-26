@@ -8,6 +8,7 @@ members = [
     "geo",
     "life",
     "main",
+    "ocean",
     "observer",
     "person",
     "planet",

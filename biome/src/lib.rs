@@ -21,6 +21,7 @@ pub mod whittaker;
 
 use climate::Climate;
 use geo::{CellId, Lithosphere};
+use ocean::Ocean;
 
 pub use whittaker::{Biome, SHELF_DEPTH_M};
 
@@ -29,6 +30,14 @@ pub struct Biosphere {
     biome: Vec<Biome>,
     /// Net primary production, grams of dry matter per square metre a year.
     production: Vec<f32>,
+    /// The sea this was read against.
+    ///
+    /// Kept rather than taken as an argument because it is the same kind of thing as the
+    /// rest of this struct — a reading of the planet and the climate, with no state of its
+    /// own — and because everything that wants a biosphere also wants the sea it implies.
+    /// Building it here means one place constructs it and one place is responsible for it
+    /// matching.
+    sea: Ocean,
 }
 
 impl Biosphere {
@@ -41,6 +50,7 @@ impl Biosphere {
         let mut biome = Vec::with_capacity(grid.len());
         let mut production = Vec::with_capacity(grid.len());
         let inland = continentality(planet);
+        let sea = Ocean::read(planet, climate);
 
         for cell in grid.cells() {
             let latitude = grid.position(cell).latitude();
@@ -64,10 +74,20 @@ impl Biosphere {
                 rain,
                 sunlight,
                 depth < SHELF_DEPTH_M,
+                sea.nutrients(cell),
             ));
             biome.push(kind);
         }
-        Biosphere { biome, production }
+        Biosphere {
+            biome,
+            production,
+            sea,
+        }
+    }
+
+    /// The sea this biosphere was read against.
+    pub fn sea(&self) -> &Ocean {
+        &self.sea
     }
 
     pub fn biome(&self, cell: CellId) -> Biome {

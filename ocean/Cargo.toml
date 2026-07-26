@@ -1,0 +1,9 @@
+[package]
+name = "ocean"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+sim-core = { path = "../sim-core" }
+geo = { path = "../geo" }
+climate = { path = "../climate" }
