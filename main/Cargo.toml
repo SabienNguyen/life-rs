@@ -16,3 +16,4 @@ life = { path = "../life" }
 observer = { path = "../observer" }
 planet = { path = "../planet" }
 person = { path = "../person" }
+culture = { path = "../culture" }

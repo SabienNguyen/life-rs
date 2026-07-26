@@ -225,6 +225,12 @@ fn main() -> ExitCode {
             println!("{line}");
         }
         println!();
+
+        println!("── peoples and countries ──");
+        for line in render::peoples(&world) {
+            println!("{line}");
+        }
+        println!();
     }
 
     if options.balance {

@@ -310,6 +310,19 @@ pub struct World {
     arrivals: std::collections::BTreeMap<PlaceId, u32>,
     /// What was done where, since the last reckoning. Norms are read off this.
     deeds_done: std::collections::BTreeMap<PlaceId, [u32; Deed::COUNT]>,
+    /// The peoples of this world and which place practises what.
+    ///
+    /// `None` until somewhere is actually inhabited — a world with nobody in it has no
+    /// culture, and starting one anyway would mean writing down a people before there was
+    /// anybody to be them.
+    cultures: Option<culture::Cultures>,
+    /// Places in the order culture knows them.
+    ///
+    /// `Cultures` indexes places by position and never forgets one, so the roster only
+    /// grows: a place that empties keeps its slot, along with the manners of whoever used
+    /// to live there. Arena ids are not dense and places are founded as the world spreads,
+    /// so the mapping has to be kept rather than derived.
+    roster: Vec<PlaceId>,
     /// The ground the world stands on, if it stands on any.
     surface: Option<Surface>,
     /// How many people it was founded with. Kept because a world cannot be made again
@@ -445,6 +458,18 @@ const GREEN_CO2_PPM: f32 = 150.0;
 const LIVEABLE_FLUX: std::ops::Range<f64> = 0.97..1.12;
 /// How far apart two settlements must be, in rings of the grid.
 ///
+/// How far apart two places can be and still be one country.
+///
+/// About a fortnight on foot. That is the classical radius of a state that has to be held
+/// together by people walking: far enough that a message and a tax collector can make the
+/// round trip within a season, close enough that they bother. Rome's core, the Han
+/// commanderies and the medieval kingdoms all sit near it, and they sit near it because
+/// they are all limited by the same legs.
+///
+/// It bounds the *links*, not the country — `World::countries` walks a chain of them, so a
+/// ribbon of towns each a fortnight from the next is one country however long the ribbon is.
+const A_FORTNIGHT_WALK: f32 = 600.0;
+
 /// One ring. At this grid a ring is most of a country, and neighbouring cells would be
 /// the same place.
 const SETTLEMENTS_APART: usize = 1;
@@ -580,6 +605,8 @@ impl World {
             watched: std::collections::BTreeSet::new(),
             arrivals: std::collections::BTreeMap::new(),
             deeds_done: std::collections::BTreeMap::new(),
+            cultures: None,
+            roster: Vec::new(),
             surface: None,
             founded_with: 0,
         }
@@ -1368,6 +1395,7 @@ impl World {
     /// moves on this year's reading, not on a stale one.
     fn reckoning(&mut self, at: Time) {
         self.take_census(at);
+        self.reckon_cultures(at);
         self.assign_detail();
         self.absorb_upbringings(at);
         self.sort_households(at);
@@ -1467,6 +1495,229 @@ impl World {
         }
         self.arrivals.clear();
         self.deeds_done.clear();
+    }
+
+    /// A year of culture, and the loop it closes.
+    ///
+    /// §14 already had every piece of this except the memory. A place's `norms` are read
+    /// off what its residents did, and `Deed::choose` weights every choice by how far it
+    /// departs from them — so behaviour already followed norms and norms already followed
+    /// behaviour. What was missing is that norms were rebuilt from scratch each year, which
+    /// breaks the loop: a place could not carry a way of doing things through a generation,
+    /// so nothing accumulated and nowhere was anywhere in particular for longer than a
+    /// census.
+    ///
+    /// Running the year's deeds through `culture` and writing the result back into `norms`
+    /// closes it. What a place did feeds what it believes, at two percent a year; what it
+    /// believes feeds what its children do, at whatever their conformity is. That circuit
+    /// is the whole mechanism — countries and peoples are what it produces, and nobody
+    /// wrote either down.
+    fn reckon_cultures(&mut self, at: Time) {
+        // Places in a fixed order that never changes, so a culture index means the same
+        // place for the life of the world.
+        let known: std::collections::BTreeSet<PlaceId> = self.roster.iter().copied().collect();
+        for id in self.places.ids() {
+            if !known.contains(&id) {
+                self.roster.push(id);
+            }
+        }
+        if self.roster.is_empty() {
+            return;
+        }
+
+        let mut doing = Vec::with_capacity(self.roster.len());
+        let mut contact = Vec::with_capacity(self.roster.len());
+        let mut souls = Vec::with_capacity(self.roster.len());
+        for id in &self.roster {
+            let place = self.places.get(*id);
+            doing.push(
+                place
+                    .map(|p| p.env.norms)
+                    .unwrap_or([0.5; culture::WAYS]),
+            );
+            // Reach is the roads: the same number that decides whether grain can get to a
+            // place decides whether manners can.
+            contact.push(
+                place
+                    .and_then(|p| p.terrain.as_ref())
+                    .map(|t| t.reach)
+                    .unwrap_or(0.5),
+            );
+            souls.push(
+                self.society
+                    .households_in(*id)
+                    .flat_map(|(_, h)| h.members.iter())
+                    .filter(|m| self.people.get(**m).is_some_and(|p| p.is_alive()))
+                    .count() as u32,
+            );
+        }
+
+        if souls.iter().all(|s| *s == 0) {
+            return;
+        }
+
+        let cultures = self.cultures.get_or_insert_with(|| {
+            // The first people are named after the first place anybody lives in, because
+            // that is who they are: the people from there. Everything else in the world's
+            // history of peoples descends from this one.
+            let hearth = self
+                .roster
+                .iter()
+                .zip(&souls)
+                .find(|(_, s)| **s > 0)
+                .and_then(|(id, _)| self.places.get(*id))
+                .map(|p| p.name.clone())
+                .unwrap_or_else(|| "Firstfolk".to_string());
+            culture::Cultures::beginning(0, hearth)
+        });
+        // A place founded since the last reckoning takes up the ways of the largest
+        // inhabited place already known, because somebody walked there from somewhere and
+        // the likeliest somewhere is the big one.
+        let from = souls
+            .iter()
+            .take(cultures.places())
+            .enumerate()
+            .max_by_key(|(_, s)| **s)
+            .map(|(at, _)| at);
+        cultures.extend_to(self.roster.len(), from);
+
+        let year = at.since(FOUNDING).as_years() as u64;
+        let mut rng = self.seed.stream(Domain::Naming, year, 0);
+        cultures.step(&doing, &contact, &souls, year, &mut rng);
+
+        // And write it back, so what a place believes is what its people conform to. This
+        // is the return leg of the loop and the only line that makes culture causal rather
+        // than decorative.
+        for (at, id) in self.roster.iter().enumerate() {
+            let ways = cultures.practised(at);
+            if let Some(place) = self.places.get_mut(*id) {
+                place.env.norms = ways;
+            }
+        }
+    }
+
+    /// The peoples of this world, in the order they arose.
+    pub fn peoples(&self) -> &[culture::Culture] {
+        self.cultures.as_ref().map(|c| c.all()).unwrap_or(&[])
+    }
+
+    /// The countries of this world, largest first, each named after its largest place.
+    ///
+    /// Derived on demand rather than stored, so a country cannot fall out of step with the
+    /// places that make it up. Nothing here decides where a border goes: a country is
+    /// whatever set of inhabited places shares a people and can walk to one another, and if
+    /// that set changes because a town emptied or a valley drifted, the reading changes
+    /// with it.
+    pub fn countries(&self) -> Vec<culture::Country> {
+        let Some(cultures) = self.cultures.as_ref() else {
+            return Vec::new();
+        };
+        let souls: Vec<u32> = self
+            .roster
+            .iter()
+            .map(|id| {
+                self.society
+                    .households_in(*id)
+                    .flat_map(|(_, h)| h.members.iter())
+                    .filter(|m| self.people.get(**m).is_some_and(|p| p.is_alive()))
+                    .count() as u32
+            })
+            .collect();
+
+        let mut countries = cultures.countries(&souls, |a, b| self.within_reach(a, b));
+        for country in &mut countries {
+            // After its largest place, which is how most real countries got their names —
+            // and that place's own name came from the terrain it stands on, so the whole
+            // chain from ground to country is derived.
+            country.name = country
+                .places
+                .iter()
+                .max_by_key(|at| souls.get(**at).copied().unwrap_or(0))
+                .and_then(|at| self.roster.get(*at))
+                .and_then(|id| self.places.get(*id))
+                .map(|p| culture::naming::name_a_country(&p.name))
+                .unwrap_or_default();
+        }
+        countries
+    }
+
+    /// Whether somebody could plausibly get from one place to the other and back often
+    /// enough for the two to be one country.
+    ///
+    /// Great-circle distance, and deliberately not land connectivity: Denmark, Greece and
+    /// Indonesia are all one country across water, and a strait is a road rather than a
+    /// wall. What actually keeps a country together is how long the journey takes.
+    ///
+    /// Transitive, because `countries` walks the connections rather than testing every pair
+    /// against a centre — so a chain of towns a fortnight apart is one long country even
+    /// though its ends are half a world from each other, which is Chile.
+    fn within_reach(&self, a: usize, b: usize) -> bool {
+        let of = |at: usize| {
+            self.roster
+                .get(at)
+                .and_then(|id| self.places.get(*id))
+                .and_then(|p| p.terrain.as_ref())
+                .map(|t| t.cell)
+        };
+        let (Some(here), Some(there)) = (of(a), of(b)) else {
+            // Places with no ground under them are not anywhere, so they cannot be a
+            // fortnight from anywhere either. Every such place is its own country.
+            return false;
+        };
+        let Some(surface) = self.surface.as_ref() else {
+            return false;
+        };
+        surface
+            .planet
+            .grid()
+            .distance_km(here, there, geo::EARTH_RADIUS_KM)
+            <= A_FORTNIGHT_WALK as f64
+    }
+
+    /// How many live in the place at a given cultural index.
+    ///
+    /// The roster index rather than the `PlaceId`, because that is what a `Country` carries
+    /// — it is a reading of `culture`'s own numbering and has no business knowing about
+    /// arenas.
+    pub fn souls_at(&self, at: usize) -> Option<u32> {
+        let id = *self.roster.get(at)?;
+        Some(
+            self.society
+                .households_in(id)
+                .flat_map(|(_, h)| h.members.iter())
+                .filter(|m| self.people.get(**m).is_some_and(|p| p.is_alive()))
+                .count() as u32,
+        )
+    }
+
+    /// What the place at a given cultural index is called.
+    pub fn place_named(&self, at: usize) -> Option<&str> {
+        let id = *self.roster.get(at)?;
+        self.places.get(id).map(|p| p.name.as_str())
+    }
+
+    /// Which people a place belongs to.
+    pub fn people_of(&self, place: PlaceId) -> Option<&culture::Culture> {
+        let cultures = self.cultures.as_ref()?;
+        let at = self.roster.iter().position(|id| *id == place)?;
+        cultures.get(cultures.of_place(at))
+    }
+
+    /// What a person would say when asked where they are from.
+    ///
+    /// Looked up rather than carried, because it is not a fact about them. Somebody who
+    /// moves house on Tuesday is from somewhere else on Wednesday, and a person whose town
+    /// drifts away from its neighbours over their lifetime ends up from a country that did
+    /// not exist when they were born, without anything about them changing at all. That is
+    /// the right shape for the thing, and it is why the eight-country enum this replaced
+    /// could never have been made to work: it made nationality an inherited attribute.
+    pub fn country_of(&self, person: PersonId) -> Option<String> {
+        let place = self.society.place_of(person)?;
+        let at = self.roster.iter().position(|id| *id == place)?;
+        self.countries()
+            .into_iter()
+            .find(|c| c.places.contains(&at))
+            .map(|c| c.name)
     }
 
     /// Children take on the character of wherever they are living.
@@ -2762,6 +3013,106 @@ mod tests {
                 .distance_km(cells[0], cell, geo::EARTH_RADIUS_KM);
             assert!(apart < 6_000.0, "a quarter {apart:.0} km from the others");
         }
+    }
+
+    #[test]
+    fn a_world_has_a_people_and_they_are_named_after_where_they_live() {
+        // The end of the eight-country enum. Nothing in the codebase now knows the name of
+        // a single people, so the only thing that can be asserted is the shape: there is
+        // one, it is called something, and what it is called came out of the ground.
+        let mut world = World::genesis(WorldSeed::from_u128(0x103), 40);
+        world.run_for(Duration::from_years(3));
+
+        let peoples = world.peoples();
+        assert!(!peoples.is_empty(), "a populated world has no peoples");
+        let first = &peoples[0];
+        assert!(!first.name.is_empty());
+        assert_eq!(first.parent, None, "the first people came from somewhere");
+        assert!(
+            world.places.iter().any(|(_, p)| p.name == first.name),
+            "the first people are not named after anywhere in this world",
+        );
+    }
+
+    #[test]
+    fn nationality_is_where_you_live_and_not_a_thing_you_carry() {
+        // The property the enum could never have. Somebody's country is looked up from the
+        // place they are in, so it is the same for everybody in that place and it is not
+        // inherited from a mother who has never been there.
+        let mut world = World::genesis(WorldSeed::from_u128(0x104), 40);
+        world.run_for(Duration::from_years(2));
+
+        let mut seen: std::collections::BTreeMap<PlaceId, String> =
+            std::collections::BTreeMap::new();
+        let mut anybody = false;
+        for (id, person) in world.people.iter() {
+            if !person.is_alive() {
+                continue;
+            }
+            let Some(place) = world.society.place_of(id) else {
+                continue;
+            };
+            let Some(country) = world.country_of(id) else {
+                continue;
+            };
+            anybody = true;
+            if let Some(before) = seen.get(&place) {
+                assert_eq!(
+                    *before, country,
+                    "two people in one place are from different countries",
+                );
+            } else {
+                seen.insert(place, country);
+            }
+        }
+        assert!(anybody, "nobody in this world is from anywhere");
+    }
+
+    #[test]
+    fn every_inhabited_place_is_in_exactly_one_country() {
+        let mut world = World::genesis(WorldSeed::from_u128(0x105), 40);
+        world.run_for(Duration::from_years(2));
+
+        let countries = world.countries();
+        assert!(!countries.is_empty(), "an inhabited world has no countries");
+
+        let mut counted: Vec<usize> = countries.iter().flat_map(|c| c.places.clone()).collect();
+        let unique: std::collections::BTreeSet<usize> = counted.iter().copied().collect();
+        assert_eq!(counted.len(), unique.len(), "a place is in two countries");
+        counted.sort_unstable();
+
+        for at in &counted {
+            assert!(
+                world.souls_at(*at).unwrap_or(0) > 0,
+                "an empty place is in a country",
+            );
+        }
+        for country in &countries {
+            assert!(!country.name.is_empty(), "a country with no name");
+            assert!(!country.places.is_empty());
+        }
+    }
+
+    #[test]
+    fn a_places_norms_outlive_the_year_that_made_them() {
+        // The loop §14 could not close. Norms used to be rebuilt from scratch each
+        // reckoning, so a place could not carry a way of doing things through a
+        // generation; now they carry, and the proof is that they are no longer equal to
+        // what people did this year.
+        let mut world = World::genesis(WorldSeed::from_u128(0x106), 60);
+        world.run_for(Duration::from_years(6));
+
+        let carried = world
+            .places
+            .iter()
+            .filter(|(id, p)| {
+                p.terrain.is_some() && world.society.households_in(*id).count() > 0
+            })
+            .any(|(_, p)| p.env.norms.iter().any(|n| (n - 0.5).abs() > 0.001));
+        assert!(
+            carried,
+            "no inhabited place carries any way of doing things at all",
+        );
     }
 
     #[test]

@@ -35,6 +35,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "culture"
+version = "0.1.0"
+dependencies = [
+ "person",
+ "sim-core",
+]
+
+[[package]]
 name = "deunicode"
 version = "1.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -130,6 +138,7 @@ dependencies = [
  "biome",
  "climate",
  "cosmos",
+ "culture",
  "ecology",
  "evolution",
  "geo",
@@ -255,6 +264,7 @@ dependencies = [
  "biome",
  "climate",
  "cosmos",
+ "culture",
  "economy",
  "genetics",
  "geo",

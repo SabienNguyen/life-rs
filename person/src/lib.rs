@@ -15,7 +15,6 @@ use genetics::{Ancestry, Architecture, FounderPool, Genome};
 use life::{Age, Health, LifeStage, Mortality, Need, Needs};
 use planet::PlanetId;
 use sim_core::{Duration, Id, Rng, Time};
-use std::fmt;
 
 pub use deeds::{Choice, Deed, Mind, Situation, Surroundings};
 pub use psyche::{Origins, Outlook, Personality, Values};
@@ -87,46 +86,6 @@ pub enum Weight {
     Overweight,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Country {
-    Usa,
-    Gbr,
-    Deu,
-    Can,
-    Fra,
-    Chn,
-    Jpn,
-    Vnm,
-}
-
-impl Country {
-    pub const ALL: [Country; 8] = [
-        Country::Can,
-        Country::Chn,
-        Country::Deu,
-        Country::Fra,
-        Country::Gbr,
-        Country::Jpn,
-        Country::Usa,
-        Country::Vnm,
-    ];
-}
-
-impl fmt::Display for Country {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let name = match self {
-            Country::Can => "Canada",
-            Country::Chn => "China",
-            Country::Deu => "Germany",
-            Country::Fra => "France",
-            Country::Gbr => "United Kingdoms",
-            Country::Jpn => "Japan",
-            Country::Usa => "United States",
-            Country::Vnm => "Vietnam",
-        };
-        f.write_str(name)
-    }
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PhysicalAttrs {
@@ -178,7 +137,6 @@ impl Cause {
 pub struct Person {
     pub name: String,
     pub sex: Sex,
-    pub country: Country,
     pub physical: PhysicalAttrs,
     /// The totals. Kept alongside `origins` because behaviour reads them constantly.
     pub personality: Personality,
@@ -244,7 +202,6 @@ impl Person {
         architecture: &Architecture,
         name: impl Into<String>,
         sex: Sex,
-        country: Country,
         genome: Genome,
         ancestry: Ancestry,
         parents: Option<(PersonId, PersonId)>,
@@ -260,7 +217,6 @@ impl Person {
         Person {
             name: name.into(),
             sex,
-            country,
             physical: PhysicalAttrs::new(
                 pick(
                     rng,
@@ -661,7 +617,6 @@ pub fn found(
         architecture,
         random_name(rng),
         Sex::sample(rng),
-        pick(rng, &Country::ALL),
         genome,
         Ancestry::founder(seed),
         None,
@@ -706,7 +661,6 @@ pub fn born_to(
         architecture,
         name,
         Sex::sample(rng),
-        mother.country,
         genome,
         ancestry,
         Some((mother_id, father_id)),

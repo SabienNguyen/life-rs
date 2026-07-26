@@ -16,3 +16,4 @@ cosmos = { path = "../cosmos" }
 climate = { path = "../climate" }
 biome = { path = "../biome" }
 settlement = { path = "../settlement" }
+culture = { path = "../culture" }

@@ -283,7 +283,14 @@ fn people(world: &World) -> String {
                         }
                     ),
                     field("outlook", &quoted(p.personality.outlook().label())),
-                    field("country", &quoted(&p.country.to_string())),
+                    field(
+                        "country",
+                        &quoted(
+                            &world
+                                .country_of(id)
+                                .unwrap_or_else(|| "nowhere in particular".to_string()),
+                        ),
+                    ),
                     field("standing", &num(p.peak_standing())),
                     field("mentored", if p.is_mentored() { "true" } else { "false" }),
                     field("upbringing", &num(p.absorbed_upbringing())),

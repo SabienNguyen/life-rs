@@ -1567,7 +1567,120 @@ by the M1 vertical slice for exactly that reason.
 5. **One planet or many?** `cosmos` is sketched but thin. Other worlds start
    Statistical and cost almost nothing — but "a second inhabited planet" means a second
    biosphere's worth of tuning.
-6. **How much culture?** Distinct languages, naming, kinship norms, and religions add
-   enormous texture per line of code, but they need their own evolutionary dynamics —
-   transmission, drift, and selection over ideas rather than genes. Tempting, and it's
-   a whole subsystem.
+6. **How much culture?** *Partly answered — see §24.* Transmission, drift and descent
+   over ideas are built, and peoples and countries emerge from them with no list of
+   either written down anywhere. Distinct **languages** remain out of scope: they need
+   phonology and sound change to be worth having, and a name that describes a practice
+   carries more real information than a fake word would. Religion and kinship norms are
+   still open.
+
+## 24. Peoples and countries
+
+For most of this project's life there was an enum called `Country` with eight variants —
+`Usa`, `Gbr`, `Deu`, `Can`, `Fra`, `Chn`, `Jpn`, `Vnm` — carried on every person and
+inherited from their mother. On a planet drawn from a random seed, orbiting a star of nine
+tenths a solar mass, a woman living on savanna at thirty degrees north would introduce
+herself as being from the United States. It was the plainest violation of design principle
+one in the codebase: nothing is placed by fiat, and there they were, eight of them, placed
+by fiat.
+
+It is gone. Nothing now writes down a people or a country. What is written down is the
+mechanism, and the peoples are what the mechanism produces.
+
+### 24.1 Culture is §14's norms with a memory
+
+§14 already gave every place a vector of `norms` — how prevalent each way of spending a day
+is, read off what its residents actually did — and `Deed::choose` already weighted every
+choice by how far it departs from them. So behaviour followed norms and norms followed
+behaviour: the loop was already there. What was missing is that norms were **rebuilt from
+scratch every reckoning**, which breaks it. A place could not carry a way of doing things
+through a generation, so nothing accumulated, and nowhere was anywhere in particular for
+longer than a census.
+
+`culture` closes the loop by adding the three things that make genetics genetics:
+
+- **Transmission** — a place's ways move toward its neighbours', at a rate set by its
+  *exposure*: how much of the company its people keep is from somewhere else. A hamlet at
+  the gates of a city and the city have the same roads, but almost everybody the hamlet
+  meets is a stranger and almost nobody the city meets is.
+- **Drift** — ways wander at random, faster in small populations and *only where a practice
+  is contested*. This is `p(1-p)/N`, the same Wright–Fisher variance the genetics runs on,
+  because it is the same phenomenon: a way ninety-nine in a hundred follow is what
+  ninety-nine children in a hundred see, and it does not move.
+- **Descent** — a place far enough from the rest of its people, for whom it is a minority,
+  *is* a different people, with a name, a date and a parent. The allopatric rule `evolution`
+  uses on species, applied to ideas.
+
+A **country** is derived and never stored: a maximal set of inhabited places that share a
+people and can walk to one another (`A_FORTNIGHT_WALK`, 600 km, transitively chained). Open
+a sea between two halves of one and you get two countries of one people; leave them
+connected and it is one country however long the ribbon.
+
+Names are built from what a people actually does — the way furthest from the unremarkable
+middle, with `Un-` for a notable *lack* — and a country takes the name of its largest place,
+which is already derived from the terrain it stands on. So the chain runs ground → place
+name → country name with nothing authored at any link.
+
+### 24.2 Four bugs worth keeping a record of
+
+Every one of these produced plausible output and none showed up as a failing assertion until
+the mechanism was asked to state its own claim.
+
+| Bug | Symptom | Cause |
+|---|---|---|
+| Practice pull at 0.20/yr | 600 years of total isolation moved a hamlet 0.03 | A three-year half-life is not a culture, it is last decade's behaviour. Drift can never accumulate against it. Now `ADOPTION = 0.02`, a 35-year half-life |
+| Frozen culture snapshot | One village produced 15 peoples in 2000 years | A people measured against the record of the day it was named keeps crossing the threshold. A culture is what its members do *now* |
+| Merging on resemblance | 8 peoples from one sealed hamlet | A place nobody can reach cannot rejoin anybody, however much it comes to resemble them. Resemblance across a gap nobody crosses is convergence, not kinship |
+| Distance is mutual | A city of 900 announced it had broken away from a village of 30 | The smaller part is the part that leaves. A people is where most of it lives |
+
+A fifth was structural rather than a bug: a place was measured against a mean it was itself
+inside, so two equal halves of one culture each sat at *half* their true separation and
+neither could ever leave, however differently they lived. Divergence is now measured against
+**the rest of** a people, which also makes the threshold mean the same thing whether a
+culture has two places or twenty.
+
+### 24.3 Calibration
+
+One place held in total isolation beside a mainland of 900, over 3000 years, twelve seeds
+each:
+
+| Souls | Diverged | Seeds that did | Peoples ever |
+|---|---|---|---|
+| 20 | never — below the floor | 0/12 | 1.0 |
+| 150 | 324 yr | 12/12 | 2.0 |
+| 200 | 1296 yr | 12/12 | 2.0 |
+| 300 | 910 yr | 1/12 | 1.1 |
+| 400+ | never | 0/12 | 1.0 |
+
+One divergence that sticks wherever drift can do it at all, and no churn at any size. Drift
+alone runs out of road at about 300 souls, and it should: neutral drift in a vacuum is slow,
+and the isolated populations that really diverged also differed in how they lived.
+
+Two floors bracket the useful range, and they are set from different arguments:
+
+- **`ENOUGH_TO_BE_A_PEOPLE` = 150** (Dunbar). Below it a place is a band. Its ways still
+  rattle across the whole space in a decade — sampling error at twenty carriers is enormous
+  and the model keeps that — but a band that drifts is a band, not a nation. Without this
+  floor a world of a hundred souls in five neighbourhoods named **three peoples inside three
+  years**, one per quarter.
+- Above ~300 souls, **circumstance** is the only road left. An upland of 400 who rove and
+  work and barely sleep become a distinct people from the lowland below them in six
+  centuries, on thin mountain-road contact, purely because they are not spending a day the
+  same way. In a real world that is the path that will produce nearly all the peoples, since
+  terrain, food and work already differ from place to place.
+
+**Open:** `DRIFT` = 0.045/yr for a contested practice in a village of 100 is at the top of
+what is defensible, and it is load-bearing — it is exactly the rate at which small
+populations can escape the pull of their own practice, so lowering it much switches
+drift-driven divergence off entirely. It also means the `norms` of a twenty-soul quarter now
+swing by ±0.19 around what its people actually do, which feeds conformity in `Deed::choose`.
+That is a real behavioural change and it has not been measured against population outcomes.
+
+### 24.4 What is deliberately not here
+
+No language, religion, kinship rule, law, or state — no government, no taxation, no army, no
+border anybody could be stopped at. A country here is an extent of shared practice, which is
+the older and broader meaning of the word and the one that does not require inventing an
+institution. **Conquest in particular is absent**: countries merge by converging, never by
+one taking another. That is a real gap rather than a modelling choice made confidently, and
+it is the obvious next thing to argue about.

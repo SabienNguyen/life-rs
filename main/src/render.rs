@@ -58,7 +58,9 @@ fn sentence(world: &World, happening: Happening) -> String {
             Some(p) => format!(
                 "Hi! My name is {} and I am from {}. I am {}, and {}.",
                 p.name,
-                p.country,
+                world
+                    .country_of(person)
+                    .unwrap_or_else(|| "nowhere in particular".to_string()),
                 describe_age(world, p),
                 p.personality.outlook().label(),
             ),
@@ -173,7 +175,9 @@ pub fn portrait(world: &World, id: person::PersonId) -> String {
         p.name,
         describe_age(world, p),
         p.stage(now).label(),
-        p.country,
+        world
+            .country_of(id)
+            .unwrap_or_else(|| "nowhere in particular".to_string()),
         p.personality.outlook().label(),
         state,
         need,
@@ -568,5 +572,100 @@ mod tests {
             .next()
             .expect("40 years should produce a death");
         assert!(obituary.contains(" dies of "), "got {obituary:?}");
+    }
+}
+/// The peoples of a world and the countries they make up.
+///
+/// Worth its own reading rather than a column on the neighbourhood table, because it is the
+/// one view where nothing on screen was written by anybody. The place names come from the
+/// terrain, the country names come from the places, and the peoples are named for whatever
+/// they do more or less of than everybody else.
+pub fn peoples(world: &World) -> Vec<String> {
+    let countries = world.countries();
+    if countries.is_empty() {
+        return vec!["  (nobody lives anywhere yet)".to_string()];
+    }
+
+    let mut lines = vec![format!(
+        "  {:<16} {:<14} {:>6}  {}",
+        "country", "people", "souls", "places"
+    )];
+    for country in &countries {
+        let souls: u32 = country
+            .places
+            .iter()
+            .filter_map(|at| world.souls_at(*at))
+            .sum();
+        let names: Vec<&str> = country
+            .places
+            .iter()
+            .filter_map(|at| world.place_named(*at))
+            .collect();
+        lines.push(format!(
+            "  {:<16} {:<14} {:>6}  {}",
+            country.name,
+            world
+                .peoples()
+                .get(country.culture)
+                .map(|p| p.name.as_str())
+                .unwrap_or("—"),
+            souls,
+            names.join(", "),
+        ));
+    }
+
+    // The peoples separately, because a people is not a country and printing what marks
+    // one out under each of its countries says the same thing four times.
+    let living: Vec<(usize, &culture::Culture)> = world
+        .peoples()
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| p.living())
+        .collect();
+    lines.push(String::new());
+    for (at, people) in &living {
+        let descent = match people.parent.and_then(|of| world.peoples().get(of)) {
+            Some(parent) => format!(" — from the {} in year {}", parent.name, people.arose),
+            None => " — here from the founding".to_string(),
+        };
+        lines.push(format!("  the {}{}", people.name, descent));
+        lines.push(format!("  {:<4} └ {}", "", describe_ways(&people.ways)));
+        let _ = at;
+    }
+    if living.len() > 1 {
+        lines.push(format!(
+            "  {} peoples out of {} that ever were",
+            living.len(),
+            world.peoples().len(),
+        ));
+    }
+    lines
+}
+
+/// What a people does unusually much or little of, in words.
+fn describe_ways(ways: &[f32; culture::WAYS]) -> String {
+    let mut ranked: Vec<(usize, f32)> = ways
+        .iter()
+        .enumerate()
+        .map(|(way, amount)| (way, amount - 0.5))
+        .collect();
+    ranked.sort_by(|a, b| b.1.abs().total_cmp(&a.1.abs()));
+
+    let said: Vec<String> = ranked
+        .iter()
+        .take(3)
+        .filter(|(_, off)| off.abs() > 0.06)
+        .map(|(way, off)| {
+            format!(
+                "{} {}",
+                if *off > 0.0 { "much" } else { "little" },
+                person::Deed::ALL[*way].label(),
+            )
+        })
+        .collect();
+    if said.is_empty() {
+        "nothing that marks them out".to_string()
+    } else {
+        said.join(", ")
     }
 }
