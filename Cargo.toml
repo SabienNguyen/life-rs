@@ -11,6 +11,7 @@ members = [
     "observer",
     "person",
     "planet",
+    "settlement",
     "sim",
     "society",
     "sim-core",

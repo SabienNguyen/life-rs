@@ -30,6 +30,7 @@ pub fn snapshot(world: &World, series: &[YearSample], balance: &Balance) -> Stri
         "factorNames",
         r#"["openness","conscientiousness","extraversion","agreeableness","neuroticism"]"#,
     );
+    push(&mut out, "planet", &planet(world));
     push(&mut out, "places", &places(world));
     push(&mut out, "people", &people(world));
     push(&mut out, "events", &events(world));
@@ -46,6 +47,42 @@ fn years_of(world: &World) -> u64 {
         .next()
         .map(|(_, p)| p.date_at(world.now()).year)
         .unwrap_or(0)
+}
+
+/// The planet the world stands on, or `null` for a world that stands on nothing.
+fn planet(world: &World) -> String {
+    let Some(surface) = world.surface() else {
+        return "null".to_string();
+    };
+    let planet = &surface.planet;
+    let climate = &surface.climate;
+    format!(
+        "{{{}}}",
+        [
+            field("land", &num(planet.land_fraction())),
+            field("biggestMass", &num(planet.largest_landmass_share())),
+            field("plates", &format!("{}", planet.active_plates())),
+            field(
+                "peakM",
+                &num(
+                    planet
+                        .grid()
+                        .cells()
+                        .map(|c| planet.height_above_sea_m(c))
+                        .fold(f32::MIN, f32::max)
+                )
+            ),
+            field("meanC", &num(climate.mean_temperature_c(planet))),
+            field("co2Ppm", &num(climate.co2_ppm())),
+            field("ice", &num(climate.ice_fraction(planet))),
+            field("rainMm", &num(climate.mean_rain_mm(planet))),
+            field("forest", &num(surface.life.forest_share(planet))),
+            field("arid", &num(surface.life.desert_share(planet))),
+            field("productionGt", &num(surface.life.total_production_gt(planet))),
+            field("cells", &format!("{}", planet.grid().len())),
+        ]
+        .join(",")
+    )
 }
 
 fn places(world: &World) -> String {
@@ -76,6 +113,37 @@ fn places(world: &World) -> String {
                     field("churn", &num(e.churn)),
                     field("households", &format!("{households}")),
                     field("residents", &format!("{residents}")),
+                    field("capacity", &format!("{}", place.capacity)),
+                    // The ground, so the viewer can say why a quarter is what it is
+                    // rather than only that it is.
+                    field(
+                        "ground",
+                        &match &place.terrain {
+                            Some(t) => quoted(&t.describe()),
+                            None => "null".to_string(),
+                        },
+                    ),
+                    field(
+                        "fertility",
+                        &place
+                            .terrain
+                            .as_ref()
+                            .map_or("null".to_string(), |t| num(t.fertility)),
+                    ),
+                    field(
+                        "reach",
+                        &place
+                            .terrain
+                            .as_ref()
+                            .map_or("null".to_string(), |t| num(t.reach)),
+                    ),
+                    field(
+                        "hardship",
+                        &place
+                            .terrain
+                            .as_ref()
+                            .map_or("null".to_string(), |t| num(t.hardship())),
+                    ),
                 ]
                 .join(",")
             )

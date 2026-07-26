@@ -212,13 +212,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "settlement"
+version = "0.1.0"
+dependencies = [
+ "biome",
+ "climate",
+ "geo",
+ "sim-core",
+ "society",
+]
+
+[[package]]
 name = "sim"
 version = "0.1.0"
 dependencies = [
+ "biome",
+ "climate",
  "genetics",
+ "geo",
  "life",
  "person",
  "planet",
+ "settlement",
  "sim-core",
  "society",
 ]

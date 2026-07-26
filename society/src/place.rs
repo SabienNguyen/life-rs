@@ -10,6 +10,7 @@
 //! it is like, what it is like determines what its children become, and what they become
 //! determines where they can afford to live.
 
+use crate::terrain::Terrain;
 use person::{Deed, Surroundings};
 use sim_core::Id;
 
@@ -273,10 +274,18 @@ pub struct Census {
 #[derive(Clone, Debug)]
 pub struct Place {
     pub name: String,
-    /// Households it holds before crowding. Authored — the one physical fact a place
-    /// has until it sits on a grid cell.
+    /// Households it holds before crowding. Grows with demand, and cannot pass what the
+    /// ground will feed once the place sits on one.
     pub capacity: u32,
     pub env: EnvironmentVector,
+    /// The ground under it, if it stands on any.
+    ///
+    /// `None` is a place that is not on a map — every world before the join, and every
+    /// test that only cares about who lives where. Such a place behaves exactly as it
+    /// always did, which is why this is an option rather than a neutral fixture: a
+    /// neutral terrain is still a claim about the ground, and "there is no ground here"
+    /// is a different thing to say.
+    pub terrain: Option<Terrain>,
 }
 
 /// How fast housing supply follows demand, per year.
@@ -302,7 +311,23 @@ impl Place {
             name: name.into(),
             capacity: capacity.max(1),
             env: EnvironmentVector::unremarkable(),
+            terrain: None,
         }
+    }
+
+    /// A place that stands somewhere in particular.
+    ///
+    /// It starts unremarkable in every respect its residents decide and already shaped in
+    /// the respects they do not. A settlement founded on thin cold ground is not a
+    /// featureless quarter that will *become* poor once the reckonings notice — it is
+    /// poor on the day it is founded, because the ground was there first.
+    pub fn on(name: impl Into<String>, capacity: u32, terrain: Terrain) -> Place {
+        let mut place = Place::new(name, capacity);
+        // Founded already shaped, by exactly the same rule a reckoning applies, so there
+        // is one description of what ground does rather than two that can drift apart.
+        place.env = under(&terrain, place.env);
+        place.terrain = Some(terrain);
+        place
     }
 
     /// Bring the place's character into line with who is living in it.
@@ -371,6 +396,10 @@ impl Place {
             },
         };
 
+        let target = match &self.terrain {
+            Some(terrain) => under(terrain, target),
+            None => target,
+        };
         self.env = blend(&self.env, &target, ADJUSTMENT);
     }
 
@@ -388,6 +417,13 @@ impl Place {
             let wanted = households as f32;
             let grown = self.capacity as f32 + (wanted - self.capacity as f32) * BUILD_RATE;
             self.capacity = grown.ceil() as u32;
+        }
+        // What the ground will feed is the one ceiling building cannot get past. It does
+        // not bind at the populations this simulation currently runs — a grid cell is
+        // most of a country — and it is here anyway, because the alternative is a rule
+        // that has to be remembered and added later rather than one that is simply true.
+        if let Some(terrain) = &self.terrain {
+            self.capacity = self.capacity.min(terrain.carrying).max(1);
         }
     }
 
@@ -409,6 +445,39 @@ impl Place {
         };
         standing + slack >= self.env.affluence
     }
+}
+
+/// What the ground does to what the residents made of it.
+///
+/// The whole of geography's effect on a neighbourhood, in one function, applied to the
+/// *target* a reckoning computes rather than to the vector itself — so terrain is
+/// something a place is always being pulled towards rather than a correction stamped on
+/// afterwards, and it fades in at the same rate everything else about a place does.
+///
+/// Three terms, and they are three because that is how many distinct things the ground
+/// does. It sets a ceiling on what can be got out of it; it decides whether anyone passes
+/// through; and it charges for a hard year. Everything else about a place is its people.
+fn under(terrain: &Terrain, mut target: EnvironmentVector) -> EnvironmentVector {
+    let ceiling = terrain.prosperity_ceiling();
+    // Ground bounds *opportunity*, not income. The first version capped affluence too,
+    // which is the same sentence read carelessly, and the balance harness caught what it
+    // did: affluence is what the residents have, it is what their children's upbringing
+    // is read off, and it is what decides where those children can afford to live. Capping
+    // it puts the ground inside that loop, so a poor site drives its residents poorer,
+    // which drives their children poorer, and three of five quarters fell to an affluence
+    // of one part in twenty-five with the heritable share of outcomes down to 0.03. Land
+    // does not confiscate wages. It limits what work there is to be had, and income
+    // follows from that through people — which the loop already models.
+    target.job_opportunity = target.job_opportunity.min(0.15 + 0.85 * ceiling);
+    target.services = target.services.min(0.1 + 0.9 * ceiling);
+    // Ties out need somewhere to go. This is the difference between a port and a valley
+    // with identical soil, and it is most of why the historical record is full of
+    // unremarkable ground that happened to be on the way to somewhere.
+    target.bridging_capital *= 0.4 + 0.6 * terrain.reach;
+    // A hard year costs, and it costs in safety rather than in money: what a punishing
+    // climate does to a life is not make it poorer, it is make it more precarious.
+    target.safety = (target.safety - 0.25 * terrain.hardship()).clamp(0.0, 1.0);
+    target
 }
 
 /// What people actually did here, as a distribution around the unremarkable 0.5.
@@ -778,5 +847,139 @@ mod tests {
         // simply swallow the whole world.
         assert!(!place.admits(a + 0.2, 2.0));
         assert!(place.admits(a + 0.6, 2.0));
+    }
+
+    // ── the ground under it ──────────────────────────────────────────────────────
+
+    fn ground(fertility: f32, reach: f32, harshness: f32) -> Terrain {
+        Terrain {
+            fertility,
+            reach,
+            harshness,
+            ..Terrain::middling(0)
+        }
+    }
+
+    /// The same residents, on two different pieces of ground.
+    fn settled_on(terrain: Terrain, census: &Census) -> Place {
+        let mut place = Place::on("Somewhere", 20, terrain);
+        for _ in 0..80 {
+            place.observe(census);
+        }
+        place
+    }
+
+    #[test]
+    fn a_place_with_no_ground_under_it_behaves_exactly_as_it_always_did() {
+        // The whole point of terrain being an option. Every world before the join, and
+        // every test that only cares who lives where, must be untouched by this.
+        let people = census(20, 0.7, 2);
+        let nowhere = settled(20, &people);
+        assert!(nowhere.terrain.is_none());
+        assert_eq!(nowhere.env, settled(20, &people).env);
+    }
+
+    #[test]
+    fn the_same_people_live_better_on_better_ground() {
+        let people = census(20, 0.8, 1);
+        let good = settled_on(ground(0.9, 0.9, 0.0), &people);
+        let poor = settled_on(ground(0.05, 0.1, 0.6), &people);
+
+        assert!(good.env.job_opportunity > poor.env.job_opportunity);
+        assert!(good.env.services > poor.env.services);
+        assert!(good.env.bridging_capital > poor.env.bridging_capital);
+        assert!(good.env.safety > poor.env.safety);
+        assert!(good.env.quality() > poor.env.quality());
+    }
+
+    #[test]
+    fn ground_bounds_the_work_there_is_and_not_the_wages() {
+        // The correction the balance harness forced, stated as a test so it cannot be
+        // undone by accident. Affluence is what the residents *have*; it is what their
+        // children's upbringing is read off and what decides where those children can
+        // afford to live. Putting the ground inside that loop compounds it every
+        // generation — three of five quarters fell to an affluence of one part in
+        // twenty-five and the heritable share of outcomes collapsed to 0.03.
+        let rich = census(20, 0.95, 0);
+        let bare = settled_on(ground(0.02, 0.05, 0.0), &rich);
+        let unbounded = settled(20, &rich);
+        assert!(
+            (bare.env.affluence - unbounded.env.affluence).abs() < 0.02,
+            "hard ground took money off people who had it"
+        );
+        // What it does take is the work: there is far less of it on bare rock.
+        assert!(bare.env.job_opportunity < unbounded.env.job_opportunity * 0.8);
+    }
+
+    #[test]
+    fn good_ground_is_permission_rather_than_a_gift() {
+        // The other half: opportunity is *allowed* by the ground, not created by it.
+        // Poor residents on excellent land stay poor.
+        let broke = census(20, 0.05, 0);
+        let lifted = settled_on(ground(0.95, 0.95, 0.0), &broke);
+        let plain = settled(20, &broke);
+        assert!(
+            (lifted.env.affluence - plain.env.affluence).abs() < 0.02,
+            "good ground made a poor place rich on its own"
+        );
+        assert!(
+            (lifted.env.job_opportunity - plain.env.job_opportunity).abs() < 0.02,
+            "a ceiling above where a place already sits should change nothing"
+        );
+    }
+
+    #[test]
+    fn a_hard_climate_costs_safety_rather_than_money() {
+        let people = census(20, 0.6, 0);
+        let mild = settled_on(ground(0.6, 0.6, 0.0), &people);
+        let brutal = settled_on(ground(0.6, 0.6, 1.0), &people);
+
+        assert!(brutal.env.safety < mild.env.safety);
+        assert_eq!(
+            brutal.env.affluence, mild.env.affluence,
+            "harshness is not poverty"
+        );
+        // And it reaches the people: a harsher place is a more pressing one to live in.
+        assert!(brutal.env.stress() > mild.env.stress());
+    }
+
+    #[test]
+    fn a_port_is_connected_and_an_identical_valley_is_not() {
+        let people = census(20, 0.7, 0);
+        let port = settled_on(ground(0.6, 0.95, 0.0), &people);
+        let valley = settled_on(ground(0.6, 0.05, 0.0), &people);
+
+        assert!(port.env.bridging_capital > valley.env.bridging_capital * 1.5);
+        // Ties *within* are not what a harbour buys, so they should be close.
+        assert!((port.env.bonding_capital - valley.env.bonding_capital).abs() < 0.05);
+    }
+
+    #[test]
+    fn building_cannot_pass_what_the_ground_feeds() {
+        let mut thin = Terrain::middling(0);
+        thin.carrying = 12;
+        let mut place = Place::on("Smallholding", 10, thin);
+        // Twice as many households want in as the land will ever feed.
+        for _ in 0..200 {
+            place.observe(&census(60, 0.5, 0));
+        }
+        assert_eq!(place.capacity, 12, "the land was built past");
+
+        // And without terrain the same demand is eventually met.
+        let mut anywhere = Place::new("Anywhere", 10);
+        for _ in 0..200 {
+            anywhere.observe(&census(60, 0.5, 0));
+        }
+        assert!(anywhere.capacity >= 59);
+    }
+
+    #[test]
+    fn a_founded_place_is_already_shaped_by_its_ground() {
+        // Not featureless-and-then-corrected: poor on the day it is founded.
+        let bleak = Place::on("Bleak", 20, ground(0.02, 0.05, 0.9));
+        let kind = Place::on("Kind", 20, ground(0.95, 0.9, 0.0));
+        assert!(bleak.env.quality() < kind.env.quality());
+        assert!(bleak.env.safety < 0.5);
+        assert!(bleak.terrain.is_some());
     }
 }

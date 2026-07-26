@@ -269,13 +269,13 @@ pub fn family(world: &World, id: person::PersonId) -> Vec<String> {
 /// Every neighbourhood, as it currently reads.
 pub fn neighbourhoods(world: &World) -> Vec<String> {
     let mut lines = vec![format!(
-        "  {:<12} {:<18} {:>6} {:>6} {:>6} {:>6} {:>6} {:>5}",
+        "  {:<13} {:<18} {:>6} {:>6} {:>6} {:>6} {:>6} {:>5}",
         "place", "reads as", "afflu", "safety", "bond", "bridge", "jobs", "hholds"
     )];
     for (id, place) in world.places.iter() {
         let households = world.society.households_in(id).count();
         lines.push(format!(
-            "  {:<12} {:<18} {:>6.2} {:>6.2} {:>6.2} {:>6.2} {:>6.2} {:>5}",
+            "  {:<13} {:<18} {:>6.2} {:>6.2} {:>6.2} {:>6.2} {:>6.2} {:>5}",
             place.name,
             place.archetype().label(),
             place.env.affluence,
@@ -285,8 +285,60 @@ pub fn neighbourhoods(world: &World) -> Vec<String> {
             place.env.job_opportunity,
             households,
         ));
+        // The ground under it, indented under the reading it produced — because the
+        // point of the join is that the second line explains a good deal of the first.
+        if let Some(terrain) = &place.terrain {
+            lines.push(format!(
+                "  {:<13} └ {}, soil {:.0}%, reach {:.0}%{}",
+                "",
+                terrain.describe(),
+                terrain.fertility * 100.0,
+                terrain.reach * 100.0,
+                if terrain.hardship() > 0.4 {
+                    format!(", a hard year ({:.0}%)", terrain.hardship() * 100.0)
+                } else {
+                    String::new()
+                },
+            ));
+        }
     }
     lines
+}
+
+/// The planet a populated world stands on, in one paragraph.
+pub fn ground(world: &World) -> Vec<String> {
+    let Some(surface) = world.surface() else {
+        return vec!["  (this world has no planet under it)".to_string()];
+    };
+    let planet = &surface.planet;
+    let climate = &surface.climate;
+    vec![
+        format!(
+            "  {:.0}% land, {:.0}% of it in one mass, {} plates, highest point {:.0} m",
+            planet.land_fraction() * 100.0,
+            planet.largest_landmass_share() * 100.0,
+            planet.active_plates(),
+            planet
+                .grid()
+                .cells()
+                .map(|c| planet.height_above_sea_m(c))
+                .fold(f32::MIN, f32::max),
+        ),
+        format!(
+            "  {:.1} °C on average, {:.0} ppm carbon dioxide, {:.0}% under ice, \
+             {:.0} mm of rain a year",
+            climate.mean_temperature_c(planet),
+            climate.co2_ppm(),
+            climate.ice_fraction(planet) * 100.0,
+            climate.mean_rain_mm(planet),
+        ),
+        format!(
+            "  {:.0}% forest, {:.0}% arid, {:.1} Gt of plant matter a year",
+            surface.life.forest_share(planet) * 100.0,
+            surface.life.desert_share(planet) * 100.0,
+            surface.life.total_production_gt(planet),
+        ),
+    ]
 }
 
 /// The scoring table behind a person's current choice — an early `why()`.

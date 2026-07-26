@@ -195,7 +195,30 @@ competent adult maintains them, so nobody unwatched ever has a bad month. Health
 slightly higher, and through the fertility check that means slightly more childbearing —
 about a fifth more population over 150 years.
 
-Next is Phase 4: the geodesic grid and tectonics beneath these places.
+### The join
+
+Those neighbourhoods now stand on a real planet. Founding a world draws continents from
+plate motion, solves a climate against them, reads the biomes off the result, and then
+puts the quarters where somebody could actually live — one country's worth of ground, and
+each quarter named after what it stands on:
+
+```
+── the planet under them ──
+  35% land, 100% of it in one mass, 7 plates, highest point 2054 m
+  18.0 °C on average, 5910 ppm carbon dioxide, 6% under ice, 1206 mm of rain a year
+
+── neighbourhoods ──
+  Twyport       working-class        afflu 0.41  safety 0.40  jobs 0.53
+                └ savanna at 30°N 69°E, 77 m, soil 53%, reach 72%
+  Shawtor       rural                afflu 0.24  safety 0.26  jobs 0.44
+                └ desert at 32°N 90°E, 1834 m, soil 16%, reach 51%
+```
+
+Nothing there is authored. The ground bounds what work there is, whether anyone passes
+through, and how hard the year is — and then who lives there decides the rest.
+
+Next is people at deep-time resolution: the planet under a populated world is still a
+single frame, because a megayear is thirty thousand lifetimes.
 
 ## Roadmap
 

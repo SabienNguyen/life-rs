@@ -165,6 +165,14 @@ fn main() -> ExitCode {
         println!();
     }
 
+    if world.surface().is_some() {
+        println!("── the planet under them ──");
+        for line in render::ground(&world) {
+            println!("{line}");
+        }
+        println!();
+    }
+
     if world.places.len() > 1 {
         println!("── neighbourhoods ──");
         for line in render::neighbourhoods(&world) {
@@ -212,6 +220,17 @@ fn print_dossier(world: &mut World) {
 
     println!("── a closer look ──");
     println!("{}", render::portrait(world, id));
+
+    // Where on the planet that is. The omniscient view was always meant to end at a
+    // point on a map rather than at a name.
+    if let Some(file) = observer::dossier(world, id)
+        && let Some(place) = &file.place
+    {
+        match &place.ground {
+            Some(ground) => println!("  lives in {} — {}", place.name, ground),
+            None => println!("  lives in {}", place.name),
+        }
+    }
 
     println!("\nfamily:");
     for line in render::family(world, id) {

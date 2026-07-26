@@ -301,6 +301,91 @@ pub struct World {
     arrivals: std::collections::BTreeMap<PlaceId, u32>,
     /// What was done where, since the last reckoning. Norms are read off this.
     deeds_done: std::collections::BTreeMap<PlaceId, [u32; Deed::COUNT]>,
+    /// The ground the world stands on, if it stands on any.
+    surface: Option<Surface>,
+}
+
+/// The solid planet under a populated world.
+///
+/// A still frame of the deep-time stack rather than a running copy of it. The lithosphere
+/// and the climate move on a clock eleven rungs above this one — a megayear is thirty
+/// thousand human lifetimes — so from the point of view of anybody living here the
+/// continents are exactly where they were yesterday and will be exactly there tomorrow.
+/// Running the two together would be spending most of the machine on a coastline nobody
+/// alive will see move.
+///
+/// What this is *for* is the join: it is what makes "where do they live" answerable with
+/// a place on a real planet rather than with a name somebody typed.
+pub struct Surface {
+    pub planet: geo::Lithosphere,
+    pub climate: climate::Climate,
+    pub life: biome::Biosphere,
+}
+
+/// How fine the grid under a populated world is.
+///
+/// Level three: six hundred and forty-two cells, about eight hundred thousand square
+/// kilometres each. Coarse for geophysics and right for this — the question being asked
+/// of it is "which corner of which continent", and a finer grid costs a settling climate
+/// on every world founded, including every one a test founds.
+const SETTLED_GRID: u8 = 3;
+/// How many plates a populated world's planet is broken into.
+const SETTLED_PLATES: usize = 8;
+/// The share of the surface that starts as continent.
+const SETTLED_LAND: f32 = 0.40;
+/// How far into its star's life a populated world is when its people arrive, in
+/// gigayears.
+///
+/// Four and a half: a planet of roughly the present Earth's age, under roughly the
+/// present sun. Anything much younger is a world whose thermostat is still working
+/// through a thick carbon dioxide atmosphere, which is interesting and is not the
+/// question people are being asked about.
+const SETTLED_AGE_GYR: f64 = 4.5;
+/// How far apart two settlements must be, in rings of the grid.
+///
+/// One ring. At this grid a ring is most of a country, and neighbouring cells would be
+/// the same place.
+const SETTLEMENTS_APART: usize = 1;
+/// How many neighbourhoods a world is founded with.
+const QUARTERS: usize = 5;
+
+impl Surface {
+    /// Make the ground a world will stand on.
+    ///
+    /// Drawn and solved once, not run. Running it was tried and measured, because the
+    /// worlds this founds carry several thousand parts per million of carbon dioxide and
+    /// that looked like a thermostat that had not been given time. It is not. Six hundred
+    /// megayears of plates and climate leaves the same planet at fifty-eight hundred parts
+    /// per million rather than fewer, because what the thermostat is regulating against is
+    /// *weatherable land*, and six hundred megayears of erosion cuts the land from a third
+    /// of the surface to a sixth. The carbon dioxide is high because there is little rock
+    /// to draw it down, which is the carbonate–silicate cycle working rather than failing.
+    /// A hot, wet, low-relief world with a Cambrian atmosphere is a legitimate planet, and
+    /// it is what these seeds produce.
+    ///
+    /// What running it *did* cost was thirteen seconds per world at the grid the plates
+    /// need, on every world any test founds. That is the trade, and it is written down
+    /// here so it does not have to be discovered twice.
+    pub fn genesis(seed: WorldSeed) -> Surface {
+        let mut rng = seed.stream(Domain::Terrain, 0, 0);
+        let mut planet =
+            geo::Lithosphere::genesis(SETTLED_GRID, SETTLED_PLATES, SETTLED_LAND, &mut rng);
+        // One step before the climate is asked anything: the carbon cycle is fed by
+        // volcanism along plate boundaries, and a planet whose boundaries have not been
+        // worked out yet has no volcanoes, no carbon dioxide, and freezes solid.
+        planet.step_myr(4.0, &mut rng);
+        let climate = climate::Climate::genesis(
+            &planet,
+            SETTLED_AGE_GYR,
+            climate::insolation::EARTH_OBLIQUITY,
+        );
+        let life = biome::Biosphere::read(&planet, &climate);
+        Surface {
+            planet,
+            climate,
+            life,
+        }
+    }
 }
 
 impl World {
@@ -323,7 +408,13 @@ impl World {
             watched: std::collections::BTreeSet::new(),
             arrivals: std::collections::BTreeMap::new(),
             deeds_done: std::collections::BTreeMap::new(),
+            surface: None,
         }
+    }
+
+    /// The planet this world's people stand on, if they stand on one.
+    pub fn surface(&self) -> Option<&Surface> {
+        self.surface.as_ref()
     }
 
     pub fn now(&self) -> Time {
@@ -499,9 +590,12 @@ impl World {
 
     /// Populate a world with an Earth-like planet, some neighbourhoods, and people.
     ///
-    /// The neighbourhoods start identical and unremarkable. Everything that
-    /// distinguishes them afterwards — which becomes the enclave, which the slum — comes
-    /// out of who ends up living in them, not out of anything written here.
+    /// The neighbourhoods no longer start identical, and the difference between them at
+    /// founding is entirely the ground: a settlement on a fertile coast is a better place
+    /// to be than one on a cold plateau on the day both are founded, and nothing was
+    /// authored to make it so. Everything that distinguishes them *afterwards* — which
+    /// becomes the enclave, which the slum — still comes out of who ends up living in
+    /// them, which is the loop that was already there.
     pub fn genesis(seed: WorldSeed, population: usize) -> World {
         let mut world = World::new(seed);
         let earth = world.add_planet(Planet::earth());
@@ -509,16 +603,41 @@ impl World {
             .scheduler
             .schedule_at(FOUNDING, Task::PlanetAwakens(earth));
 
-        let quarters = [
-            "Northside",
-            "The Wharf",
-            "Elmhurst",
-            "Kingsfield",
-            "Lowgate",
-        ];
-        let capacity = ((population / 3).max(4)) as u32;
-        for name in quarters {
-            world.places.insert(Place::new(name, capacity));
+        // Make the ground first. Neither the people nor the places exist yet, so nothing
+        // can have influenced where the continents ended up — which is the direction
+        // causation has to run for a world to be somewhere rather than about somewhere.
+        let surface = Surface::genesis(seed);
+        let mut naming = seed.stream(Domain::Naming, 0, 0);
+        let sites = settlement::survey(
+            &surface.planet,
+            &surface.climate,
+            &surface.life,
+            QUARTERS,
+            SETTLEMENTS_APART,
+            &mut naming,
+        );
+        world.surface = Some(surface);
+
+        // Founding capacity is the same total housing as before, split by how good the
+        // ground is rather than evenly — so the fertile coast is the big town and the
+        // plateau is the hamlet, before anybody has moved anywhere.
+        let total = (population.max(12) / 3).max(4) as f32 * QUARTERS as f32;
+        let strength: f32 = sites.iter().map(|s| s.habitability).sum::<f32>().max(1e-6);
+        for site in &sites {
+            let share = (total * site.habitability / strength).round().max(4.0) as u32;
+            world
+                .places
+                .insert(Place::on(&site.name, share, site.terrain.clone()));
+        }
+        // A planet with no habitable land is a possible planet. Its people have to live
+        // somewhere all the same, so the abstract quarters are the fallback rather than
+        // the default.
+        if world.places.is_empty() {
+            for name in ["Northside", "The Wharf", "Elmhurst", "Kingsfield", "Lowgate"] {
+                world
+                    .places
+                    .insert(Place::new(name, ((population / 3).max(4)) as u32));
+            }
         }
         let place_ids: Vec<PlaceId> = world.places.ids().collect();
 
@@ -2333,5 +2452,129 @@ mod tests {
                 .any(|(_, p)| p.is_alive() && p.stage(now) == LifeStage::Elder),
             "people should have aged into their sixties"
         );
+    }
+
+    // ── the join: people standing on a planet ────────────────────────────────────
+
+    #[test]
+    fn a_world_stands_on_a_planet() {
+        let world = World::genesis(WorldSeed::from_u128(0x101), 20);
+        let surface = world.surface().expect("a founded world has ground under it");
+        assert!(surface.planet.land_fraction() > 0.0, "a planet with no land");
+        assert!(surface.planet.grid().len() > 100);
+        // And it is a planet somebody could live on rather than a snowball or a furnace.
+        let mean = surface.climate.mean_temperature_c(&surface.planet);
+        assert!(
+            (-10.0..45.0).contains(&mean),
+            "the world was founded on a planet at {mean:.1} °C"
+        );
+    }
+
+    #[test]
+    fn every_quarter_stands_on_dry_land_in_one_country() {
+        let world = World::genesis(WorldSeed::from_u128(0x102), 30);
+        let surface = world.surface().unwrap();
+        let cells: Vec<u32> = world
+            .places
+            .iter()
+            .filter_map(|(_, p)| p.terrain.as_ref().map(|t| t.cell))
+            .collect();
+        assert_eq!(cells.len(), world.places.len(), "a quarter with no ground");
+
+        for &cell in &cells {
+            assert!(surface.planet.is_land(cell), "cell {cell} is under water");
+            assert!(!surface.life.biome(cell).is_marine());
+        }
+        // Neighbourhoods of one society, not five civilisations sharing a chronicle.
+        for &cell in &cells[1..] {
+            let apart = surface
+                .planet
+                .grid()
+                .distance_km(cells[0], cell, geo::EARTH_RADIUS_KM);
+            assert!(apart < 6_000.0, "a quarter {apart:.0} km from the others");
+        }
+    }
+
+    #[test]
+    fn two_worlds_are_founded_on_two_different_planets() {
+        // The non-determinism promise, now reaching all the way down to the ground: a
+        // new world is a new planet with different continents and differently named
+        // towns on them, not the same map with the names shuffled.
+        let a = World::genesis(WorldSeed::from_u128(0x201), 20);
+        let b = World::genesis(WorldSeed::from_u128(0x202), 20);
+
+        let names = |w: &World| -> Vec<String> {
+            w.places.iter().map(|(_, p)| p.name.clone()).collect()
+        };
+        assert_ne!(names(&a), names(&b));
+
+        let land = |w: &World| w.surface().unwrap().planet.land_fraction();
+        assert_ne!(land(&a), land(&b), "two worlds got the identical planet");
+    }
+
+    #[test]
+    fn the_ground_does_not_move_while_people_live_on_it() {
+        // A still frame, deliberately: the continents move on a clock eleven rungs above
+        // this one, and a century of human history is not a measurable interval to them.
+        let mut world = World::genesis(WorldSeed::from_u128(0x203), 20);
+        let before: Vec<f32> = world
+            .surface()
+            .unwrap()
+            .planet
+            .grid()
+            .cells()
+            .map(|c| world.surface().unwrap().planet.height_above_sea_m(c))
+            .collect();
+        world.record_only(Salience::Pivotal);
+        world.run_for(Duration::from_years(80));
+        let after: Vec<f32> = world
+            .surface()
+            .unwrap()
+            .planet
+            .grid()
+            .cells()
+            .map(|c| world.surface().unwrap().planet.height_above_sea_m(c))
+            .collect();
+        assert_eq!(before, after);
+    }
+
+    #[test]
+    fn the_ground_shapes_the_quarters_it_holds() {
+        // Not that the best-sited quarter is the richest — that is up to who lives there
+        // — but that the ground is doing something rather than being decoration.
+        let world = World::genesis(WorldSeed::from_u128(0x204), 40);
+        let mut best: Option<(&society::Terrain, f32)> = None;
+        let mut worst: Option<(&society::Terrain, f32)> = None;
+        for (_, place) in world.places.iter() {
+            let Some(terrain) = &place.terrain else {
+                continue;
+            };
+            let ceiling = terrain.prosperity_ceiling();
+            if best.is_none_or(|(_, b)| ceiling > b) {
+                best = Some((terrain, ceiling));
+            }
+            if worst.is_none_or(|(_, b)| ceiling < b) {
+                worst = Some((terrain, ceiling));
+            }
+        }
+        let (_, high) = best.unwrap();
+        let (_, low) = worst.unwrap();
+        assert!(
+            high > low + 0.03,
+            "every quarter sits on identical ground ({low:.3}..{high:.3})"
+        );
+
+        // And a quarter's opportunity is held under what its ground allows.
+        for (_, place) in world.places.iter() {
+            let Some(terrain) = &place.terrain else {
+                continue;
+            };
+            let allowed = 0.15 + 0.85 * terrain.prosperity_ceiling();
+            assert!(
+                place.env.job_opportunity <= allowed + 1e-4,
+                "{} offers more work than its ground has",
+                place.name
+            );
+        }
     }
 }

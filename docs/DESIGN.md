@@ -125,6 +125,7 @@ ecology/     Vegetation fields, animal demes, trophic web, dispersal, disturbanc
 evolution/   Selection, drift, mutation, gene flow, speciation, extinction, phylogeny
 person/      Humans: identity, personality, skills, memory, intent
 society/     Households, kinship, places, environment vectors, settlements, economy
+settlement/  The join: habitability, where people found towns, and what the ground does
 chronicle/   Append-only event log, indices, compaction, biography & history assembly
 observer/    Read-only query API at every scale
 sim/         Systems + scheduler; owns `World`
@@ -1145,7 +1146,7 @@ only after the fact; all three were found by drawing the planet and looking at i
 | Phase | Deliverable |
 | --- | --- |
 | **11** ◑ | `evolution`: adaptation with a tracking speed limit, allopatric speciation, diversity-dependent diversification, extinction, phylogeny. Gene flow and molecular drift are not modelled — species traits move by a rule rather than by inheritance from individuals |
-| **12** ◑ | Deep-time integration: adaptive stepping ✓ (the lithosphere subdivides its own step so no plate ever jumps a cell), supercontinent cycle ✓, orbital forcing ✓ as machinery — obliquity varies on its 41 kyr cycle, which megayear steps cannot resolve and honestly return the mean of. Keyframing and a named mass-extinction mechanism are not built; extinction pulses do emerge from climate shocks |
+| **12** ◑ | Deep-time integration: adaptive stepping ✓ (the lithosphere subdivides its own step so no plate ever jumps a cell), supercontinent cycle ✓, orbital forcing ✓ as machinery — obliquity varies on its 41 kyr cycle, which megayear steps cannot resolve and honestly return the mean of. **The join ✓** — `settlement` puts neighbourhoods on real grid cells and the ground shapes them; the planet under a populated world is a still frame, and people at deep-time resolution is what remains. Keyframing and a named mass-extinction mechanism are not built; extinction pulses do emerge from climate shocks |
 | **13** ✗ | Globe + phylogeny rendering (`wgpu`), timeline scrubbing, continuous zoom. **Superseded.** The self-contained HTML viewer does the job better in every way that matters here — five layers, a time scrubber, hover readout, and a file anybody can open — and it is what actually found four of the modelling bugs in Phase 4. A `wgpu` client would be a second renderer for the same data |
 | **14** | Economy, culture, technology; `cosmos`; save/load; profiling. Determinism goldens exist in the form that survives: every subsystem tests that the same seed produces the same result, self-comparing rather than pinned to a constant, so a legitimate change does not require re-blessing a hash |
 
@@ -1161,12 +1162,66 @@ The one wire that runs *back down* is rainfall into erosion, and it had to exist
 without it the continents wear away, the carbon thermostat loses the rock it regulates
 with, and the planet cooks.
 
-**What is still missing is the join.** People live in abstract neighbourhoods and the
-planet has no people on it. Giving a place a grid cell is the remaining piece of Phase 12
-and it is a small change to make and a large one to get right: the two halves run at
-scales eleven rungs apart, and connecting them means deciding what a person is when the
-clock is striding a megayear at a time. The level-of-detail machinery in §6 exists for
-exactly that and has not yet been asked to do it.
+**The join, in the event.** People stand somewhere now. A world's neighbourhoods are no
+longer five authored names with a capacity divided out of the founding population; they
+are cells of a real planet's grid, chosen because somebody could live there, named after
+what the ground is, and shaped by it. `settlement` is where the two halves meet, and it
+is the only crate that can see both.
+
+The projection down is **four numbers wide**, and that is the decision worth recording.
+The planet knows elevation, crustal thickness, sediment depth, sea level, temperature,
+rainfall, ice cover, net primary production and which of fifteen biomes each cell is. A
+human life turns on almost none of it. It turns on whether the land feeds you, whether
+anyone can reach you, how hard the year is, and how many of you the place will hold — so
+those four cross and the rest stays on the planet's side. Handing `society` a grid and a
+climate instead would have made every rule about neighbourhoods also a rule about
+geophysics.
+
+Habitability is a **product** rather than a weighted sum: a place has to be survivable,
+and fed, and reachable, all three at once. A sum lets a spectacular score on one term
+carry a zero on another, which is how a capital city ends up on an ice cap because the
+fishing offshore is excellent.
+
+Three things were wrong and the map found two of them.
+
+*The five quarters came out on three continents* — 128° east, 75° west, 165° east. They
+are neighbourhoods of one society, not five civilisations sharing a chronicle. Sites are
+now chosen within one country around the single best cell, so what varies between them is
+the difference between good ground at the centre and poorer ground at the edges, which is
+what a region is.
+
+*Fertility saturated.* A hard ceiling at what a temperate forest produces meant every
+decent site scored exactly one and the term distinguished nothing. It saturates now
+instead, which keeps the shape that is true — bare rock to thin pasture is worth far more
+than good land to better — without running out of range.
+
+*Terrain capped affluence, and the balance harness caught it.* Affluence is what the
+residents have; it is what their children's upbringing is read off, and what decides where
+those children can afford to live. Capping it puts the ground inside that loop: a poor site
+drove its residents poorer, which drove their children poorer, and three of five quarters
+fell to an affluence of one part in twenty-five with the heritable share of outcomes down
+to 0.03. Land does not confiscate wages. It limits **what work there is**, and income
+follows from that through people — which the loop already models. With that corrected the
+shared-environment and luck shares both came back inside their targets, and more of the
+world is lived in than before.
+
+A fourth thing looked wrong and was not. These worlds carry several thousand parts per
+million of carbon dioxide, which reads as a thermostat that was never given time. It was
+measured rather than assumed: six hundred megayears of plates and climate leaves the same
+planet *higher*, at fifty-eight hundred, because what the thermostat regulates against is
+weatherable land and six hundred megayears of erosion cuts the land from a third of the
+surface to a sixth. The carbon dioxide is high because there is little rock to draw it
+down. That is the carbonate–silicate cycle working. The cost of finding out was thirteen
+seconds per world at the grid the plates need, on every world any test founds, and it is
+written into the code so it is not discovered twice.
+
+**What is still missing** is the other half of the join: people at deep-time resolution.
+The planet under a populated world is a still frame — solved once, and deliberately, since
+a megayear is thirty thousand lifetimes and running the two together spends the machine on
+a coastline nobody alive will see move. Letting a world watch its own continents drift
+means deciding what a person *is* when the clock strides a megayear at a time. The
+level-of-detail machinery in §6 exists for exactly that and has still not been asked to
+do it.
 
 **Recommended tactic:** after M1, build one deliberately crude vertical slice through
 every scale — a blobby planet, three PFTs, two animal species, a million years — before

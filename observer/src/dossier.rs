@@ -46,6 +46,13 @@ pub struct Whereabouts {
     pub schooling: f32,
     /// How many people live there.
     pub residents: usize,
+    /// Where on the planet this is, if the world has a planet under it.
+    ///
+    /// The join, from the observer's side. "She lives in Thornhythe, a well-off quarter"
+    /// was as far as this went; it now finishes the sentence — on a temperate coast at
+    /// forty-one degrees north, ninety metres above the sea, on ground good enough that
+    /// the quarter being well-off is not a coincidence.
+    pub ground: Option<String>,
 }
 
 /// Who somebody's people are.
@@ -145,6 +152,7 @@ pub fn dossier<'a>(world: &'a World, id: PersonId) -> Option<Dossier<'a>> {
                 .flat_map(|(_, h)| h.members.iter())
                 .filter(|m| world.people.get(**m).is_some_and(|p| p.is_alive()))
                 .count(),
+            ground: place.terrain.as_ref().map(|t| t.describe()),
         })
     });
 

@@ -9,9 +9,11 @@
 //! system that iterates one would quietly break the promise that a seed replays exactly.
 
 pub mod place;
+pub mod terrain;
 
 use person::PersonId;
 pub use place::{Archetype, Census, EnvironmentVector, Place, PlaceId};
+pub use terrain::Terrain;
 use sim_core::{Arena, Id, Time};
 use std::collections::{BTreeMap, BTreeSet};
 
