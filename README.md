@@ -217,8 +217,29 @@ each quarter named after what it stands on:
 Nothing there is authored. The ground bounds what work there is, whether anyone passes
 through, and how hard the year is — and then who lives there decides the rest.
 
-Next is people at deep-time resolution: the planet under a populated world is still a
-single frame, because a megayear is thirty thousand lifetimes.
+### People at the pace of continents
+
+`--ages 500` runs a populated world for half a gigayear. The planet moves first and knows
+nothing about the people on it; they find out what their ground is afterwards.
+
+```
+── what the planet did to them ──
+  827 settlements founded, 790 lost
+   653 drowned
+    22 frozen
+   106 parched
+     9 thrown up
+```
+
+Nobody is anybody at this resolution — a megayear is thirty thousand lifetimes — so a
+people is a number in a place with a memory of where it came from. Population tracks
+habitable area: fifty-seven million across a quarter of the surface, twenty-five million
+across a tenth after a glaciation takes the temperate belt. Not one settlement standing at
+the end was founded in the first four hundred megayears.
+
+That five sixths of all losses are *drownings* is the part nothing aimed at. The best
+ground to live on is coastal, because the sea is a road — and coastal is what the sea
+takes back.
 
 ## Roadmap
 

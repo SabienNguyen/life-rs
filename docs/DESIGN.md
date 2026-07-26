@@ -1305,13 +1305,28 @@ down. That is the carbonate–silicate cycle working. The cost of finding out wa
 seconds per world at the grid the plates need, on every world any test founds, and it is
 written into the code so it is not discovered twice.
 
-**What is still missing** is the other half of the join: people at deep-time resolution.
-The planet under a populated world is a still frame — solved once, and deliberately, since
-a megayear is thirty thousand lifetimes and running the two together spends the machine on
-a coastline nobody alive will see move. Letting a world watch its own continents drift
-means deciding what a person *is* when the clock strides a megayear at a time. The
-level-of-detail machinery in §6 exists for exactly that and has still not been asked to
-do it.
+**People at deep time, in the event.** The other half of the join, and the question it
+turned on — what a person *is* when the clock strides a megayear — has a short answer once
+written down: **they are not anybody**. A megayear is thirty thousand lifetimes. There is
+no individual at that resolution, and what survives the projection upward is a *folk*: a
+number of people, in a place, with a memory of where they came from. That is the §6
+level-of-detail move taken one rung further, and `sim::deep` is it.
+
+The order is the whole design. The planet steps *first*, with no knowledge that anybody is
+on it; the people are then told what their ground is now. Causation runs one way, so
+everything that happens to them is a consequence rather than a rule — and it reaches them
+through exactly one channel, the habitability of their cell, recomputed each step.
+
+Half a gigayear of one world, at level three: **827 settlements founded and 790 lost.**
+Six hundred and fifty-three drowned, a hundred and six dried out, twenty-two froze, nine
+were thrown up by an orogeny. Population tracks habitable area — fifty-seven million people
+across a quarter of the surface early on, twenty-five million across a tenth after a
+glaciation at 432 Myr took the temperate belt. Not one settlement standing at the end was
+founded before 416 Myr; the world outlived every one of the original thirty-seven.
+
+That drowning is five sixths of all losses is the nicest thing to fall out of it, and
+nothing aimed at it. The best ground to live on is coastal — the sea is a road, so reach is
+a third of what makes a site good — and coastal is exactly what the sea takes back.
 
 **Recommended tactic:** after M1, build one deliberately crude vertical slice through
 every scale — a blobby planet, three PFTs, two animal species, a million years — before

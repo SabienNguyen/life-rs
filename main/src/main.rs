@@ -37,6 +37,8 @@ options:
   --html           write a self-contained page you can open in a browser
   --globe <myr>    run the solid planet for this many megayears instead, and
                    write a page you can scrub through
+  --ages <myr>     run a *populated* world for this many megayears: the planet
+                   moves, and the people on it settle and fail as it does
   --grid <level>   how fine the planet's grid is (default: 4, ~450 km cells)
   --quiet          print only the closing summary
   -h, --help       this message
@@ -54,6 +56,7 @@ struct Options {
     json: bool,
     html: bool,
     globe: Option<f64>,
+    ages: Option<f64>,
     grid: u8,
     quiet: bool,
 }
@@ -72,6 +75,7 @@ impl Default for Options {
             json: false,
             html: false,
             globe: None,
+            ages: None,
             grid: 4,
             quiet: false,
         }
@@ -95,6 +99,14 @@ fn main() -> ExitCode {
     // a megayear at a time rather than fifteen minutes.
     if let Some(myr) = options.globe {
         println!("{}", run_globe(&options, myr));
+        return ExitCode::SUCCESS;
+    }
+
+    // A populated world at the pace of its planet. No individuals — a megayear is thirty
+    // thousand lifetimes — but real people in real places, settling and failing as the
+    // ground under them changes.
+    if let Some(myr) = options.ages {
+        run_ages(&options, myr);
         return ExitCode::SUCCESS;
     }
 
@@ -282,6 +294,86 @@ fn print_dossier(world: &mut World) {
     println!();
 }
 
+/// Run a populated world at the pace of its planet, and narrate what became of it.
+fn run_ages(options: &Options, myr: f64) {
+    use sim::deep::{Ages, Epoch};
+
+    let mut rng = options.seed.stream(Domain::Terrain, 42, 0);
+    let mut ages = Ages::begin(options.seed, sim::Surface::genesis(options.seed));
+
+    println!("world {}", options.seed);
+    println!("{}\n", render::sky(&ages.surface).join("\n"));
+    println!(
+        "  {} people in {} settlements at the start\n",
+        ages.souls(),
+        ages.folk.len()
+    );
+
+    ages.run_myr(myr, 4.0, &mut rng);
+
+    println!("── {:.0} megayears later ──", ages.myr());
+    for line in render::ground_of(&ages.surface) {
+        println!("{line}");
+    }
+    println!();
+
+    if ages.folk.is_empty() {
+        println!("  nobody is left. the world outlived them.\n");
+    } else {
+        println!("── who is left ──");
+        println!(
+            "  {:<14} {:>10} {:>8} {:>9}  where",
+            "people", "souls", "founded", "ground"
+        );
+        let mut standing: Vec<&sim::deep::Folk> = ages.folk.iter().collect();
+        standing.sort_by_key(|f| std::cmp::Reverse(f.souls));
+        for folk in standing.iter().take(12) {
+            println!(
+                "  {:<14} {:>10} {:>7.0}M {:>9.2}  {}",
+                folk.name,
+                folk.souls,
+                folk.founded_myr,
+                folk.best_ground,
+                ages.surface.life.biome(folk.cell).label(),
+            );
+        }
+        if standing.len() > 12 {
+            println!("  … and {} more", standing.len() - 12);
+        }
+        println!();
+    }
+
+    // What the planet did to them, counted by cause.
+    let mut by_cause: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+    for happened in &ages.history {
+        if let Epoch::Abandoned { why, .. } = happened {
+            *by_cause.entry(why.label()).or_insert(0) += 1;
+        }
+    }
+    println!("── what the planet did to them ──");
+    println!("  {} settlements founded, {} lost", ages.ever, ages.lost);
+    for (why, count) in &by_cause {
+        println!("  {count:>4} {why}");
+    }
+    println!();
+
+    // The shape of it, as a series.
+    println!("── the record ──");
+    println!("  {:>8} {:>11} {:>6} {:>9} {:>8}", "myr", "souls", "towns", "habitable", "mean °C");
+    let step = (ages.readings.len() / 14).max(1);
+    for reading in ages.readings.iter().step_by(step) {
+        println!(
+            "  {:>8.0} {:>11} {:>6} {:>8.1}% {:>8.1}",
+            reading.myr,
+            reading.souls,
+            reading.settlements,
+            reading.habitable * 100.0,
+            reading.mean_temperature_c,
+        );
+    }
+    println!("\n  replay with --seed {} --ages {myr:.0}", options.seed);
+}
+
 /// Run the lithosphere and render its history.
 ///
 /// Sampled at a fixed number of points rather than every step: a page carrying five
@@ -359,6 +451,16 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Option<Options>, Str
             "--balance" => options.balance = true,
             "--json" => options.json = true,
             "--html" => options.html = true,
+            "--ages" => {
+                let raw = value()?;
+                let myr: f64 = raw
+                    .parse()
+                    .map_err(|e| format!("bad megayear count {raw:?}: {e}"))?;
+                if !myr.is_finite() || myr <= 0.0 {
+                    return Err("--ages needs a positive number of megayears".to_string());
+                }
+                options.ages = Some(myr);
+            }
             "--globe" => {
                 let raw = value()?;
                 let myr: f64 = raw

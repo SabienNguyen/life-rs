@@ -310,6 +310,33 @@ pub fn ground(world: &World) -> Vec<String> {
     let Some(surface) = world.surface() else {
         return vec!["  (this world has no planet under it)".to_string()];
     };
+    let mut lines = sky(surface);
+    lines.extend(ground_of(surface));
+    lines
+}
+
+/// The star and the orbit, in two lines.
+pub fn sky(surface: &sim::Surface) -> Vec<String> {
+    let star = surface.star();
+    let orbit = surface.orbit();
+    vec![
+        format!(
+            "  {} {} star of {:.2} solar masses, {:.2} Gyr old with {:.1} Gyr left",
+            star.article(),
+            star.colour(),
+            star.mass_solar,
+            star.age_gyr,
+            star.remaining_gyr(),
+        ),
+        format!(
+            "  {}",
+            cosmos::habitability::describe(&star, &orbit)
+        ),
+    ]
+}
+
+/// The planet itself, in three lines.
+pub fn ground_of(surface: &sim::Surface) -> Vec<String> {
     let planet = &surface.planet;
     let climate = &surface.climate;
     let star = surface.star();

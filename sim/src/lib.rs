@@ -12,6 +12,10 @@
 //! the pace of what they are doing (minutes to hours), and age at the pace of a year.
 //! Neither polls.
 
+pub mod deep;
+#[cfg(test)]
+mod deep_tests;
+
 use genetics::{Architecture, FounderPool};
 use person::{Cause, Deed, FERTILE_FROM, Person, PersonId, Situation};
 use planet::{DayPhase, Planet, PlanetId};
@@ -334,6 +338,33 @@ impl Surface {
     /// This world's orbit.
     pub fn orbit(&self) -> cosmos::Orbit {
         self.system.worlds[self.world]
+    }
+
+    /// Let the planet get on with it.
+    ///
+    /// Plates move, mountains rise and wear down, the sea comes and goes, the star
+    /// brightens, the thermostat answers, and the biomes are re-read off the result. This
+    /// is the same loop the deep-time globe runs; what is new is that there are people
+    /// standing on it while it happens.
+    ///
+    /// The star ages too, which is the part that eventually ends everything: a world stays
+    /// habitable for a finite time and this is the mechanism that runs it out.
+    pub fn step_myr(&mut self, dt: f32, rng: &mut Rng) {
+        debug_assert!(dt > 0.0, "time only runs forwards");
+        self.planet.step_myr(dt, rng);
+        self.system.star.age_gyr += dt as f64 / 1000.0;
+        self.climate.step_myr(&self.planet, dt, rng);
+        // The one wire that runs back down the stack: rivers cut in proportion to how much
+        // falls on them, and only the climate knows that. Without it a desert wears down as
+        // fast as a rainforest and the continents retire into the sea.
+        let runoff: Vec<f32> = self
+            .planet
+            .grid()
+            .cells()
+            .map(|c| self.climate.rain_mm(c) / climate::moisture::REFERENCE_RAIN_MM)
+            .collect();
+        self.planet.set_runoff(&runoff);
+        self.life = biome::Biosphere::read(&self.planet, &self.climate);
     }
 }
 
