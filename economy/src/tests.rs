@@ -412,3 +412,62 @@ fn the_malthusian_trap_closes() {
         "and at that size they are no better off than they started"
     );
 }
+
+#[test]
+fn a_place_that_cannot_feed_itself_says_so() {
+    // The reading that was being thrown away. `prosperity` clamps at zero, so it cannot
+    // tell a place in famine from one that just breaks even; `want` is the difference.
+    let crowded = produce(&land(0.05, 0.5, 0.2), 400.0);
+    let barely = produce(&land(0.85, 0.5, 0.2), 1.0);
+
+    assert!(crowded.want() > 0.0, "a place four hundred deep on bad ground is not hungry");
+    assert_eq!(
+        crowded.prosperity(),
+        barely.prosperity().min(crowded.prosperity()),
+        "prosperity cannot tell famine from sufficiency, which is why `want` exists",
+    );
+    assert_eq!(
+        produce(&land(0.85, 0.5, 0.2), 1.0).want(),
+        0.0,
+        "a place with room to spare is hungry",
+    );
+}
+
+#[test]
+fn hunger_deepens_as_a_place_fills_up() {
+    // Diminishing returns to labour, felt as hunger. Cobb-Douglas puts output per head on
+    // `workers^-0.35`, so past the point the land can carry, every extra pair of hands
+    // makes the shortfall worse rather than better.
+    let thin = land(0.10, 0.5, 0.2);
+    let mut last = -1.0;
+    for workers in [50.0, 100.0, 200.0, 400.0, 800.0] {
+        let want = produce(&thin, workers).want();
+        assert!(
+            want > last,
+            "{workers} workers wanted {want:.3}, no worse than the {last:.3} before them",
+        );
+        last = want;
+    }
+    assert!(last < 1.0, "nobody can be short of more than everything they need");
+}
+
+#[test]
+fn trade_feeds_a_place_that_cannot_feed_itself() {
+    // Which is most of the point of trade, and the reason `want` is measured after it.
+    let barren = land(0.06, 0.95, 0.2);
+    let alone = produce(&barren, 300.0);
+    assert!(alone.want() > 0.0);
+
+    // Neighbours well inside what their ground carries, so they have food to sell.
+    let rich = land(0.9, 0.95, 0.1);
+    let together = year(&[
+        (barren.clone(), 300.0),
+        (rich.clone(), 60.0),
+        (rich, 60.0),
+    ]);
+    assert!(
+        together[0].want() < alone.want(),
+        "neighbours with food to sell did not reduce a hungry place's want",
+    );
+}
+

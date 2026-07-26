@@ -1139,11 +1139,36 @@ impl World {
             return;
         }
 
+        // What the ground failed to grow, felt by the people standing on it. Applied to
+        // everybody once a year, at both tiers alike — a hunger that only reached the
+        // people somebody happened to be watching would be the same class of bug as the
+        // one `arrive_from_coarse` exists to prevent.
+        let want = self
+            .society
+            .place_of(id)
+            .and_then(|place| self.places.get(place))
+            .map(|place| place.want)
+            .unwrap_or(0.0);
+
         let mut rng = self.moment_stream(Domain::Demography, id.to_bits(), at);
         let Some(subject) = self.people.get_mut(id) else {
             return;
         };
         if !subject.is_alive() {
+            return;
+        }
+
+        if want > 0.0 {
+            subject.go_hungry(want, at);
+        } else {
+            // The land is feeding them again. Lift the ceiling, and let the ordinary
+            // recovery do the rest at its own pace — a famine that ends does not restore
+            // anybody instantly.
+            subject.eat_well();
+        }
+        if !subject.is_alive() {
+            self.record_death(at, id, Cause::Deprivation);
+            self.release(id);
             return;
         }
 
@@ -1425,6 +1450,19 @@ impl World {
         // choice, but through something. This is the negative feedback the design has
         // wanted since Phase 2, and it is what stops a population running past its land
         // and levelling every difference between places by hunger.
+        // `economy::births_relative` belongs here and is still not called, and this is now
+        // the *fifth* centring measured rather than the fourth. It was switched on against
+        // the world's own household-weighted mean — the most defensible centre there is —
+        // on the expectation that the earlier four verdicts were confounded, because every
+        // one of them was measured while the detail budget was quietly culling people.
+        //
+        // They were not confounded. On a sound world it still culls: with the check on, a
+        // world of sixty founders was down to 46 souls at year ninety where it had 157
+        // without it, and 15 at year one hundred and eighty where it had 629. See §21.2 for
+        // all six seeds. Prosperity has too little spread between places for a multiplier
+        // of this strength to be anything but noise with a downward bias, and the honest
+        // conclusion after five attempts is that fertility is the wrong lever: what stops a
+        // population is that the land will not feed it, and that is `Ledger::want`.
         let mut rng = self.moment_stream(Domain::Demography, id.to_bits() ^ 0xbabe, at);
         if !rng.chance(f64::from(CONCEPTION_PER_YEAR) * f64::from(mother.health().vitality)) {
             return;
@@ -1529,6 +1567,11 @@ impl World {
                 .get(&id)
                 .map(|ledger: &economy::Ledger| ledger.prosperity())
                 .unwrap_or(0.5);
+            // And whether it fed them at all, which prosperity cannot say.
+            census.want = economies
+                .get(&id)
+                .map(|ledger: &economy::Ledger| ledger.want())
+                .unwrap_or(0.0);
 
             if let Some(place) = self.places.get_mut(id) {
                 let before = place.archetype();
@@ -3344,6 +3387,132 @@ mod tests {
             surface.climate.brightness()
         );
         assert!(LIVEABLE_FLUX.contains(&expected), "{expected} is outside the band");
+    }
+}
+
+#[cfg(test)]
+mod the_land_holds {
+    //! A population has to stop somewhere, and the somewhere has to be the ground.
+    //!
+    //! For a long time nothing stopped one. `births_relative` is centred on the world's own
+    //! middle, so it averages one by construction and can only decide *where* children are
+    //! born — a uniformly poorer world gets a multiplier of one everywhere. Crowding acts on
+    //! where households live, not on how many there are. So worlds ran to three and five
+    //! times what their ground would hold and growth accelerated to nearly two per cent a
+    //! year, for ever.
+    //!
+    //! The missing reading was being computed and thrown away: `prosperity` is
+    //! `per_head().max(0)`, so a place in famine reported exactly what a place that just
+    //! broke even reported. `Ledger::want` is that clamp undone.
+
+    use super::*;
+
+    /// What the ceiling costs, across seeds. A measurement, not an assertion.
+    #[test]
+    #[ignore]
+    fn measure_the_ceiling() {
+        println!("{:>7} {:>7} {:>7} {:>7} {:>8}", "seed", "yr90", "yr180", "growth", "want");
+        for seed in [0x220u128, 0x221, 0x222, 0x223, 0x224, 0x225] {
+            let mut world = World::genesis(WorldSeed::from_u128(seed), 60);
+            world.run_for(Duration::from_years(90));
+            let early = world.living();
+            world.run_for(Duration::from_years(90));
+            let late = world.living();
+            let want: f32 = {
+                let lived: Vec<f32> = world
+                    .places
+                    .iter()
+                    .filter(|(id, _)| world.society.households_in(*id).count() > 0)
+                    .map(|(_, p)| p.want)
+                    .collect();
+                if lived.is_empty() { 0.0 } else { lived.iter().sum::<f32>() / lived.len() as f32 }
+            };
+            let growth = (late as f32 / early.max(1) as f32).powf(1.0 / 90.0) - 1.0;
+            println!("{seed:>7x} {early:>7} {late:>7} {:>+6.2}% {want:>8.3}", growth * 100.0);
+        }
+    }
+
+    #[test]
+    fn going_short_costs_people_their_health() {
+        // The mechanism stated where it can be seen, rather than as a claim about where a
+        // population ends up. Whether a *particular* world levels off inside two centuries
+        // depends on how much room its land had to begin with, and asserting a number there
+        // would be asserting a fact about one seed's geography — §21.2 measures six.
+        //
+        // What is always true is the link itself: a place that cannot feed its people leaves
+        // them in worse condition than one that can, and condition is what feeds back into
+        // births and deaths.
+        let mut world = World::genesis(WorldSeed::from_u128(0x222), 60);
+        world.run_for(Duration::from_years(120));
+        let now = world.now();
+
+        let condition = |place: PlaceId| {
+            let people: Vec<f32> = world
+                .society
+                .households_in(place)
+                .flat_map(|(_, h)| h.members.iter())
+                .filter_map(|m| world.people.get(*m))
+                .filter(|p| p.is_alive() && !p.stage(now).is_dependent())
+                .map(|p| p.health().vitality)
+                .collect();
+            (!people.is_empty()).then(|| people.iter().sum::<f32>() / people.len() as f32)
+        };
+
+        let mut lived_in: Vec<(PlaceId, f32, f32)> = world
+            .places
+            .iter()
+            .filter_map(|(id, place)| condition(id).map(|health| (id, place.want, health)))
+            .collect();
+        assert!(lived_in.len() > 1, "only one place is inhabited, nothing to compare");
+
+        lived_in.sort_by(|a, b| a.1.total_cmp(&b.1));
+        let (_, least_want, best_fed) = lived_in[0];
+        let (_, most_want, worst_fed) = *lived_in.last().unwrap();
+        assert!(
+            most_want > least_want,
+            "every inhabited place is equally fed, so this world says nothing",
+        );
+        assert!(
+            worst_fed < best_fed,
+            "the hungriest place ({most_want:.2} short) is in no worse condition \
+({worst_fed:.2}) than the best fed one ({least_want:.2} short, {best_fed:.2})",
+        );
+        // And visibly short of hale, rather than a rounding error away from it. The exact
+        // arithmetic of the ceiling is `person`'s to test; here it is reached through a
+        // year's lag, since a body carries the ceiling set at its last birthday.
+        assert!(
+            worst_fed < 0.9,
+            "the hungriest place is {most_want:.2} short and its people are at {worst_fed:.2}",
+        );
+    }
+
+    #[test]
+    fn hunger_is_what_stops_it_and_it_is_felt_where_the_land_is_thin() {
+        // The mechanism, not just the outcome. Somewhere in a settled world people are
+        // going short, and going short is what closes the fertility gate.
+        let mut world = World::genesis(WorldSeed::from_u128(0x221), 60);
+        world.run_for(Duration::from_years(120));
+
+        let inhabited: Vec<&society::Place> = world
+            .places
+            .iter()
+            .filter(|(id, _)| world.society.households_in(*id).count() > 0)
+            .map(|(_, place)| place)
+            .collect();
+        assert!(!inhabited.is_empty(), "nobody lives anywhere");
+        assert!(
+            inhabited.iter().any(|p| p.want > 0.0),
+            "a world at its ceiling has nobody short of anything",
+        );
+        // And nowhere is so far gone that the model has stopped meaning anything.
+        for place in &inhabited {
+            assert!(
+                place.want < 0.9,
+                "{} is short of {:.2} of everything its people need",
+                place.name,
+                place.want,
+            );
+        }
     }
 }
 

@@ -619,6 +619,68 @@ impl Person {
         self.health.respond_to(self.needs.vital_pressure(), coped);
     }
 
+    /// A year of not having enough, because the place could not grow it.
+    ///
+    /// The positive check, and the only thing in the model that stops a population. Every
+    /// other limit was on where people are born or how crowded a place feels; none of them
+    /// bounds the total, because a world that is uniformly poorer still has an ordinary
+    /// place to be compared against. What bounds it is that land does not yield to wanting
+    /// more of it — past what the ground carries, another pair of hands makes the shortfall
+    /// worse, and people go hungry no matter what anybody decides.
+    ///
+    /// `want` is how far short of feeding one person for a year the place fell, per head,
+    /// after trade. It raises hunger and thirst above what coping can reach — that is the
+    /// whole of the mechanism, and everything downstream is already built: pressure above
+    /// what the body tolerates costs vitality, lost vitality raises frailty and so the
+    /// hazard of dying, and drops a woman below the fertility gate. Malthus's two checks
+    /// out of one number.
+    ///
+    /// Applied once a year to everybody, watched or not, which is deliberate: a hunger that
+    /// only reached the people somebody was looking at would be exactly the bug this
+    /// project has just spent a long time removing from the other direction.
+    pub fn go_hungry(&mut self, want: f32, now: Time) {
+        if !self.is_alive() || want <= 0.0 {
+            return;
+        }
+        // A ceiling on condition, not a year of the needs cycle run at once.
+        //
+        // Routing chronic hunger through `Needs` and `Health::respond_to` does not work,
+        // and the reason is worth writing down because it is the shape that defeated four
+        // earlier attempts at this. That machinery is built for the fine tier, where needs
+        // swing over hours and health answers per *day*. Raising hunger and thirst by a
+        // want of 0.4 puts vital pressure at 0.30 against a tolerance of 0.45 — so the body
+        // *recovers*, and a place forty per cent short of feeding itself is no worse off
+        // than one with food to spare. Push want a little higher and pressure crosses the
+        // tolerance, where a year at three tenths a day of decline kills everybody outright.
+        // Nothing, and then a massacre, with no useful ground between.
+        //
+        // What is true instead is simply that a body cannot be in better condition than its
+        // food allows. `want` is measured in what one person needs for a year, so it maps
+        // straight onto how far below hale that ceiling sits — and everything downstream
+        // already responds: frailty rises with the square of the deficit, conception scales
+        // with vitality, and `is_fertile` stops at a half.
+        //
+        // That last gate is what actually holds a population, and it should be: Malthus's
+        // preventive check is the one that operates in ordinary times. The positive check
+        // is here too, through frailty, but it is weak for the young because the mortality
+        // schedule's baseline hazard is small — which is also true of real famine, where
+        // the collapse in births outruns the rise in deaths.
+        // A standing ceiling rather than a yearly knock. Applied as a one-off it lasted
+        // about a fortnight — the fine tier's recovery runs at five hundredths a day — so
+        // chronic hunger only bit because the mortality and conception rolls happened to
+        // follow it in the same call. That is not a mechanism, it is a coincidence of
+        // ordering, and it would have broken the moment anything moved.
+        self.health.feed((1.0 - want.clamp(0.0, 1.0) * HUNGER_COSTS).max(0.0));
+        if self.health.is_dead() {
+            self.die(now, Cause::Deprivation);
+        }
+    }
+
+    /// A place that feeds its people takes the ceiling off again.
+    pub fn eat_well(&mut self) {
+        self.health.feed(1.0);
+    }
+
     /// Force a need, for tests and for events that act on a person from outside.
     pub fn set_need(&mut self, need: Need, level: f32) {
         self.needs.set(need, level);
@@ -710,6 +772,17 @@ fn stature_of(architecture: &Architecture, genome: &Genome) -> Height {
 /// Measured from finely simulated people rather than chosen: their needs oscillate as
 /// they eat and sleep, and this is roughly where that cycle averages out.
 const COPING: f32 = 0.25;
+
+/// How far below hale a year of going short holds a body, per unit of shortfall.
+///
+/// `want` is in units of what one person needs for a year, so a want of a quarter means a
+/// quarter of a diet missing. At this rate that caps vitality at 0.65; the fertility gate
+/// closes at a want of about 0.36, and nobody survives a want past 0.71.
+///
+/// Calibrated on the one thing that has to be true — that a population *levels off* rather
+/// than growing without bound or collapsing — and the value is recorded rather than chosen.
+/// See §21.2.
+const HUNGER_COSTS: f32 = 1.4;
 
 /// How much a year at this age shapes someone.
 ///
@@ -1169,5 +1242,84 @@ mod tests {
             outlooks.len() >= 2,
             "a population should not share one outlook"
         );
+    }
+}
+
+#[cfg(test)]
+mod hunger {
+    use super::*;
+
+    fn somebody() -> Person {
+        let mut arena: sim_core::Arena<planet::Planet> = sim_core::Arena::new();
+        let home = arena.insert(planet::Planet::earth());
+        let mut rng =
+            sim_core::WorldSeed::from_u128(0x40).stream(sim_core::Domain::Genetics, 0, 0);
+        found(
+            genetics::standard_architecture(),
+            &FounderPool::uniform(),
+            &mut rng,
+            home,
+            Time::ORIGIN,
+            0.0,
+        )
+    }
+
+    #[test]
+    fn a_body_cannot_be_in_better_condition_than_its_food_allows() {
+        let mut person = somebody();
+        assert_eq!(person.health().vitality, 1.0);
+
+        person.go_hungry(0.25, Time::ORIGIN);
+        assert!(
+            (person.health().vitality - (1.0 - 0.25 * HUNGER_COSTS)).abs() < 1e-6,
+            "a quarter short left them at {}",
+            person.health().vitality,
+        );
+    }
+
+    #[test]
+    fn the_ceiling_holds_against_recovery() {
+        // The bug this shape exists to prevent. Recovery runs at five hundredths a day, so
+        // a ceiling applied once and then forgotten is gone inside a fortnight — chronic
+        // hunger would only bite in the instant it was applied.
+        let mut person = somebody();
+        person.go_hungry(0.3, Time::ORIGIN);
+        let hungry = person.health().vitality;
+
+        person.get_by(Time::ORIGIN + Duration::from_years(1));
+        assert!(
+            person.health().vitality <= hungry + 1e-6,
+            "a year of coping mended somebody nobody was feeding: {hungry} then {}",
+            person.health().vitality,
+        );
+    }
+
+    #[test]
+    fn a_famine_that_ends_lets_people_mend() {
+        let mut person = somebody();
+        person.go_hungry(0.4, Time::ORIGIN);
+        let starved = person.health().vitality;
+
+        person.eat_well();
+        person.get_by(Time::ORIGIN + Duration::from_years(1));
+        assert!(
+            person.health().vitality > starved,
+            "the land fed them again and they stayed at {starved}",
+        );
+    }
+
+    #[test]
+    fn going_short_of_everything_is_fatal() {
+        let mut person = somebody();
+        person.go_hungry(1.0, Time::ORIGIN);
+        assert!(!person.is_alive());
+        assert_eq!(person.death().map(|(_, c)| c), Some(Cause::Deprivation));
+    }
+
+    #[test]
+    fn a_place_that_feeds_its_people_costs_them_nothing() {
+        let mut person = somebody();
+        person.go_hungry(0.0, Time::ORIGIN);
+        assert_eq!(person.health().vitality, 1.0);
     }
 }

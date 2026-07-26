@@ -1401,6 +1401,69 @@ life mid-stride and collapsed every world to a dozen people at every budget alik
 the whole thing was invisible to the test suite**, which had 614 passing tests at the time,
 because every one of them ran small enough worlds that the budget never bound.
 
+### 21.2 What stops a population, and what does not
+
+With §21.1 fixed, nothing bounded population at all. Places ran to three and five times what
+their ground would hold, and growth *accelerated* — 0.98%/yr over years 40–80, 1.76%/yr over
+160–200 — with no sign of levelling. The bug had been the only brake, and it worked by
+killing children in demoted quarters.
+
+**Fertility was the wrong lever, and this is the fifth time of asking.** `births_relative`
+was switched on against the world's own household-weighted mean — the most defensible centre
+available — on the explicit expectation that the four earlier verdicts against it were
+confounded, since every one had been measured while the detail budget was culling people.
+They were not confounded. Six seeds, sixty founders, and the check on its own:
+
+| Seed | yr 90 | yr 180 | growth | yr 90 with check | yr 180 with check |
+|---|---|---|---|---|---|
+| 220 | 65 | 187 | +1.18% | 35 | 64 |
+| 221 | 130 | 489 | +1.48% | 105 | 388 |
+| 222 | 141 | 485 | +1.38% | 118 | 471 |
+| 224 | 150 | 590 | +1.53% | 92 | 339 |
+| 225 | 157 | 629 | +1.55% | 46 | 15 |
+
+It halves worlds before hunger ever enters, and it kills the marginal ones. Prosperity does
+not vary enough between places for a multiplier of this strength to be anything but noise
+with a downward bias. `economy::births_relative` stays written, tested, and uncalled, and
+the original judgement stands.
+
+**What does work is that the land will not feed them.** The reading already existed and was
+being discarded: `prosperity` is `per_head().max(0)`, so a place in famine reported exactly
+what a place breaking even reported. `Ledger::want` is that clamp undone — how far short of
+feeding its people a place falls, per head, after trade.
+
+Routing it through `Needs` and `Health::respond_to` does **not** work, and the shape is worth
+recording because it is what defeated the earlier attempts. That machinery answers per *day*.
+A want of 0.4 puts vital pressure at 0.30 against a tolerance of 0.45, so the body recovers
+and famine is free; a little higher and a year at three tenths a day kills everyone outright.
+Nothing, then a massacre, with no useful ground between.
+
+What is true instead is that a body cannot be in better condition than its food allows, so
+`want` sets a **standing ceiling** on vitality (`Health::fed`), and everything downstream
+already responds — frailty rises with the square of the deficit, conception scales with
+vitality, and `is_fertile` stops at a half. It has to be standing rather than applied yearly:
+recovery runs at five hundredths a day, so a one-off ceiling is gone inside a fortnight and
+only bites because the mortality roll happens to follow it in the same call.
+
+| Seed | growth, no hunger | growth, with hunger | want at yr 180 |
+|---|---|---|---|
+| 220 | +1.18% | +1.00% | 0.074 |
+| 221 | +1.48% | +1.14% | 0.104 |
+| 222 | +1.38% | +0.61% | 0.146 |
+| 224 | +1.53% | +0.80% | 0.091 |
+| 225 | +1.55% | +0.44% | 0.105 |
+| 223 | −0.87% | −0.87% | 0.000 |
+
+A brake proportional to how tight the land is, biting hardest exactly where want is highest,
+and culling nobody — the year-90 populations barely move. Seed 223 declines identically in
+every configuration, including with everything switched off: a world that was always going to
+fail, not something the check did.
+
+`HUNGER_COSTS` = 1.4 is calibrated here and the neighbours are measured: at 2.2 and 3.0 the
+extra braking is slight and worlds start collapsing instead (225 goes from +0.44%/yr to
+−2.02% and −2.63%). This is a brake, not a ceiling — a world with room in its land still
+takes more than two centuries to fill it, and that is the honest description.
+
 **Where the model misses its targets, measured.** §15's bands come from the
 behaviour-genetics literature and the model does not meet two of them. Across four seeds at
 about two hundred lives each:

@@ -276,6 +276,12 @@ pub struct Census {
     /// come back round. Computed by `economy` and handed in, because a neighbourhood
     /// should not need to know what a Cobb–Douglas is.
     pub prosperity: f32,
+    /// How far short of feeding its people the place fell, per head. Zero when it managed.
+    ///
+    /// Kept apart from `prosperity` rather than folded into it, because prosperity cannot
+    /// carry it: prosperity is `per_head().max(0)`, so famine and bare sufficiency are the
+    /// same number to it. This is the one that can be negative news.
+    pub want: f32,
 }
 
 impl Default for Census {
@@ -293,6 +299,7 @@ impl Default for Census {
             arrivals: 0,
             deeds: [0; Deed::COUNT],
             prosperity: 0.5,
+            want: 0.0,
         }
     }
 }
@@ -311,6 +318,12 @@ pub struct Place {
     /// conception, a household deciding where to live — happen between reckonings and must
     /// not each rebuild a region's economy to ask one question.
     pub prosperity: f32,
+    /// How far short of feeding its people this place fell at the last reckoning, per head.
+    ///
+    /// Zero for a place that manages, which is most of them most of the time. Kept on the
+    /// place for the same reason `prosperity` is: the things that read it happen between
+    /// reckonings and must not each rebuild a region's economy to ask one question.
+    pub want: f32,
     /// The ground under it, if it stands on any.
     ///
     /// `None` is a place that is not on a map — every world before the join, and every
@@ -348,6 +361,9 @@ impl Place {
             // census defaults there: nought is a claim, and a place nobody has looked at
             // should make none.
             prosperity: 0.5,
+            // Nobody is hungry until a reckoning has looked at the ground and the
+            // headcount together and found otherwise.
+            want: 0.0,
             terrain: None,
         }
     }
@@ -374,6 +390,7 @@ impl Place {
     /// low turnover builds; norms are literally what people did.
     pub fn observe(&mut self, census: &Census) {
         self.prosperity = census.prosperity;
+        self.want = census.want;
         self.build_for(census.households);
         let occupancy = (census.households as f32 / self.capacity as f32).clamp(0.0, 1.5);
 
@@ -599,8 +616,10 @@ mod tests {
             arrivals,
             deeds: [0; Deed::COUNT],
             // An unremarkable economy, so every test written before there was one keeps
-            // meaning what it meant.
+            // meaning what it meant — and one that feeds its people, which is the same
+            // claim about the other half of the ledger.
             prosperity: 0.5,
+            want: 0.0,
         }
     }
 

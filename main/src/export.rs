@@ -252,6 +252,10 @@ fn places(world: &World) -> String {
                     field("households", &format!("{households}")),
                     field("residents", &format!("{residents}")),
                     field("capacity", &format!("{}", place.capacity)),
+                    // How far short of feeding itself the place fell, per head. Zero for
+                    // a place that manages, which is the usual case and the interesting
+                    // exception.
+                    field("want", &num(place.want)),
                     // The ground, so the viewer can say why a quarter is what it is
                     // rather than only that it is.
                     field(

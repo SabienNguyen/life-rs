@@ -112,6 +112,32 @@ impl Ledger {
         }
     }
 
+    /// How far short of feeding its people a place falls, per head, as a fraction of what
+    /// one person needs for a year. Zero when it manages.
+    ///
+    /// This is the *positive* check, and it is the half of Malthus that was missing. The
+    /// other half — `births_relative` — is centred on the world's own middle, so it
+    /// averages one by construction and can only ever decide **where** children are born.
+    /// A world that is uniformly poorer gets a multiplier of one everywhere, which is
+    /// correct for what that function is for and useless as a ceiling. Nothing was stopping
+    /// population at all: places ran to three and five times what their ground would hold,
+    /// growth accelerated to nearly two per cent a year, and it never levelled.
+    ///
+    /// It was being thrown away rather than missing. `prosperity` takes `per_head().max(0)`,
+    /// so a place that cannot feed itself reports exactly what a place that just breaks even
+    /// reports. Everything downstream read prosperity and nothing read this, so famine and
+    /// bare sufficiency were the same number.
+    ///
+    /// Measured after trade, because a place that cannot feed itself but can buy food is not
+    /// hungry — which is most of why trade matters.
+    pub fn want(&self) -> f32 {
+        if self.workers <= 0.0 {
+            0.0
+        } else {
+            (-self.per_head()).max(0.0)
+        }
+    }
+
     /// Whether the place feeds itself.
     pub fn self_sufficient(&self) -> bool {
         self.surplus >= 0.0
