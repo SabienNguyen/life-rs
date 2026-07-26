@@ -717,7 +717,48 @@ impl World {
         }
     }
 
+    /// Hand somebody who has been living coarsely over to the fine tier.
+    ///
+    /// A coarse person's clock is only stamped forward once a year, at their birthday. The
+    /// fine tier's first act is `catch_up`, which accrues every need across the whole span
+    /// since that stamp — so a person who crosses tiers at any other moment is billed for
+    /// up to a year of hunger and thirst in one step, and then charged a year of health
+    /// decline against it. It kills them, and it kills children fastest.
+    ///
+    /// Three ways to cross, and each had to be found separately: a place is promoted, a
+    /// household moves out of a coarse quarter into a fine one, or two people pair and the
+    /// new household takes the *other* one's place.
+    ///
+    /// `from` is where they were, and it is what makes this safe to call. Applying it to
+    /// somebody already being simulated finely wipes a life mid-stride — every world
+    /// collapsed to a dozen souls when this fired on every mover rather than only on the
+    /// ones actually arriving from coarse ground. A person with no place at all is *not*
+    /// coarse: `live_coarsely` skips them, so the fine tier has been running them all
+    /// along.
+    fn arrive_from_coarse(&mut self, at: Time, id: PersonId, from: Option<PlaceId>, into: PlaceId) {
+        if self.detail_of(into) != Detail::Full {
+            return;
+        }
+        if !from.is_some_and(|was| self.detail_of(was) == Detail::Coarse) {
+            return;
+        }
+        let Some(person) = self.people.get_mut(id) else {
+            return;
+        };
+        if !person.is_alive() {
+            return;
+        }
+        // They have been coping, by assumption, right up to this moment. Hand them across
+        // in that state rather than billing them for the assumption.
+        person.get_by(at);
+        self.scheduler.schedule_at(at, Task::PersonActs(id));
+    }
+
     /// Put a place's residents back on the fine schedule.
+    ///
+    /// Everybody here is by definition arriving from the coarse tier, so everybody is
+    /// caught up to the present before being scheduled — see `arrive_from_coarse` for why
+    /// that is load-bearing rather than tidiness.
     fn promote(&mut self, place: PlaceId) {
         self.detail.insert(place, Detail::Full);
         let now = self.scheduler.now();
@@ -727,9 +768,16 @@ impl World {
             .flat_map(|(_, h)| h.members.iter().copied())
             .collect();
         for id in residents {
-            if self.people.get(id).is_some_and(|p| p.is_alive()) {
-                self.scheduler.schedule_at(now, Task::PersonActs(id));
+            let Some(person) = self.people.get_mut(id) else {
+                continue;
+            };
+            if !person.is_alive() {
+                continue;
             }
+            // They have been coping, by assumption, right up to this moment. Hand them to
+            // the fine tier in that state rather than billing them for the assumption.
+            person.get_by(now);
+            self.scheduler.schedule_at(now, Task::PersonActs(id));
         }
     }
 
@@ -1324,15 +1372,20 @@ impl World {
 
         // A new household, with its own character, for the two of them and any
         // children they raise.
-        let inherited_place = self
-            .society
-            .place_of(id)
-            .or_else(|| self.society.place_of(chosen));
+        // Captured before either of them moves into the new household, because moving in
+        // clears where they were — and where they were is exactly what decides whether the
+        // new place is a tier crossing for them.
+        let were = (self.society.place_of(id), self.society.place_of(chosen));
+        let inherited_place = were.0.or(were.1);
         let home = self.society.found_household(at, 0.0);
         self.society.move_in(id, home);
         self.society.move_in(chosen, home);
         if let Some(place) = inherited_place {
             self.society.settle(home, place);
+            // The new household takes one partner's quarter, so the other may have just
+            // crossed out of a coarse one into a fine one.
+            self.arrive_from_coarse(at, id, were.0, place);
+            self.arrive_from_coarse(at, chosen, were.1, place);
         }
         self.society.dissolve_empty();
 
@@ -1864,6 +1917,11 @@ impl World {
 
             self.society.settle(home, best);
             *self.arrivals.entry(best).or_insert(0) += 1;
+            // Moving out of a coarse quarter into a fine one is a tier crossing, and an
+            // unattended one is lethal — see `arrive_from_coarse`.
+            for member in &members {
+                self.arrive_from_coarse(at, *member, current, best);
+            }
             for member in members {
                 if self.people.get(member).is_some_and(|p| p.is_alive()) {
                     // Pivotal, not routine. §14 makes the neighbourhood a child grows
@@ -3286,5 +3344,93 @@ mod tests {
             surface.climate.brightness()
         );
         assert!(LIVEABLE_FLUX.contains(&expected), "{expected} is outside the band");
+    }
+}
+
+#[cfg(test)]
+mod detail_neutrality {
+    //! The level-of-detail machinery must not decide what happens.
+    //!
+    //! §19 calls scale-crossing equivalence the riskiest property in the design, and for a
+    //! long time it was silently false: the same world, same seed, run with different
+    //! amounts of the observer's attention, reached different populations by way of
+    //! different death rates. A budget of 150 finished at 184 souls, 400 at 384, and 2000
+    //! at 990 — and the 400 run lost 141 people in a decade on the way, which read as a
+    //! famine and was actually an accounting error.
+    //!
+    //! Two gaps, both the same shape: a person leaves the coarse tier without being handed
+    //! over, so the fine tier's first act is to bill them for every need across a span
+    //! nobody simulated. One gap opened when a *place* was promoted, the other when a
+    //! *household* moved out of a coarse quarter into an already-fine one.
+
+    use super::*;
+
+    fn starved(world: &World) -> usize {
+        world
+            .people
+            .iter()
+            .filter(|(_, p)| matches!(p.death(), Some((_, Cause::Deprivation))))
+            .count()
+    }
+
+    #[test]
+    fn promoting_a_quarter_does_not_starve_the_people_in_it() {
+        // Let a world settle, put everybody out of detail for a good while, then bring
+        // them all back at once. Nobody has been going hungry — they have been coping, by
+        // assumption — so nobody should die of hunger the moment somebody looks at them.
+        let mut world = World::genesis(WorldSeed::from_u128(0x210), 30);
+        world.run_for(Duration::from_years(2));
+
+        world.set_detail_budget(0);
+        world.run_for(Duration::from_years(4));
+        let before = starved(&world);
+
+        world.set_detail_budget(FULL_DETAIL_BUDGET);
+        world.run_for(Duration::from_years(2));
+
+        assert_eq!(
+            starved(&world),
+            before,
+            "looking at a quarter again killed people in it",
+        );
+        // And they arrive coping rather than at death's door.
+        let now = world.now();
+        for (_, person) in world.people.iter() {
+            if person.is_alive() && !person.stage(now).is_dependent() {
+                assert!(
+                    person.health().vitality > 0.5,
+                    "somebody came back from the coarse tier half dead",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_budget_does_not_decide_the_death_rate() {
+        // The property itself, at the smallest size that still exercises it: one budget too
+        // thin to hold everybody, one that never binds. Deaths by deprivation are the
+        // tell-tale, because a coarse person is by assumption fed.
+        let toll = |budget: usize| {
+            let mut world = World::genesis(WorldSeed::from_u128(0x211), 40);
+            world.set_detail_budget(budget);
+            world.run_for(Duration::from_years(40));
+            (world.living(), starved(&world), world.people.len())
+        };
+
+        let (thin_living, thin_starved, thin_ever) = toll(12);
+        let (ample_living, ample_starved, ample_ever) = toll(4_000);
+
+        assert!(
+            thin_starved <= ample_starved + 2,
+            "a thin budget starved {thin_starved} people against {ample_starved} on an ample one",
+        );
+        // And the world it produces has to be recognisably the same world.
+        let apart = (thin_living as f32 - ample_living as f32).abs() / ample_living.max(1) as f32;
+        assert!(
+            apart < 0.25,
+            "watching fewer people changed the population by {:.0}% \
+({thin_living} against {ample_living}, {thin_ever} and {ample_ever} ever lived)",
+            apart * 100.0,
+        );
     }
 }

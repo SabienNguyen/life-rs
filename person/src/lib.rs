@@ -585,14 +585,38 @@ impl Person {
     /// The claim a coarse tier makes. Rather than accruing a year of hunger nobody was
     /// simulated to relieve, needs are returned to where a person who looks after
     /// themselves actually sits — which is what the fine simulation shows them doing.
+    ///
+    /// The span matters and passing `Duration::ZERO` here was a serious bug. It made the
+    /// call a no-op: needs were set to coping and then health was asked to respond to them
+    /// over no time at all, so a coarse person's vitality **froze** at whatever it happened
+    /// to be the moment their neighbourhood fell out of the detail budget. It could never
+    /// recover, because `catch_up` also sees no elapsed time once `updated` has been moved
+    /// forward. Anyone demoted below the fertility gate of 0.5 was sterile for life, and
+    /// everybody else carried their frailty for ever.
+    ///
+    /// What it cost: the same world, same seed, differing only in how many people the
+    /// observer could afford to watch, finished at 184 souls with a budget of 150, 384 with
+    /// 400, and 990 with 2000. The level-of-detail machinery was not observation-neutral —
+    /// it decided the population. That is the one property §19 calls the riskiest in the
+    /// design, and it was failing silently.
+    ///
+    /// A year at coping pressure recovers to full, which is not a generous assumption but a
+    /// measured one: finely simulated adults sit at vitality 1.000 — mean, median and tenth
+    /// percentile alike — because a fine person acts on a need long before it does them any
+    /// harm. Coping and being watched have to arrive at the same place, or watching is a
+    /// treatment.
     pub fn get_by(&mut self, now: Time) {
+        let coped = if now > self.updated {
+            now.since(self.updated)
+        } else {
+            Duration::ZERO
+        };
         self.updated = now;
         self.needs = Needs::rested();
         for need in Need::ALL {
             self.needs.set(need, COPING);
         }
-        self.health
-            .respond_to(self.needs.vital_pressure(), Duration::ZERO);
+        self.health.respond_to(self.needs.vital_pressure(), coped);
     }
 
     /// Force a need, for tests and for events that act on a person from outside.

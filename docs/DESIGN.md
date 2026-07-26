@@ -1345,7 +1345,7 @@ Coarse models must be checked against reality or they drift into plausible nonse
   save format.
 - Scale-crossing equivalence: a region run fine for 50 years vs. coarse-then-promoted
   agrees on aggregates within tolerance. The riskiest property in the design, so it's
-  tested hardest.
+  tested hardest. **It was false for a long time — see §21.1.**
 - Graph invariants: kinship acyclic, no parent born after a child, every id resolves.
 
 **Physical**
@@ -1354,6 +1354,52 @@ Coarse models must be checked against reality or they drift into plausible nonse
 - Conservation: mass, energy, water, and carbon balance to tolerance over 1 Myr.
 - Milankovitch response: glacial cycles at the right periods under orbital forcing.
 - Stability: 100 Myr with no NaN, no runaway, no dead planet from numerical drift.
+
+### 21.1 The observer was setting the death rate
+
+The riskiest property in the design was silently false, and it stayed false because
+everything it broke looked like something else. The same world, same seed, differing only
+in how many people the observer could afford to simulate finely, ran like this:
+
+| Detail budget | Living at year 220 | Worst 10-year fall |
+|---|---|---|
+| 150 | 184 | 29 |
+| 400 | 384 | **141** |
+| 2000 | 990 | 11 |
+
+The trajectories are *identical* for the first century and separate exactly where the budget
+starts to bind. The 141-soul collapse in the middle run read as a famine — a population
+overshooting its land and being cut back, which is precisely what the economy was built to
+produce, so it was the most plausible possible disguise.
+
+It was an accounting error. A coarse person's clock is stamped forward once a year, at
+their birthday, by `get_by`. The fine tier's first act is `catch_up`, which accrues every
+need across the whole span since that stamp. So anybody crossing from coarse to fine at any
+*other* moment was billed for up to a year of unrelieved hunger and thirst in a single
+step, then charged a year of health decline against it. They died of deprivation, and
+children died fastest.
+
+There are three ways to cross, and each had to be found separately:
+
+1. a **place** is promoted back into the budget;
+2. a **household moves** out of a coarse quarter into an already-fine one — invisible to
+   promotion, because that place never changed tier;
+3. two people **pair**, and the new household takes the *other* partner's quarter.
+
+All three now go through one handover that hands a person to the fine tier in the state the
+coarse tier claims for them. Afterwards, the same three runs finish at 1030, 893 and 1045,
+the crash is gone at every budget, and the populations agree to within 1% out to year 160
+and 15% at year 200 — with the residual no longer ordered by budget, which makes it chaotic
+divergence rather than bias.
+
+Three things are worth keeping from how this was found. **The first fix was wrong**: the
+frozen-vitality bug next door (`get_by` passing `Duration::ZERO`, so a coarse person's
+health could never recover) is real and is fixed, but repairing it moved the population by
+four souls. **The second fix made things far worse before it made them better** — handing
+*every* mover to the fine tier, rather than only those arriving from coarse ground, wipes a
+life mid-stride and collapsed every world to a dozen people at every budget alike. **And
+the whole thing was invisible to the test suite**, which had 614 passing tests at the time,
+because every one of them ran small enough worlds that the budget never bound.
 
 **Where the model misses its targets, measured.** §15's bands come from the
 behaviour-genetics literature and the model does not meet two of them. Across four seeds at
