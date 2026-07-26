@@ -13,6 +13,9 @@
 //! Neither polls.
 
 pub mod deep;
+pub mod provenance;
+
+pub use provenance::{DeepProvenance, NotASave, Provenance};
 #[cfg(test)]
 mod deep_tests;
 
@@ -307,6 +310,9 @@ pub struct World {
     deeds_done: std::collections::BTreeMap<PlaceId, [u32; Deed::COUNT]>,
     /// The ground the world stands on, if it stands on any.
     surface: Option<Surface>,
+    /// How many people it was founded with. Kept because a world cannot be made again
+    /// without it, and making it again is what a save is.
+    founded_with: usize,
 }
 
 /// The solid planet under a populated world.
@@ -573,6 +579,7 @@ impl World {
             arrivals: std::collections::BTreeMap::new(),
             deeds_done: std::collections::BTreeMap::new(),
             surface: None,
+            founded_with: 0,
         }
     }
 
@@ -700,6 +707,34 @@ impl World {
     /// Stop recording anything below this level. See `Chronicle::set_floor` — running
     /// for decades with every routine act retained is not affordable until compaction
     /// exists, so a long run has to say what it does not care about.
+    /// Everything needed to make this world again.
+    ///
+    /// The save file, and the whole save file. See `provenance` for why it is five numbers
+    /// rather than a serialised heap, and what that costs.
+    pub fn provenance(&self) -> Provenance {
+        Provenance {
+            seed: self.seed,
+            population: self.founded_with,
+            elapsed: self.now().since(FOUNDING),
+            detail_budget: self.budget,
+            floor: self.chronicle.floor(),
+        }
+    }
+
+    /// Make that world again.
+    ///
+    /// Bit-for-bit the world that was saved, because it is the same computation — which is
+    /// the reproducibility guarantee cashed in rather than a new promise.
+    pub fn reopen(save: &Provenance) -> World {
+        let mut world = World::genesis(save.seed, save.population);
+        world.record_only(save.floor);
+        world.set_detail_budget(save.detail_budget);
+        if save.elapsed > Duration::ZERO {
+            world.run_for(save.elapsed);
+        }
+        world
+    }
+
     pub fn record_only(&mut self, floor: Salience) {
         self.chronicle.set_floor(floor);
     }
@@ -762,6 +797,7 @@ impl World {
     /// them, which is the loop that was already there.
     pub fn genesis(seed: WorldSeed, population: usize) -> World {
         let mut world = World::new(seed);
+        world.founded_with = population;
         let earth = world.add_planet(Planet::earth());
         world
             .scheduler

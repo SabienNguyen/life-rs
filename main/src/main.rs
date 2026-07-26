@@ -40,6 +40,8 @@ options:
   --ages <myr>     run a *populated* world for this many megayears: the planet
                    moves, and the people on it settle and fail as it does
   --grid <level>   how fine the planet's grid is (default: 4, ~450 km cells)
+  --save <path>    write the world out so it can be opened again
+  --load <path>    open a world written earlier, and carry on from there
   --quiet          print only the closing summary
   -h, --help       this message
 ";
@@ -58,6 +60,8 @@ struct Options {
     globe: Option<f64>,
     ages: Option<f64>,
     grid: u8,
+    save: Option<String>,
+    load: Option<String>,
     quiet: bool,
 }
 
@@ -77,6 +81,8 @@ impl Default for Options {
             globe: None,
             ages: None,
             grid: 4,
+            save: None,
+            load: None,
             quiet: false,
         }
     }
@@ -110,14 +116,42 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
-    let mut world = World::genesis(options.seed, options.people);
-    // Don't record what won't be shown. A century of one person's every meal is tens of
-    // millions of records; asking to see only the pivotal moments should also mean not
-    // paying to store the rest.
-    world.record_only(options.min_salience);
-    if let Some(budget) = options.detail {
-        world.set_detail_budget(budget);
-    }
+    // A saved world is opened by re-deriving it, which is exact and costs the time being
+    // opened. See `sim::provenance` for why that is the trade rather than a format.
+    let mut world = match &options.load {
+        Some(path) => {
+            let text = match std::fs::read_to_string(path) {
+                Ok(text) => text,
+                Err(e) => {
+                    eprintln!("error: cannot read {path}: {e}");
+                    return ExitCode::FAILURE;
+                }
+            };
+            let save: sim::Provenance = match text.parse() {
+                Ok(save) => save,
+                Err(e) => {
+                    eprintln!("error: {path}: {e}");
+                    return ExitCode::FAILURE;
+                }
+            };
+            eprintln!(
+                "opening {} at {} — re-derived, so it is the same world to the last decimal",
+                save.seed, save.elapsed
+            );
+            World::reopen(&save)
+        }
+        None => {
+            let mut world = World::genesis(options.seed, options.people);
+            // Don't record what won't be shown. A century of one person's every meal is
+            // tens of millions of records; asking to see only the pivotal moments should
+            // also mean not paying to store the rest.
+            world.record_only(options.min_salience);
+            if let Some(budget) = options.detail {
+                world.set_detail_budget(budget);
+            }
+            world
+        }
+    };
     let started = world.now();
 
     // The JSON path walks the run a year at a time so the viewer has a series to plot;
@@ -209,8 +243,19 @@ fn main() -> ExitCode {
         world.now().since(started),
         world.living(),
         world.people.len(),
-        options.seed,
+        world.provenance().seed,
     );
+
+    if let Some(path) = &options.save {
+        let save = world.provenance();
+        match std::fs::write(path, format!("{save}\n")) {
+            Ok(()) => println!("saved to {path}: {save}"),
+            Err(e) => {
+                eprintln!("error: cannot write {path}: {e}");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
 
     ExitCode::SUCCESS
 }
@@ -451,6 +496,8 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Option<Options>, Str
             "--balance" => options.balance = true,
             "--json" => options.json = true,
             "--html" => options.html = true,
+            "--save" => options.save = Some(value()?),
+            "--load" => options.load = Some(value()?),
             "--ages" => {
                 let raw = value()?;
                 let myr: f64 = raw
