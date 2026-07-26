@@ -1545,6 +1545,29 @@ do, the same worlds read:
 | Intergenerational elasticity | 0.20–0.50 | 0.63 | high |
 | Mobility | 0.40–0.90 | 0.63–0.73 | met |
 
+**Re-measured after §21.1 and §21.4.** Every figure above was taken while the detail budget
+was culling people (§21.1) and while unwatched adults were earning a fifth too little
+(§21.4) — both of which act directly on attainment, so the harness was measuring a world
+with a thumb on it. Five seeds, 150 years, 150–382 lives each, on the repaired model:
+
+| Quantity | Target | Five seeds | Mean | Verdict |
+| --- | --- | --- | --- | --- |
+| Heritable share | 0.15–0.45 | 0.35, 0.49, 0.27, 0.36, 0.25 | 0.34 | **met** |
+| Shared environment | 0.20–0.55 | 0.31, 0.40, 0.37, 0.37, 0.12 | 0.31 | **met** |
+| Chance's share | 0.15–0.45 | 0.54, 0.44, 0.51, 0.51, 0.68 | 0.54 | **high**, and worse |
+| Intergenerational elasticity | 0.20–0.50 | 0.39, 0.58, 0.46, 0.57, 0.22 | 0.44 | **met** — was 0.63 |
+| Sibling correlation | 0.25–0.65 | 0.17, 0.37, 0.07, 0.23, 0.10 | 0.19 | **low** |
+| Mobility | 0.40–0.90 | 0.74, 0.70, 0.70, 0.69, 0.74 | 0.71 | met |
+| Upbringing gap | 0.30–1.20 | 0.95, 1.17, 1.07, 1.01, 0.34 | 0.91 | met |
+
+Elasticity was the clearest remaining miss and it is now inside the band — a real gain, and
+not one that was aimed at: nothing in either fix touches inheritance, and both simply stopped
+the observer's budget from adding noise and bias to attainment. Chance's share moved the
+other way, from marginally high to clearly high, and sibling correlation is low, which is the
+same defect seen twice: siblings share a household and a neighbourhood, so anything that
+makes outcomes more idiosyncratic pulls their correlation down while pushing chance up. The
+patronage coin flip below remains the prime suspect and remains unfixed.
+
 **Four real defects behind what remains, each measured and none yet fixed.** An attempt at
 all four together is recorded in this section rather than in the code, because every
 configuration tried either traded one target for another or halved the population, and a
