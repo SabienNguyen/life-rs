@@ -316,7 +316,8 @@ pub fn ground(world: &World) -> Vec<String> {
     let orbit = surface.orbit();
     vec![
         format!(
-            "  a {} star of {:.2} solar masses, {:.2} Gyr old with {:.1} Gyr left",
+            "  {} {} star of {:.2} solar masses, {:.2} Gyr old with {:.1} Gyr left",
+            star.article(),
             star.colour(),
             star.mass_solar,
             star.age_gyr,

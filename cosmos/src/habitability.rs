@@ -110,6 +110,21 @@ pub fn promise(star: &Star, world: &Orbit) -> f64 {
     let across = (world.semi_major_au - zone.inner_au) / (zone.outer_au - zone.inner_au);
     let placed = 1.0 - (2.0 * across - 1.0).abs().powi(2);
 
+    placed * body_and_time(star, world)
+}
+
+/// Everything about a world's promise except where it sits — its size, and how long its
+/// star has left.
+///
+/// Split out because *where it sits* is the one term a caller may reasonably disagree
+/// about. This crate says the middle of the astronomical habitable zone is best, which is
+/// correct as astronomy; a caller with an actual climate model may find its own band is
+/// somewhere else entirely, and should be able to substitute its own placement without
+/// losing the rest. `sim` does exactly that.
+pub fn body_and_time(star: &Star, world: &Orbit) -> f64 {
+    if !world.is_rocky() {
+        return 0.0;
+    }
     // Size. Too small and the atmosphere leaves and the interior freezes, which stops the
     // plate tectonics the carbon cycle runs on; too large and it holds its hydrogen and
     // has no surface to speak of. Earth is not special here so much as *sufficient*, and
@@ -137,7 +152,7 @@ pub fn promise(star: &Star, world: &Orbit) -> f64 {
     // get from its first cell to anything that could ask the question.
     let time = (star.remaining_gyr() / 4.0).clamp(0.0, 1.0);
 
-    (placed * sized * time * free).clamp(0.0, 1.0)
+    (sized * time * free).clamp(0.0, 1.0)
 }
 
 /// Whether a star has despun a world onto one face.
@@ -162,8 +177,9 @@ pub fn describe(star: &Star, world: &Orbit) -> String {
         "in the habitable zone"
     };
     format!(
-        "{:.2} AU from a {} star, {:.0}% of Earth's sunlight, {:.1} Earth masses — {kind}",
+        "{:.2} AU from {} {} star, {:.0}% of Earth's sunlight, {:.1} Earth masses — {kind}",
         world.semi_major_au,
+        star.article(),
         star.colour(),
         flux * 100.0,
         world.mass_earth,

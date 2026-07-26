@@ -360,22 +360,50 @@ const WORTH_SETTLING: f64 = 0.35;
 /// A bound rather than a limit anybody is expected to hit: it exists so that a
 /// pathological seed cannot spin here forever.
 const SYSTEMS_TO_SEARCH: usize = 4_000;
-/// The band of starlight this simulation's own climate can hold a temperate planet in,
-/// relative to what the Earth gets.
+/// How many candidate worlds to actually solve a climate for.
 ///
-/// **Measured rather than assumed, and narrower than the astronomy says.** The habitable
-/// zone in `cosmos` uses the standard bounds, whose outer edge sits at about a third of
-/// Earth's sunlight — but that figure assumes a planet can accumulate *several bars* of
-/// carbon dioxide, and the energy balance here caps at half a bar and linearises the
-/// outgoing longwave. Run it and the disagreement is stark: at four fifths of Earth's
-/// light this model settles at a degree below freezing with a third of the surface iced,
-/// and at three quarters the ice–albedo feedback wins outright and it freezes solid at
-/// forty below with the carbon dioxide pinned at its ceiling.
+/// The flux band below narrows the field, but it cannot settle the question on its own:
+/// how much carbon dioxide a thermostat needs to hold a given temperature also depends on
+/// how much weatherable rock the planet has, and that varies by a factor of two between
+/// seeds. So the last step is to ask the climate rather than to predict it, and asking
+/// costs a solve. Four is enough that a breathable world turns up on every seed tried and
+/// few enough that founding a world stays cheap.
+const WORLDS_TO_TRY: usize = 4;
+/// The most carbon dioxide people can live under, in parts per million.
 ///
-/// So the astronomy says where a planet *could* be habitable and this says where this
-/// simulation can actually keep one. Two different claims, and quietly conflating them
-/// would have founded a fifth of all worlds on snowballs.
-const LIVEABLE_FLUX: std::ops::Range<f64> = 0.82..1.25;
+/// One per cent. Above it the air is measurably harmful and by four it is lethal; the
+/// exact threshold is a matter of exposure, and one per cent is the standard occupational
+/// ceiling.
+const BREATHABLE_CO2_PPM: f32 = 10_000.0;
+/// The least carbon dioxide a biosphere can live under, in parts per million.
+///
+/// Ordinary photosynthesis stops fixing carbon below about this, which is why a very
+/// brightly lit world is not habitable either: the thermostat draws the air down to keep
+/// it cool and starves the plants doing it.
+const GREEN_CO2_PPM: f32 = 150.0;
+/// The band of starlight a world can carry **people** in, relative to what the Earth gets.
+///
+/// Measured across three planets rather than assumed, and startlingly narrow — and the
+/// reason it is narrow is the interesting part, because it is not temperature.
+///
+/// The habitable zone in `cosmos` uses the standard astronomical bounds and its outer edge
+/// sits at about a third of Earth's sunlight. That figure means *liquid water somewhere*,
+/// and it gets there by letting the planet accumulate several bars of carbon dioxide. The
+/// thermostat here will do exactly that, and it works: a world at nine tenths of Earth's
+/// light settles at a comfortable thirteen degrees. It does so under **seven per cent
+/// carbon dioxide**, which is four times the concentration that kills a human being.
+///
+/// The other end is the mirror image. Past about one and an eighth of Earth's light the
+/// thermostat has drawn carbon dioxide down below a hundred and fifty parts per million,
+/// which is where ordinary photosynthesis stops working. The planet is warm, blue, and
+/// starving.
+///
+/// So the temperature is a red herring at both ends: everywhere from three quarters to a
+/// quarter again of Earth's light comes out temperate, because that is what a thermostat
+/// is *for*. What is habitable is the much narrower band where the atmosphere it needs to
+/// do that is one a person could breathe and a plant could use. That band is this one, and
+/// it holds across every planet tested to within a couple of per cent.
+const LIVEABLE_FLUX: std::ops::Range<f64> = 0.97..1.12;
 /// How far apart two settlements must be, in rings of the grid.
 ///
 /// One ring. At this grid a ring is most of a country, and neighbouring cells would be
@@ -409,7 +437,7 @@ impl Surface {
         // honest in a way that hardcoding a sun is not: the star that comes out is drawn
         // from the real distribution, conditioned on somebody being there to see it.
         let mut sky = seed.stream(Domain::World, 0, 0);
-        let mut best: Option<(cosmos::System, usize, f64)> = None;
+        let mut candidates: Vec<(cosmos::System, usize, f64)> = Vec::new();
         for _ in 0..SYSTEMS_TO_SEARCH {
             let system = cosmos::System::drawn(&mut sky);
             let Some(index) = system.best_world() else {
@@ -421,16 +449,34 @@ impl Surface {
             if !LIVEABLE_FLUX.contains(&flux) {
                 continue;
             }
-            let promise = cosmos::habitability::promise(&system.star, &world);
-            if best.as_ref().is_none_or(|(_, _, b)| promise > *b) {
-                let good = promise >= WORTH_SETTLING;
-                best = Some((system, index, promise));
-                if good {
-                    break;
-                }
+            // Ranked on this simulation's own criterion rather than the astronomy's.
+            // `cosmos` scores the middle of the habitable zone highest, which is right as
+            // astronomy and wrong here: the band this climate can hold a *breathable*
+            // world in sits against the zone's inner edge, so the two criteria pull in
+            // opposite directions and between them admitted almost nothing. The body and
+            // the star's remaining time carry over unchanged; only the placement differs.
+            let lit = 1.0 - ((flux - 1.03) / 0.12).abs().min(1.0);
+            let promise = lit * cosmos::habitability::body_and_time(&system.star, &world);
+            let good = promise >= WORTH_SETTLING;
+            candidates.push((system, index, promise));
+            // Stop once there are enough genuinely good ones to choose between. A
+            // marginal world is kept as a fallback rather than as a preference — the
+            // filter is a lot to ask at once, and a seed that cannot meet all of it
+            // should get the best available rather than nothing.
+            if good && candidates.iter().filter(|(_, _, p)| *p >= WORTH_SETTLING).count()
+                >= WORLDS_TO_TRY
+            {
+                break;
             }
         }
-        let (system, world, _) = best.expect("four thousand systems and not one world");
+        assert!(
+            !candidates.is_empty(),
+            "four thousand systems and not one world anybody could live on"
+        );
+        // Best first, so a seed whose every candidate has a difficult atmosphere still
+        // gets the best of them rather than the last tried.
+        candidates.sort_by(|(_, _, a), (_, _, b)| b.total_cmp(a));
+        candidates.truncate(WORLDS_TO_TRY);
 
         let mut rng = seed.stream(Domain::Terrain, 0, 0);
         let mut planet =
@@ -439,12 +485,31 @@ impl Surface {
         // volcanism along plate boundaries, and a planet whose boundaries have not been
         // worked out yet has no volcanoes, no carbon dioxide, and freezes solid.
         planet.step_myr(4.0, &mut rng);
-        let climate = climate::Climate::around(
-            &planet,
-            system.star,
-            system.worlds[world].semi_major_au,
-            climate::insolation::EARTH_OBLIQUITY,
-        );
+
+        // Now ask each candidate's climate what atmosphere it needs, and take the first
+        // that needs one people could breathe. The flux band gets this right most of the
+        // time and cannot get it right always, because a planet with less weatherable rock
+        // needs more carbon dioxide at the same distance.
+        let mut chosen: Option<(cosmos::System, usize, climate::Climate)> = None;
+        for (system, index, _) in candidates {
+            let climate = climate::Climate::around(
+                &planet,
+                system.star,
+                system.worlds[index].semi_major_au,
+                climate::insolation::EARTH_OBLIQUITY,
+            );
+            let air = climate.co2_ppm();
+            let breathable = (GREEN_CO2_PPM..BREATHABLE_CO2_PPM).contains(&air);
+            let first = chosen.is_none();
+            if breathable || first {
+                chosen = Some((system, index, climate));
+            }
+            if breathable {
+                break;
+            }
+        }
+
+        let (system, world, climate) = chosen.expect("a candidate was checked");
         let life = biome::Biosphere::read(&planet, &climate);
         Surface {
             planet,
@@ -2696,6 +2761,30 @@ mod tests {
         let distinct: std::collections::BTreeSet<String> =
             stars.iter().map(|s| format!("{:.4}", s.mass_solar)).collect();
         assert!(distinct.len() > 1, "every world got the same star: {stars:?}");
+    }
+
+    #[test]
+    fn the_air_on_a_founded_world_is_air_a_person_could_breathe() {
+        // The constraint that actually binds, and it is not temperature. Everywhere from
+        // three quarters to a quarter again of Earth's light comes out temperate, because
+        // that is what a thermostat is for; what varies is the atmosphere it needs in
+        // order to manage it. At nine tenths of Earth's light this planet is a comfortable
+        // thirteen degrees under seven per cent carbon dioxide, which is four times the
+        // concentration that kills a human being.
+        const LETHAL_PPM: f32 = 10_000.0; // one per cent
+        const PHOTOSYNTHESIS_FLOOR_PPM: f32 = 150.0;
+        for seed in [0x701u128, 0x702, 0x703, 0x704] {
+            let world = World::genesis(WorldSeed::from_u128(seed), 12);
+            let air = world.surface().unwrap().climate.co2_ppm();
+            assert!(
+                air < LETHAL_PPM,
+                "seed {seed:#x} founded people under {air:.0} ppm of carbon dioxide"
+            );
+            assert!(
+                air > PHOTOSYNTHESIS_FLOOR_PPM,
+                "seed {seed:#x} founded a world with {air:.0} ppm — nothing grows below 150"
+            );
+        }
     }
 
     #[test]

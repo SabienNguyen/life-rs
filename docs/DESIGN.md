@@ -1112,13 +1112,35 @@ which is also why Mars is in the sun's habitable zone and dead anyway. And tidal
 had to be modelled, because most stars are red dwarfs and a red dwarf keeps its habitable
 zone inside its own locking radius.
 
-The fourth was a genuine disagreement between two models rather than a bug. A world at two
-thirds of Earth's sunlight passes the habitable-zone test and then freezes solid here at
-forty below with its carbon dioxide pinned at the model's ceiling — because the standard
-outer bound assumes a planet can accumulate several bars of it and this energy balance caps
-at half a bar. So `sim` filters on a measured band, 0.82 to 1.25 of Earth's light, and says
-why. The astronomy says where a planet *could* be habitable; that band says where this
-simulation can keep one.
+The fourth was a genuine disagreement between two models rather than a bug, and chasing it
+down produced the most interesting result in the phase. A world at two thirds of Earth's
+sunlight passes the habitable-zone test and then freezes solid here at forty below with its
+carbon dioxide pinned at the model's ceiling — because the standard outer bound assumes a
+planet can accumulate several bars of it and this energy balance caps at half a bar.
+
+Narrowing the band to what the climate can hold fixed the freezing and revealed the real
+constraint, which is **not temperature at all**. Everywhere from three quarters to a
+quarter again of Earth's light comes out temperate, because that is what a thermostat is
+*for*. What varies is the atmosphere it needs in order to manage it. At nine tenths of
+Earth's light this planet settles at a comfortable thirteen degrees under **seven per cent
+carbon dioxide**, which is four times the concentration that kills a person. Past about one
+and an eighth, the thermostat has drawn the air below a hundred and fifty parts per million
+and ordinary photosynthesis stops: the planet is warm, blue, and starving.
+
+So a world's habitability here is decided by its air, and the band where that air is
+breathable *and* green is 0.97 to 1.12 of Earth's light — startlingly narrow, and it holds
+to within a couple of per cent across every planet tested. Even that is not sufficient on
+its own, because how much carbon dioxide a thermostat needs also depends on how much
+weatherable rock the planet has, which varies by a factor of two between seeds. So the last
+step is to *ask* the climate rather than predict it: `sim` solves up to four candidate
+worlds and takes the first whose air people could breathe.
+
+One further consequence had to be untangled. `cosmos` scores the middle of the habitable
+zone highest, which is right as astronomy and wrong here, since the breathable band sits
+against the zone's *inner* edge — so the two criteria pulled in opposite directions and
+between them admitted almost nothing. Placement is now separable: `promise` is the
+astronomy, `body_and_time` is everything about a world except where it sits, and `sim`
+supplies its own placement term.
 
 **The sea, in the event.** Marine productivity was a placeholder and said so: a flat
 multiplier — one on the shelf, a bit over a quarter everywhere else — standing in for a

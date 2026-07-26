@@ -394,11 +394,18 @@ mod tests {
     use sim_core::{Duration, Salience, WorldSeed};
 
     /// One world lived long enough for grandchildren to have outcomes. Built once.
+    ///
+    /// Sixty people over ninety years was the first version and it was too small to
+    /// measure the thing it was measuring. An intergenerational elasticity is a regression
+    /// over parent–child pairs, and that fixture produced sixty-six lives — at which size
+    /// the estimate is dominated by sampling noise. It read 0.89 on one world and 0.53 on
+    /// the same seed run half again as long, and the difference was not a change in the
+    /// model. Two hundred lives is enough for the number to mean something.
     fn measured() -> &'static Balance {
         static BALANCE: std::sync::LazyLock<Balance> = std::sync::LazyLock::new(|| {
-            let mut world = World::genesis(WorldSeed::from_u128(0x11), 60);
+            let mut world = World::genesis(WorldSeed::from_u128(0x11), 80);
             world.record_only(Salience::Pivotal);
-            world.run_for(Duration::from_years(90));
+            world.run_for(Duration::from_years(120));
             measure(&world)
         });
         &BALANCE
@@ -407,7 +414,10 @@ mod tests {
     #[test]
     fn there_is_enough_to_measure() {
         let balance = measured();
-        assert!(balance.sample > 20, "only {} lives", balance.sample);
+        // Enough to regress on. The bar is deliberately near what the fixture produces:
+        // if a change to the world shrinks the population below this, every statistic
+        // below becomes noise and should fail loudly rather than drift.
+        assert!(balance.sample > 150, "only {} lives", balance.sample);
         assert!(balance.shares.is_some());
         assert!(balance.elasticity.is_some(), "no parent-child pairs");
         assert!(balance.mobility.is_some());

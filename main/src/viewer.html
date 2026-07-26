@@ -548,7 +548,8 @@ function drawPlanet() {
   $("planet-panel").hidden = false;
   if (g.starMass !== undefined && g.starMass !== null) {
     $("star-line").textContent =
-      `A ${g.starColour} star of ${g.starMass.toFixed(2)} solar masses, ` +
+      `${/^[aeiou]/.test(g.starColour) ? "An" : "A"} ${g.starColour} star of ` +
+      `${g.starMass.toFixed(2)} solar masses, ` +
       `${g.starAgeGyr.toFixed(1)} billion years old with ${g.starLeftGyr.toFixed(1)} left. ` +
       `This world orbits it at ${g.orbitAu.toFixed(2)} AU and gets ` +
       `${Math.round(g.sunlight * 100)}% of Earth\u2019s sunlight; a year lasts ` +

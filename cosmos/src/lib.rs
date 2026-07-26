@@ -173,6 +173,11 @@ impl Star {
         SOLAR_SURFACE_K * (self.luminosity_solar() / (radius * radius)).powf(0.25)
     }
 
+    /// "a" or "an", for whichever colour this star is.
+    pub fn article(&self) -> &'static str {
+        if self.colour().starts_with('o') { "an" } else { "a" }
+    }
+
     /// What the star looks like, in one word.
     pub fn colour(&self) -> &'static str {
         match self.surface_k() {
