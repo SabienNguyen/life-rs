@@ -1339,6 +1339,39 @@ Coarse models must be checked against reality or they drift into plausible nonse
 - Milankovitch response: glacial cycles at the right periods under orbital forcing.
 - Stability: 100 Myr with no NaN, no runaway, no dead planet from numerical drift.
 
+**Where the model misses its targets, measured.** §15's bands come from the
+behaviour-genetics literature and the model does not meet two of them. Across four seeds at
+about two hundred lives each:
+
+| Quantity | Target | Measured | Verdict |
+| --- | --- | --- | --- |
+| Heritable share of outcome | 0.15–0.45 | 0.08, 0.10, 0.13, 0.27 | **low** |
+| Chance's share | 0.15–0.45 | 0.41, 0.52, 0.57, 0.66 | **high** |
+| Shared environment | 0.20–0.55 | 0.10, 0.15, 0.20, 0.36 | borderline |
+| Intergenerational elasticity | 0.20–0.50 | 0.45–0.63 | slightly high |
+| Mobility | 0.40–0.90 | 0.63–0.73 | met |
+| Upbringing gap | 0.30–1.20 | 0.53–1.38 | mostly met |
+
+The first two are the same fact stated twice: **personality has too little leverage over
+attainment**, so what is left over reads as chance. Closing it means changing how standing
+is earned rather than nudging a coefficient, and it is the most substantial piece of
+unfinished work in §15. It long predates the ground and the star — the same measurement at
+the start of the geography work read 0.08 and 0.52.
+
+These are *reported* rather than asserted. A unit test that fails on a known, documented
+gap makes the suite permanently red and useless as a regression signal; the `--balance`
+output names every target and says which are missed, and the tests assert the structural
+claims — that the shares sum to one, that neither cause decides everything, that the sample
+is large enough to measure at all.
+
+One measurement error worth recording, because it nearly became a wrong conclusion. The
+elasticity fixture ran sixty people for ninety years and produced sixty-six lives. An
+intergenerational elasticity is a regression over parent–child pairs, and at that size the
+estimate is noise: the same seed read 0.89 at sixty-six lives, 0.66 at two hundred and five,
+and 0.53 at three hundred and sixty-four. The first of those looked like a caste system and
+was a sample size. The fixture now runs to two hundred lives and a separate test fails
+loudly if it ever drops below a hundred and fifty.
+
 **Biological**
 - Heritability recovery: after 10 generations, sibling ≈ 0.5·h², parent–child ≈
   0.5·h², unrelated ≈ 0. If configured `h2` doesn't come back out, the architecture is
