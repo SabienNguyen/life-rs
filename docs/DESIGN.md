@@ -1239,7 +1239,7 @@ only after the fact; all three were found by drawing the planet and looking at i
 | **11** ◑ | `evolution`: adaptation with a tracking speed limit, allopatric speciation, diversity-dependent diversification, extinction, phylogeny. Gene flow and molecular drift are not modelled — species traits move by a rule rather than by inheritance from individuals |
 | **12** ◑ | Deep-time integration: adaptive stepping ✓ (the lithosphere subdivides its own step so no plate ever jumps a cell), supercontinent cycle ✓, orbital forcing ✓ as machinery — obliquity varies on its 41 kyr cycle, which megayear steps cannot resolve and honestly return the mean of. **The join ✓** — `settlement` puts neighbourhoods on real grid cells and the ground shapes them; the planet under a populated world is a still frame, and people at deep-time resolution is what remains. Keyframing and a named mass-extinction mechanism are not built; extinction pulses do emerge from climate shocks |
 | **13** ✗ | Globe + phylogeny rendering (`wgpu`), timeline scrubbing, continuous zoom. **Superseded.** The self-contained HTML viewer does the job better in every way that matters here — five layers, a time scrubber, hover readout, and a file anybody can open — and it is what actually found four of the modelling bugs in Phase 4. A `wgpu` client would be a second renderer for the same data |
-| **14** ◑ | `cosmos` ✓ — stars, orbits, habitable zones, and an anthropic search for a world worth founding on. Save/load ✓ — as a *derivation* rather than a format: a world is a pure function of five numbers, so the save file is those numbers and loading re-runs. Exact, no schema to rot, and it costs the time being opened, which is the whole trade and is written down. Economy ✓ — `economy`: Cobb–Douglas on land and labour, subsistence taken out first, and trade weighted by reach. Culture and technology are not built. Determinism goldens exist in the form that survives: every subsystem tests that the same seed produces the same result, self-comparing rather than pinned to a constant, so a legitimate change does not require re-blessing a hash |
+| **14** ◑ | `cosmos` ✓ — stars, orbits, habitable zones, and an anthropic search for a world worth founding on. Save/load ✓ — as a *derivation* rather than a format: a world is a pure function of five numbers, so the save file is those numbers and loading re-runs. Exact, no schema to rot, and it costs the time being opened, which is the whole trade and is written down. Economy ✓ — `economy`: Cobb–Douglas on land and labour, subsistence taken out first, and trade weighted by reach, with hunger as the check that stops a population (§21.2). Culture ✓ — `culture`: peoples and countries emerge from transmission, drift and descent, and nobody writes either down (§24). Technology ✓ as machinery and inert in practice — technique is carried per country and decays below its Tasmanian threshold, which no world yet reaches (§21.3). Determinism goldens exist in the form that survives: every subsystem tests that the same seed produces the same result, self-comparing rather than pinned to a constant, so a legitimate change does not require re-blessing a hash |
 
 **Sequencing note.** Deep time is what you most want and it lands last, for a real
 reason: there's nothing to evolve until there's a planet and a biosphere to evolve on,
@@ -1463,6 +1463,38 @@ fail, not something the check did.
 extra braking is slight and worlds start collapsing instead (225 goes from +0.44%/yr to
 −2.02% and −2.63%). This is a brake, not a ceiling — a world with room in its land still
 takes more than two centuries to fill it, and that is the honest description.
+
+### 21.3 Technique is wired, and the trap does not open
+
+`economy::Technique` — the Tasmanian mechanism, where technique lives in people rather than
+in writing and decays below `MINDS_TO_KEEP` carriers — was built, tested, and never called:
+`economies()` produced with `Technique::BARE` every year, so no world could accumulate or
+lose anything. It is now advanced each reckoning, per **country**, because a country is
+precisely the set of people who can reach each other to copy a technique from. Tasmania is
+then not a special case but the ordinary case with a sea in it.
+
+It does not fire, and the reason is scale rather than modelling. Carriers are
+`minds x (0.5 + 1.5 x reach)`, so about five hundred well-connected souls are needed to hold
+technique steady. Measured over five centuries on a world founded with a hundred and twenty
+people: at year 200 it held 332 living, its largest country 192, and technique at exactly
+1.0000. Nothing had been forgotten — nobody forgets how to eat — and nothing had been gained.
+
+That is the right answer for populations of a few hundred, and it is what the Malthusian
+trap staying shut looks like. It does mean the mechanism is inert in practice until worlds
+are an order of magnitude larger, which is a scale limitation to state rather than a
+calibration to fiddle with: `MINDS_TO_KEEP` is anchored on Tasmania's real four thousand.
+
+**A country cannot be small here, and that is the grid's doing.** The link between places
+was written as six hundred kilometres — a fortnight on foot, the classical radius of a state
+held together by walking. It could not stay that way. A populated world runs at grid level
+three, where a cell is 961 km across, wider than France, so settlements land one to four
+thousand kilometres apart because that is the finest the ground can distinguish. An absolute
+six hundred kilometres did not describe a small country; it guaranteed that no two places
+were ever in one, every quarter was its own country, and the technique pool was a single
+settlement for ever. The link is now expressed in grid spacing and tightens automatically if
+the level is ever raised — but at level three a "country" is a handful of adjacent regions,
+not anywhere anybody walked across. §23's first open question is load-bearing for more than
+coastline fidelity.
 
 **Where the model misses its targets, measured.** §15's bands come from the
 behaviour-genetics literature and the model does not meet two of them. Across four seeds at

@@ -316,6 +316,13 @@ pub struct World {
     /// culture, and starting one anyway would mean writing down a people before there was
     /// anybody to be them.
     cultures: Option<culture::Cultures>,
+    /// What each place knows how to do.
+    ///
+    /// Kept per place but *advanced per country*, because the Tasmanian result is about how
+    /// many people a technique can be copied between, and a country is exactly the set of
+    /// people who can reach each other to copy it. A place that empties keeps what it knew,
+    /// for the same reason its manners survive it.
+    technique: std::collections::BTreeMap<PlaceId, economy::Technique>,
     /// Places in the order culture knows them.
     ///
     /// `Cultures` indexes places by position and never forgets one, so the roster only
@@ -458,17 +465,30 @@ const GREEN_CO2_PPM: f32 = 150.0;
 const LIVEABLE_FLUX: std::ops::Range<f64> = 0.97..1.12;
 /// How far apart two settlements must be, in rings of the grid.
 ///
-/// How far apart two places can be and still be one country.
+/// How far apart two places can be and still be one country, in cells rather than in miles.
 ///
-/// About a fortnight on foot. That is the classical radius of a state that has to be held
-/// together by people walking: far enough that a message and a tax collector can make the
-/// round trip within a season, close enough that they bother. Rome's core, the Han
-/// commanderies and the medieval kingdoms all sit near it, and they sit near it because
-/// they are all limited by the same legs.
+/// It wants to be about a fortnight on foot — the classical radius of a state held together
+/// by people walking, which is where Rome's core and the medieval kingdoms all sit, because
+/// they are all limited by the same legs. Six hundred kilometres, written down as such.
+///
+/// It cannot be written down as such. The planet under a populated world runs at grid level
+/// three, where one cell is **961 km across** — wider than France. Settlements land one to
+/// four thousand kilometres apart because that is the finest the ground can distinguish, so
+/// an absolute threshold of six hundred kilometres does not describe a small country: it
+/// guarantees that no two places are ever in the same one. Every quarter became its own
+/// country, and because technique is carried by a country's population, no world could ever
+/// hold enough minds together to learn anything. The Tasmanian mechanism was switched on and
+/// unreachable.
+///
+/// So the link is expressed in what the grid can actually say — neighbouring ground — and
+/// scales with resolution: raise the level and this tightens towards the fortnight it wants
+/// to be. What it costs is honesty about what a country means here, which §23 records: at
+/// this resolution a country is a handful of adjacent regions, not a polity anybody walked
+/// across.
 ///
 /// It bounds the *links*, not the country — `World::countries` walks a chain of them, so a
-/// ribbon of towns each a fortnight from the next is one country however long the ribbon is.
-const A_FORTNIGHT_WALK: f32 = 600.0;
+/// ribbon of places each within reach of the next is one country however long the ribbon is.
+const NEIGHBOURING_GROUND: f64 = 1.6;
 
 /// One ring. At this grid a ring is most of a country, and neighbouring cells would be
 /// the same place.
@@ -607,6 +627,7 @@ impl World {
             deeds_done: std::collections::BTreeMap::new(),
             cultures: None,
             roster: Vec::new(),
+            technique: std::collections::BTreeMap::new(),
             surface: None,
             founded_with: 0,
         }
@@ -1514,11 +1535,17 @@ impl World {
                 .count() as f32;
             on_the_map.push((id, terrain, hands));
         }
-        let inputs: Vec<(society::Terrain, f32)> = on_the_map
+        let inputs: Vec<(society::Terrain, f32, economy::Technique)> = on_the_map
             .iter()
-            .map(|(_, t, w)| (t.clone(), *w))
+            .map(|(id, t, w)| {
+                (
+                    t.clone(),
+                    *w,
+                    self.technique.get(id).copied().unwrap_or_default(),
+                )
+            })
             .collect();
-        let ledgers = economy::year(&inputs);
+        let ledgers = economy::year_knowing(&inputs);
         on_the_map
             .into_iter()
             .map(|(id, _, _)| id)
@@ -1690,6 +1717,50 @@ impl World {
                 place.env.norms = ways;
             }
         }
+
+        self.learn_and_forget();
+    }
+
+    /// A year of a people either learning or forgetting.
+    ///
+    /// Advanced per country rather than per place, and that is the whole content of it.
+    /// `MINDS_TO_KEEP` is the Tasmanian number — technique is not written down, it lives in
+    /// people, and every one of them is an imperfect copy of whoever they learned from. What
+    /// decides whether a body of technique grows or decays is how many carriers it has, and
+    /// the carriers are everybody you can reach. A country *is* that set: people who do
+    /// things the same way, close enough together to keep doing them the same way.
+    ///
+    /// So Tasmania is not a special case here, it is the ordinary case with the sea in it.
+    /// A country that falls below the threshold loses what it knew, at the rate of its
+    /// shortfall, and nothing had to be written down to say so.
+    fn learn_and_forget(&mut self) {
+        for country in self.countries() {
+            let minds: u32 = country
+                .places
+                .iter()
+                .filter_map(|at| self.souls_at(*at))
+                .sum();
+            for at in &country.places {
+                let Some(id) = self.roster.get(*at).copied() else {
+                    continue;
+                };
+                // Reach is the roads again: a technique lost in one valley can be relearned
+                // from the next one if anybody is travelling.
+                let reach = self
+                    .places
+                    .get(id)
+                    .and_then(|p| p.terrain.as_ref())
+                    .map(|t| t.reach)
+                    .unwrap_or(0.5);
+                let known = self.technique.entry(id).or_default();
+                *known = known.after_a_year(minds as f32, reach);
+            }
+        }
+    }
+
+    /// What a place knows how to do.
+    pub fn technique_of(&self, place: PlaceId) -> economy::Technique {
+        self.technique.get(&place).copied().unwrap_or_default()
     }
 
     /// The peoples of this world, in the order they arose.
@@ -1763,11 +1834,9 @@ impl World {
         let Some(surface) = self.surface.as_ref() else {
             return false;
         };
-        surface
-            .planet
-            .grid()
-            .distance_km(here, there, geo::EARTH_RADIUS_KM)
-            <= A_FORTNIGHT_WALK as f64
+        let grid = surface.planet.grid();
+        grid.distance_km(here, there, geo::EARTH_RADIUS_KM)
+            <= NEIGHBOURING_GROUND * grid.spacing_km(geo::EARTH_RADIUS_KM)
     }
 
     /// How many live in the place at a given cultural index.
@@ -3407,11 +3476,72 @@ mod the_land_holds {
 
     use super::*;
 
+    /// Whether a world can ever hold enough minds together to learn anything.
+    #[test]
+    #[ignore]
+    fn measure_whether_the_trap_ever_opens() {
+        let mut world = World::genesis(WorldSeed::from_u128(0x221), 120);
+        for century in 1..=5 {
+            world.run_for(Duration::from_years(100));
+            let biggest = world
+                .countries()
+                .first()
+                .map(|c| c.places.iter().filter_map(|a| world.souls_at(*a)).sum::<u32>())
+                .unwrap_or(0);
+            let best = world
+                .places
+                .iter()
+                .map(|(id, _)| world.technique_of(id).level())
+                .fold(0.0f32, f32::max);
+            println!(
+                "year {:>4}: living {:>5} biggest country {:>5} best technique {:.4}",
+                century * 100,
+                world.living(),
+                biggest,
+                best,
+            );
+        }
+    }
+
+    /// How far apart the quarters of one world actually stand.
+    #[test]
+    #[ignore]
+    fn measure_how_far_apart_quarters_are() {
+        for seed in [0x230u128, 0x231, 0x232] {
+            let world = World::genesis(WorldSeed::from_u128(seed), 40);
+            let surface = world.surface().unwrap();
+            let grid = surface.planet.grid();
+            let cells: Vec<u32> = world
+                .places
+                .iter()
+                .filter_map(|(_, p)| p.terrain.as_ref().map(|t| t.cell))
+                .collect();
+            let mut gaps: Vec<f64> = Vec::new();
+            for (i, a) in cells.iter().enumerate() {
+                for b in &cells[i + 1..] {
+                    gaps.push(grid.distance_km(*a, *b, geo::EARTH_RADIUS_KM));
+                }
+            }
+            gaps.sort_by(f64::total_cmp);
+            println!(
+                "seed {seed:x}: grid level {} spacing {:.0} km | quarter gaps min {:.0} median {:.0} max {:.0} km",
+                grid.level(),
+                grid.spacing_km(geo::EARTH_RADIUS_KM),
+                gaps.first().copied().unwrap_or(0.0),
+                gaps[gaps.len() / 2],
+                gaps.last().copied().unwrap_or(0.0),
+            );
+        }
+    }
+
     /// What the ceiling costs, across seeds. A measurement, not an assertion.
     #[test]
     #[ignore]
     fn measure_the_ceiling() {
-        println!("{:>7} {:>7} {:>7} {:>7} {:>8}", "seed", "yr90", "yr180", "growth", "want");
+        println!(
+            "{:>7} {:>7} {:>7} {:>7} {:>8} {:>8} {:>8}",
+            "seed", "yr90", "yr180", "growth", "want", "know", "biggest"
+        );
         for seed in [0x220u128, 0x221, 0x222, 0x223, 0x224, 0x225] {
             let mut world = World::genesis(WorldSeed::from_u128(seed), 60);
             world.run_for(Duration::from_years(90));
@@ -3428,8 +3558,55 @@ mod the_land_holds {
                 if lived.is_empty() { 0.0 } else { lived.iter().sum::<f32>() / lived.len() as f32 }
             };
             let growth = (late as f32 / early.max(1) as f32).powf(1.0 / 90.0) - 1.0;
-            println!("{seed:>7x} {early:>7} {late:>7} {:>+6.2}% {want:>8.3}", growth * 100.0);
+            let (know, biggest) = {
+                let lived: Vec<f32> = world
+                    .places
+                    .iter()
+                    .filter(|(id, _)| world.society.households_in(*id).count() > 0)
+                    .map(|(id, _)| world.technique_of(id).level())
+                    .collect();
+                let best = world
+                    .countries()
+                    .first()
+                    .map(|c| c.places.iter().filter_map(|a| world.souls_at(*a)).sum::<u32>())
+                    .unwrap_or(0);
+                (
+                    if lived.is_empty() { 1.0 } else { lived.iter().cloned().fold(0.0f32, f32::max) },
+                    best,
+                )
+            };
+            println!(
+                "{seed:>7x} {early:>7} {late:>7} {:>+6.2}% {want:>8.3} {know:>8.3} {biggest:>8}",
+                growth * 100.0
+            );
         }
+    }
+
+    #[test]
+    fn a_people_large_enough_to_carry_a_technique_improves_on_it() {
+        // Wiring the Tasmanian result to the thing that decides it. Technique is advanced
+        // per *country*, because a country is the set of people who can reach each other to
+        // copy a technique from — which is exactly the quantity `MINDS_TO_KEEP` is about.
+        let mut world = World::genesis(WorldSeed::from_u128(0x230), 60);
+        world.run_for(Duration::from_years(120));
+
+        let known: Vec<f32> = world
+            .places
+            .iter()
+            .filter(|(id, _)| world.society.households_in(*id).count() > 0)
+            .map(|(id, _)| world.technique_of(id).level())
+            .collect();
+        assert!(!known.is_empty(), "nobody lives anywhere");
+        // Nobody forgets how to eat, whatever else happens.
+        for level in &known {
+            assert!(*level >= 1.0, "somebody forgot how to farm: {level}");
+        }
+        // And a world of a few hundred is nowhere near the threshold, so it should be at
+        // or near bare — this is the Malthusian trap staying shut, not a bug.
+        assert!(
+            known.iter().all(|l| *l < 1.5),
+            "a few hundred people invented their way out of subsistence",
+        );
     }
 
     #[test]
