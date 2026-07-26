@@ -670,7 +670,17 @@ impl Person {
         // chronic hunger only bit because the mortality and conception rolls happened to
         // follow it in the same call. That is not a mechanism, it is a coincidence of
         // ordering, and it would have broken the moment anything moved.
-        self.health.feed((1.0 - want.clamp(0.0, 1.0) * HUNGER_COSTS).max(0.0));
+        // Total failure is fatal on its own terms, and not as a consequence of whatever
+        // `HUNGER_COSTS` happens to be. A want of one means the shortfall is a whole
+        // person's food for a whole year — the ground grew nothing and no neighbour sold
+        // them anything — and nobody survives that at any coefficient. Below it the ceiling
+        // is the gradual thing the coefficient describes.
+        let ceiling = if want >= 1.0 {
+            0.0
+        } else {
+            (1.0 - want * HUNGER_COSTS).max(0.0)
+        };
+        self.health.feed(ceiling);
         if self.health.is_dead() {
             self.die(now, Cause::Deprivation);
         }
@@ -776,13 +786,21 @@ const COPING: f32 = 0.25;
 /// How far below hale a year of going short holds a body, per unit of shortfall.
 ///
 /// `want` is in units of what one person needs for a year, so a want of a quarter means a
-/// quarter of a diet missing. At this rate that caps vitality at 0.65; the fertility gate
-/// closes at a want of about 0.36, and nobody survives a want past 0.71.
+/// quarter of a diet missing. At this rate that caps vitality at 0.78; the fertility gate at
+/// `is_fertile` closes at a want of about 0.56, and nobody survives a want past 1.0.
 ///
-/// Calibrated on the one thing that has to be true — that a population *levels off* rather
-/// than growing without bound or collapsing — and the value is recorded rather than chosen.
-/// See §21.2.
-const HUNGER_COSTS: f32 = 1.4;
+/// Where that gate sits is the whole of the calibration, because it is a **cliff**: below it
+/// hunger only slows births, above it they stop dead. It was 1.4, which put the gate at a
+/// want of 0.36 — reachable by any world founded on ground that was already full. Such a
+/// world did not level off, it fell over: four hundred founders came to 86 souls in a
+/// hundred and fifty years, and 65 on another seed, while the same worlds founded with
+/// eighty grew to 373. Starting crowded was fatal, which is the same "nothing, then a
+/// massacre" shape this mechanism exists to avoid, reintroduced by me one layer up.
+///
+/// At 0.9 the gate needs a want of 0.56 — real famine rather than a lean generation — and
+/// those worlds come to 521 and 260 instead. Growth is still braked by about a quarter
+/// against no hunger at all. §21.2 has the sweep.
+const HUNGER_COSTS: f32 = 0.9;
 
 /// How much a year at this age shapes someone.
 ///

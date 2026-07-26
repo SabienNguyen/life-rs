@@ -1661,6 +1661,7 @@ impl World {
 
         let mut doing = Vec::with_capacity(self.roster.len());
         let mut contact = Vec::with_capacity(self.roster.len());
+        let mut reachers: Vec<PlaceId> = Vec::with_capacity(self.roster.len());
         let mut souls = Vec::with_capacity(self.roster.len());
         for id in &self.roster {
             let place = self.places.get(*id);
@@ -1669,14 +1670,22 @@ impl World {
                     .map(|p| p.env.norms)
                     .unwrap_or([0.5; culture::WAYS]),
             );
-            // Reach is the roads: the same number that decides whether grain can get to a
-            // place decides whether manners can.
-            contact.push(
-                place
-                    .and_then(|p| p.terrain.as_ref())
-                    .map(|t| t.reach)
-                    .unwrap_or(0.5),
-            );
+            // Reach is the roads — but roads to *whom*. Terrain reach says how easy this
+            // cell is to get about in, and on its own it made two settlements four thousand
+            // kilometres apart, each with good going, count as being in constant touch with
+            // each other. So every world stayed one people for ever: the mechanism was
+            // sound and the number fed to it was a fact about the ground rather than about
+            // anybody's neighbours.
+            //
+            // Contact is now the roads *times who is at the end of them*: how much of the
+            // rest of the world's population a person here could actually reach. A place
+            // nobody can get to has nobody to borrow a habit from, whatever its terrain.
+            let roads = place
+                .and_then(|p| p.terrain.as_ref())
+                .map(|t| t.reach)
+                .unwrap_or(0.5);
+            contact.push(roads);
+            reachers.push(*id);
             souls.push(
                 self.society
                     .households_in(*id)
@@ -1688,6 +1697,26 @@ impl World {
 
         if souls.iter().all(|s| *s == 0) {
             return;
+        }
+
+        // Scale each place's contact by the share of everybody else it can actually get to.
+        let elsewhere: u32 = souls.iter().sum();
+        for (at, id) in reachers.iter().enumerate() {
+            let mine = souls[at];
+            let within: u32 = reachers
+                .iter()
+                .enumerate()
+                .filter(|(other, _)| *other != at && self.within_reach(at, *other))
+                .map(|(other, _)| souls[other])
+                .sum();
+            let apart = elsewhere.saturating_sub(mine);
+            let share = if apart == 0 {
+                0.0
+            } else {
+                within as f32 / apart as f32
+            };
+            let _ = id;
+            contact[at] *= share;
         }
 
         let cultures = self.cultures.get_or_insert_with(|| {
@@ -3491,6 +3520,42 @@ mod the_land_holds {
 
     use super::*;
 
+    /// Whether a world ever grows more than one people.
+    #[test]
+    #[ignore]
+    fn measure_whether_peoples_diverge() {
+        for (seed, founders, years) in [
+            (0x11u128, 80usize, 180u64),
+            (0x21, 80, 180),
+            (0x21, 400, 150),
+            (0x22, 400, 150),
+        ] {
+            let mut world = World::genesis(WorldSeed::from_u128(seed), founders);
+            world.run_for(Duration::from_years(years));
+            let living: Vec<&culture::Culture> =
+                world.peoples().iter().filter(|p| p.living()).collect();
+            let names: Vec<&str> = living.iter().map(|p| p.name.as_str()).collect();
+            let biggest = world
+                .countries()
+                .first()
+                .map(|c| c.places.iter().filter_map(|a| world.souls_at(*a)).sum::<u32>())
+                .unwrap_or(0);
+            let know = world
+                .places
+                .iter()
+                .map(|(id, _)| world.technique_of(id).level())
+                .fold(0.0f32, f32::max);
+            println!(
+                "seed {seed:x} ({founders} founders, {years} yr): {:>5} living, {} peoples {:?}, \
+{} countries, biggest {biggest}, technique {know:.4}",
+                world.living(),
+                living.len(),
+                names,
+                world.countries().len(),
+            );
+        }
+    }
+
     /// Whether a world can ever hold enough minds together to learn anything.
     #[test]
     #[ignore]
@@ -3621,6 +3686,31 @@ mod the_land_holds {
         assert!(
             known.iter().all(|l| *l < 1.5),
             "a few hundred people invented their way out of subsistence",
+        );
+    }
+
+    #[test]
+    fn founding_a_world_crowded_does_not_kill_it() {
+        // The fault I put in and had to take out again. `is_fertile` gates at a vitality of
+        // a half, so hunger deep enough to reach that gate does not slow births, it stops
+        // them — a cliff, and the very shape this whole mechanism exists to avoid. With
+        // `HUNGER_COSTS` at 1.4 the gate sat at a want of 0.36, which any world founded on
+        // ground that was already full reaches immediately. Four hundred founders came to
+        // 86 souls where eighty founders on the same seed grew to 373: starting crowded was
+        // fatal, and the more people you began with the fewer you ended with.
+        let crowded = {
+            let mut world = World::genesis(WorldSeed::from_u128(0x21), 400);
+            world.run_for(Duration::from_years(120));
+            world.living()
+        };
+        let sparse = {
+            let mut world = World::genesis(WorldSeed::from_u128(0x21), 80);
+            world.run_for(Duration::from_years(120));
+            world.living()
+        };
+        assert!(
+            crowded > sparse / 2,
+            "founding with four hundred left {crowded} where founding with eighty left {sparse}",
         );
     }
 

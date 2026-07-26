@@ -1459,10 +1459,34 @@ and culling nobody — the year-90 populations barely move. Seed 223 declines id
 every configuration, including with everything switched off: a world that was always going to
 fail, not something the check did.
 
-`HUNGER_COSTS` = 1.4 is calibrated here and the neighbours are measured: at 2.2 and 3.0 the
-extra braking is slight and worlds start collapsing instead (225 goes from +0.44%/yr to
-−2.02% and −2.63%). This is a brake, not a ceiling — a world with room in its land still
-takes more than two centuries to fill it, and that is the honest description.
+**`HUNGER_COSTS` is set by where a cliff sits, not by how hard the brake pulls.** `is_fertile`
+gates at a vitality of a half, so hunger deep enough to reach that gate does not slow births,
+it stops them — the same "nothing, then a massacre" shape this mechanism exists to avoid,
+reintroduced one layer up. At 1.4 the gate sat at a want of 0.36, which any world founded on
+ground that was already full reaches at once, and such worlds did not level off, they fell
+over:
+
+| `HUNGER_COSTS` | 80 founders, 180 yr | 80 founders, 180 yr | 400 founders, 150 yr | 400 founders, 150 yr |
+|---|---|---|---|---|
+| 0.6 | 461 | 630 | 602 | 383 |
+| **0.9** | **350** | **452** | **521** | **260** |
+| 1.4 | 308 | 373 | **86** | **65** |
+
+Four hundred founders came to 86 souls where eighty founders on the same seed grew to 373 —
+the more people a world began with, the fewer it ended with. At 0.9 the gate needs a want of
+0.56, real famine rather than a lean generation, and the braking is still about a quarter
+against no hunger at all. Higher values were also measured (2.2 and 3.0) and only make the
+collapse worse for no extra brake.
+
+This is a brake, not a ceiling — a world with room in its land still takes more than two
+centuries to fill it, and that is the honest description.
+
+**And it is what lets a second people exist.** Peoples are gated on `ENOUGH_TO_BE_A_PEOPLE`
+(Dunbar's 150), so a world has to grow a place past that before it can go its own way. Under
+the collapsing calibration no world ever did, and every run reported one people for ever.
+With hunger set where it belongs, three worlds in four grow a second: `Norhaven` and
+`Clearolu`, `Norhaven` and `Unquietyr`, `Bramwick` and `Untoilyr` — the ones who wash, the
+ones who barely sleep, the ones who barely work. Nobody wrote a word of that down.
 
 ### 21.3 Technique is wired, and the trap does not open
 
