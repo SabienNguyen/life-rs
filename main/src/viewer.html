@@ -312,6 +312,7 @@
   <section class="panel" id="planet-panel" hidden>
     <div class="panel-head">
       <h2>The planet under them</h2>
+      <p class="note" id="star-line"></p>
       <p class="note">Continents grown from plate motion, a climate solved against them,
         and biomes read off the result. Nobody chose where the land is; the quarters below
         were placed on it because somebody could live there.</p>
@@ -545,6 +546,15 @@ function drawPlanet() {
   const g = WORLD.planet;
   if (!g) return;                       // a world with no ground under it
   $("planet-panel").hidden = false;
+  if (g.starMass !== undefined && g.starMass !== null) {
+    $("star-line").textContent =
+      `A ${g.starColour} star of ${g.starMass.toFixed(2)} solar masses, ` +
+      `${g.starAgeGyr.toFixed(1)} billion years old with ${g.starLeftGyr.toFixed(1)} left. ` +
+      `This world orbits it at ${g.orbitAu.toFixed(2)} AU and gets ` +
+      `${Math.round(g.sunlight * 100)}% of Earth\u2019s sunlight; a year lasts ` +
+      `${g.yearYears.toFixed(2)} Earth years and you would weigh ` +
+      `${g.gravity.toFixed(2)} times what you do here.`;
+  }
   const tiles = [
     [`${Math.round(g.land * 100)}%`, "land"],
     [`${g.meanC.toFixed(1)}\u00b0C`, "mean"],

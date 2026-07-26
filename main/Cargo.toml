@@ -9,6 +9,7 @@ ecology = { path = "../ecology" }
 biome = { path = "../biome" }
 climate = { path = "../climate" }
 geo = { path = "../geo" }
+cosmos = { path = "../cosmos" }
 sim-core = { path = "../sim-core" }
 sim = { path = "../sim" }
 life = { path = "../life" }

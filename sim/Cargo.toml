@@ -11,6 +11,7 @@ person = { path = "../person" }
 genetics = { path = "../genetics" }
 society = { path = "../society" }
 geo = { path = "../geo" }
+cosmos = { path = "../cosmos" }
 climate = { path = "../climate" }
 biome = { path = "../biome" }
 settlement = { path = "../settlement" }

@@ -312,7 +312,25 @@ pub fn ground(world: &World) -> Vec<String> {
     };
     let planet = &surface.planet;
     let climate = &surface.climate;
+    let star = surface.star();
+    let orbit = surface.orbit();
     vec![
+        format!(
+            "  a {} star of {:.2} solar masses, {:.2} Gyr old with {:.1} Gyr left",
+            star.colour(),
+            star.mass_solar,
+            star.age_gyr,
+            star.remaining_gyr(),
+        ),
+        format!(
+            "  {}",
+            cosmos::habitability::describe(&star, &orbit),
+        ),
+        format!(
+            "  a year is {:.2} Earth years; gravity {:.2} g",
+            orbit.year_years(&star),
+            orbit.gravity(),
+        ),
         format!(
             "  {:.0}% land, {:.0}% of it in one mass, {} plates, highest point {:.0} m",
             planet.land_fraction() * 100.0,

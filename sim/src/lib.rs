@@ -320,6 +320,21 @@ pub struct Surface {
     pub planet: geo::Lithosphere,
     pub climate: climate::Climate,
     pub life: biome::Biosphere,
+    /// The star this world goes round, and which of its planets this is.
+    pub system: cosmos::System,
+    pub world: usize,
+}
+
+impl Surface {
+    /// The star.
+    pub fn star(&self) -> cosmos::Star {
+        self.system.star
+    }
+
+    /// This world's orbit.
+    pub fn orbit(&self) -> cosmos::Orbit {
+        self.system.worlds[self.world]
+    }
 }
 
 /// How fine the grid under a populated world is.
@@ -333,14 +348,34 @@ const SETTLED_GRID: u8 = 3;
 const SETTLED_PLATES: usize = 8;
 /// The share of the surface that starts as continent.
 const SETTLED_LAND: f32 = 0.40;
-/// How far into its star's life a populated world is when its people arrive, in
-/// gigayears.
+/// How promising a world has to be before people are put on it.
 ///
-/// Four and a half: a planet of roughly the present Earth's age, under roughly the
-/// present sun. Anything much younger is a world whose thermostat is still working
-/// through a thick carbon dioxide atmosphere, which is interesting and is not the
-/// question people are being asked about.
-const SETTLED_AGE_GYR: f64 = 4.5;
+/// The anthropic filter, stated as a number. Most stars have nowhere worth living and
+/// most of the worlds that qualify are marginal; a world with a civilisation on it is by
+/// construction one of the good ones, so worlds are drawn until a good one turns up rather
+/// than the first one that is merely possible.
+const WORTH_SETTLING: f64 = 0.35;
+/// How many systems to look through before giving up and taking the best seen.
+///
+/// A bound rather than a limit anybody is expected to hit: it exists so that a
+/// pathological seed cannot spin here forever.
+const SYSTEMS_TO_SEARCH: usize = 4_000;
+/// The band of starlight this simulation's own climate can hold a temperate planet in,
+/// relative to what the Earth gets.
+///
+/// **Measured rather than assumed, and narrower than the astronomy says.** The habitable
+/// zone in `cosmos` uses the standard bounds, whose outer edge sits at about a third of
+/// Earth's sunlight — but that figure assumes a planet can accumulate *several bars* of
+/// carbon dioxide, and the energy balance here caps at half a bar and linearises the
+/// outgoing longwave. Run it and the disagreement is stark: at four fifths of Earth's
+/// light this model settles at a degree below freezing with a third of the surface iced,
+/// and at three quarters the ice–albedo feedback wins outright and it freezes solid at
+/// forty below with the carbon dioxide pinned at its ceiling.
+///
+/// So the astronomy says where a planet *could* be habitable and this says where this
+/// simulation can actually keep one. Two different claims, and quietly conflating them
+/// would have founded a fifth of all worlds on snowballs.
+const LIVEABLE_FLUX: std::ops::Range<f64> = 0.82..1.25;
 /// How far apart two settlements must be, in rings of the grid.
 ///
 /// One ring. At this grid a ring is most of a country, and neighbouring cells would be
@@ -367,6 +402,36 @@ impl Surface {
     /// need, on every world any test founds. That is the trade, and it is written down
     /// here so it does not have to be discovered twice.
     pub fn genesis(seed: WorldSeed) -> Surface {
+        // Find a sky first. Most stars have nowhere worth living — that is the whole
+        // point of `cosmos` and it is why this is a search rather than a construction —
+        // and a world with people on it is by construction one of the lucky ones. Looking
+        // until one turns up is the anthropic principle written as a loop, and it is
+        // honest in a way that hardcoding a sun is not: the star that comes out is drawn
+        // from the real distribution, conditioned on somebody being there to see it.
+        let mut sky = seed.stream(Domain::World, 0, 0);
+        let mut best: Option<(cosmos::System, usize, f64)> = None;
+        for _ in 0..SYSTEMS_TO_SEARCH {
+            let system = cosmos::System::drawn(&mut sky);
+            let Some(index) = system.best_world() else {
+                continue;
+            };
+            let world = system.worlds[index];
+            // What the astronomy allows, narrowed to what this climate can hold.
+            let flux = world.flux(&system.star) / cosmos::SOLAR_CONSTANT_WM2;
+            if !LIVEABLE_FLUX.contains(&flux) {
+                continue;
+            }
+            let promise = cosmos::habitability::promise(&system.star, &world);
+            if best.as_ref().is_none_or(|(_, _, b)| promise > *b) {
+                let good = promise >= WORTH_SETTLING;
+                best = Some((system, index, promise));
+                if good {
+                    break;
+                }
+            }
+        }
+        let (system, world, _) = best.expect("four thousand systems and not one world");
+
         let mut rng = seed.stream(Domain::Terrain, 0, 0);
         let mut planet =
             geo::Lithosphere::genesis(SETTLED_GRID, SETTLED_PLATES, SETTLED_LAND, &mut rng);
@@ -374,9 +439,10 @@ impl Surface {
         // volcanism along plate boundaries, and a planet whose boundaries have not been
         // worked out yet has no volcanoes, no carbon dioxide, and freezes solid.
         planet.step_myr(4.0, &mut rng);
-        let climate = climate::Climate::genesis(
+        let climate = climate::Climate::around(
             &planet,
-            SETTLED_AGE_GYR,
+            system.star,
+            system.worlds[world].semi_major_au,
             climate::insolation::EARTH_OBLIQUITY,
         );
         let life = biome::Biosphere::read(&planet, &climate);
@@ -384,6 +450,8 @@ impl Surface {
             planet,
             climate,
             life,
+            system,
+            world,
         }
     }
 }
@@ -2576,5 +2644,71 @@ mod tests {
                 place.name
             );
         }
+    }
+
+    #[test]
+    fn a_world_goes_round_a_real_star() {
+        let world = World::genesis(WorldSeed::from_u128(0x301), 20);
+        let surface = world.surface().unwrap();
+        let star = surface.star();
+        let orbit = surface.orbit();
+
+        assert!((cosmos::LIGHTEST_STAR..=cosmos::HEAVIEST_STAR).contains(&star.mass_solar));
+        assert!(star.remaining_gyr() > 0.0, "founded a world round a dead star");
+        assert!(star.age_gyr < cosmos::UNIVERSE_GYR, "a star older than everything");
+        assert!(orbit.is_rocky(), "people were put on a gas giant");
+        assert!(cosmos::habitability::zone(&star).holds(orbit.semi_major_au));
+        // And the climate knows about it rather than assuming a sun.
+        assert_eq!(surface.climate.star(), Some(star));
+    }
+
+    #[test]
+    fn nobody_is_founded_on_a_snowball() {
+        // The reason `LIVEABLE_FLUX` is narrower than the astronomy. Before it, a world
+        // at two thirds of Earth's light passed the habitable-zone test and then froze
+        // solid at forty below with its carbon dioxide pinned at the model's ceiling.
+        for seed in [0x401u128, 0x402, 0x403, 0x404, 0x405, 0x406] {
+            let world = World::genesis(WorldSeed::from_u128(seed), 12);
+            let surface = world.surface().unwrap();
+            let ice = surface.climate.ice_fraction(&surface.planet);
+            let mean = surface.climate.mean_temperature_c(&surface.planet);
+            assert!(
+                ice < 0.6 && mean > -5.0,
+                "seed {seed:#x} founded a world at {mean:.1} °C with {:.0}% ice",
+                ice * 100.0
+            );
+            // And people ended up somewhere real rather than on the abstract fallback.
+            assert!(
+                world.places.iter().all(|(_, p)| p.terrain.is_some()),
+                "seed {seed:#x} fell back to abstract quarters"
+            );
+        }
+    }
+
+    #[test]
+    fn the_star_a_world_gets_is_drawn_rather_than_chosen() {
+        // Different seeds, different skies. If every world came out round the sun the
+        // search would be theatre.
+        let stars: Vec<cosmos::Star> = [0x501u128, 0x502, 0x503, 0x504]
+            .iter()
+            .map(|&s| World::genesis(WorldSeed::from_u128(s), 8).surface().unwrap().star())
+            .collect();
+        let distinct: std::collections::BTreeSet<String> =
+            stars.iter().map(|s| format!("{:.4}", s.mass_solar)).collect();
+        assert!(distinct.len() > 1, "every world got the same star: {stars:?}");
+    }
+
+    #[test]
+    fn the_light_a_world_gets_is_what_its_star_and_orbit_imply() {
+        let world = World::genesis(WorldSeed::from_u128(0x601), 12);
+        let surface = world.surface().unwrap();
+        let expected =
+            surface.star().flux_at_au(surface.orbit().semi_major_au) / cosmos::SOLAR_CONSTANT_WM2;
+        assert!(
+            (surface.climate.brightness() - expected).abs() < 1e-9,
+            "the climate is lit by {} and the star supplies {expected}",
+            surface.climate.brightness()
+        );
+        assert!(LIVEABLE_FLUX.contains(&expected), "{expected} is outside the band");
     }
 }

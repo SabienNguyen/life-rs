@@ -62,6 +62,16 @@ pub struct Climate {
     obliquity_deg: f64,
     /// Age of the system in gigayears, which is what sets how bright the sun is.
     age_gyr: f64,
+    /// The star this planet goes round, and how far out it is, if anybody said.
+    ///
+    /// `None` means the sun at one astronomical unit, which is what every caller wanted
+    /// before there were other stars and is still what most tests want. With a star, the
+    /// brightness comes from the mass–luminosity relation and the orbit instead of from a
+    /// curve fitted to one particular sun — and a world round a red dwarf is a genuinely
+    /// different planet rather than the same one with the lights dimmed, because its year
+    /// is shorter, its star lives for hundreds of gigayears, and it is very probably
+    /// tidally locked.
+    sky: Option<(cosmos::Star, f64)>,
     settled: bool,
 }
 
@@ -78,10 +88,49 @@ impl Climate {
             co2_ppm: carbon::REFERENCE_CO2_PPM,
             obliquity_deg,
             age_gyr,
+            sky: None,
             settled: false,
         };
         climate.settle(planet);
         climate
+    }
+
+    /// A climate for a planet going round a particular star at a particular distance.
+    ///
+    /// The same solver; only the sun is different. Age comes from the star, so a world
+    /// round a red dwarf can legitimately be forty gigayears old — which is not a number
+    /// this model could previously represent, because its brightness curve was the sun's
+    /// and ran out.
+    pub fn around(
+        planet: &Lithosphere,
+        star: cosmos::Star,
+        orbit_au: f64,
+        obliquity_deg: f64,
+    ) -> Climate {
+        let grid = planet.grid();
+        let mut climate = Climate {
+            energy: Energy::new(grid),
+            moisture: Moisture::new(grid.len()),
+            insolation: vec![0.0; grid.len()],
+            surface_c: vec![14.0; grid.len()],
+            co2_ppm: carbon::REFERENCE_CO2_PPM,
+            obliquity_deg,
+            age_gyr: star.age_gyr,
+            sky: Some((star, orbit_au)),
+            settled: false,
+        };
+        climate.settle(planet);
+        climate
+    }
+
+    /// The star this planet goes round, if it was told about one.
+    pub fn star(&self) -> Option<cosmos::Star> {
+        self.sky.map(|(star, _)| star)
+    }
+
+    /// How far out this planet orbits, in astronomical units.
+    pub fn orbit_au(&self) -> f64 {
+        self.sky.map_or(1.0, |(_, au)| au)
     }
 
     // ---- reading it ------------------------------------------------------------
@@ -110,9 +159,17 @@ impl Climate {
         self.age_gyr
     }
 
-    /// How bright the sun is now, relative to today's.
+    /// How much light reaches this planet, relative to what reaches the Earth today.
+    ///
+    /// Two sources and one meaning. Without a star it is the sun's brightening curve
+    /// against the system's age, which is what this always did. With one it is the star's
+    /// luminosity over the square of the orbit, which is the same quantity arrived at
+    /// honestly.
     pub fn brightness(&self) -> f64 {
-        insolation::brightness_at(self.age_gyr)
+        match self.sky {
+            Some((star, au)) => star.flux_at_au(au) / cosmos::SOLAR_CONSTANT_WM2,
+            None => insolation::brightness_at(self.age_gyr),
+        }
     }
 
     pub fn mean_temperature_c(&self, planet: &Lithosphere) -> f32 {
@@ -188,6 +245,11 @@ impl Climate {
     pub fn step_myr(&mut self, planet: &Lithosphere, dt: f32, _rng: &mut Rng) {
         debug_assert!(dt > 0.0, "time only runs forwards");
         self.age_gyr += dt as f64 / 1000.0;
+        // A star ages with its planet. Without one the age alone drives the brightening,
+        // which `brightness` reads directly.
+        if let Some((star, _)) = &mut self.sky {
+            star.age_gyr = self.age_gyr;
+        }
         self.recompute_insolation(planet);
         for _ in 0..COUPLING_PASSES {
             self.solve(planet, RELAX_ROUNDS);

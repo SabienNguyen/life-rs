@@ -129,7 +129,7 @@ settlement/  The join: habitability, where people found towns, and what the grou
 chronicle/   Append-only event log, indices, compaction, biography & history assembly
 observer/    Read-only query API at every scale
 sim/         Systems + scheduler; owns `World`
-cosmos/      Systems, stars, orbits (thin for a long time)
+cosmos/      Stars from the mass-luminosity relation, orbits, habitable zones
 main/        Frontend
 ```
 
@@ -1085,6 +1085,41 @@ over a gigayear, and the carbon thermostat then lost the rock it regulates with 
 carbon dioxide climb to six percent of the atmosphere. With it the same planet holds a
 tenth of its surface dry and stays temperate throughout.
 
+**`cosmos`, in the event.** The project is called a simulation of the universe and its
+universe was one sun, hardcoded, with a brightness curve fitted to it. What was missing was
+not machinery — everything above already took a solar constant as an argument — but a
+*source*: something to say where that number comes from, and therefore what a world that is
+not Earth would be like.
+
+A main-sequence star's mass fixes everything else about it, which is as close to a free
+lunch as astrophysics offers. Luminosity from the mass–luminosity relation (piecewise: one
+exponent across the whole range puts red dwarfs out by a factor of several), lifetime from
+`M/L`, brightening across that lifetime calibrated on the one star anybody has measured
+properly. Habitable zones on the standard bounds. Systems with their orbits spaced
+geometrically and their masses drawn log-uniformly, giants beyond the snow line.
+
+Founding a world is now a **search**, and that is the honest shape: most stars have nowhere
+worth living, and a world with people on it is by construction one of the lucky ones. The
+anthropic principle written as a loop.
+
+Four things had to be got right and three of them were caught by tests written against
+measured stars. The brightening curve was normalised against lifetime fraction rather than
+the sun's present age, so the sun came out at 0.82 of its own luminosity. Planet masses
+drawn uniformly put almost every inner world above the mass that holds an atmosphere, and
+four systems in five then came out with a comfortable Earth in them — against a measured
+eta-Earth nearer a third; log-uniform masses and a hard floor at 0.3 Earth masses fixed it,
+which is also why Mars is in the sun's habitable zone and dead anyway. And tidal locking
+had to be modelled, because most stars are red dwarfs and a red dwarf keeps its habitable
+zone inside its own locking radius.
+
+The fourth was a genuine disagreement between two models rather than a bug. A world at two
+thirds of Earth's sunlight passes the habitable-zone test and then freezes solid here at
+forty below with its carbon dioxide pinned at the model's ceiling — because the standard
+outer bound assumes a planet can accumulate several bars of it and this energy balance caps
+at half a bar. So `sim` filters on a measured band, 0.82 to 1.25 of Earth's light, and says
+why. The astronomy says where a planet *could* be habitable; that band says where this
+simulation can keep one.
+
 **The sea, in the event.** Marine productivity was a placeholder and said so: a flat
 multiplier — one on the shelf, a bit over a quarter everywhere else — standing in for a
 nutrient budget that did not exist. It got the pattern roughly right by accident, because
@@ -1181,7 +1216,7 @@ only after the fact; all three were found by drawing the planet and looking at i
 | **11** ◑ | `evolution`: adaptation with a tracking speed limit, allopatric speciation, diversity-dependent diversification, extinction, phylogeny. Gene flow and molecular drift are not modelled — species traits move by a rule rather than by inheritance from individuals |
 | **12** ◑ | Deep-time integration: adaptive stepping ✓ (the lithosphere subdivides its own step so no plate ever jumps a cell), supercontinent cycle ✓, orbital forcing ✓ as machinery — obliquity varies on its 41 kyr cycle, which megayear steps cannot resolve and honestly return the mean of. **The join ✓** — `settlement` puts neighbourhoods on real grid cells and the ground shapes them; the planet under a populated world is a still frame, and people at deep-time resolution is what remains. Keyframing and a named mass-extinction mechanism are not built; extinction pulses do emerge from climate shocks |
 | **13** ✗ | Globe + phylogeny rendering (`wgpu`), timeline scrubbing, continuous zoom. **Superseded.** The self-contained HTML viewer does the job better in every way that matters here — five layers, a time scrubber, hover readout, and a file anybody can open — and it is what actually found four of the modelling bugs in Phase 4. A `wgpu` client would be a second renderer for the same data |
-| **14** | Economy, culture, technology; `cosmos`; save/load; profiling. Determinism goldens exist in the form that survives: every subsystem tests that the same seed produces the same result, self-comparing rather than pinned to a constant, so a legitimate change does not require re-blessing a hash |
+| **14** ◑ | `cosmos` ✓ — stars, orbits, habitable zones, and an anthropic search for a world worth founding on. Economy, culture, technology and save/load are not built. Determinism goldens exist in the form that survives: every subsystem tests that the same seed produces the same result, self-comparing rather than pinned to a constant, so a legitimate change does not require re-blessing a hash |
 
 **Sequencing note.** Deep time is what you most want and it lands last, for a real
 reason: there's nothing to evolve until there's a planet and a biosphere to evolve on,
