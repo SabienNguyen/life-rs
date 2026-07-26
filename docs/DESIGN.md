@@ -1669,12 +1669,24 @@ Two floors bracket the useful range, and they are set from different arguments:
   same way. In a real world that is the path that will produce nearly all the peoples, since
   terrain, food and work already differ from place to place.
 
-**Open:** `DRIFT` = 0.045/yr for a contested practice in a village of 100 is at the top of
-what is defensible, and it is load-bearing — it is exactly the rate at which small
-populations can escape the pull of their own practice, so lowering it much switches
-drift-driven divergence off entirely. It also means the `norms` of a twenty-soul quarter now
-swing by ±0.19 around what its people actually do, which feeds conformity in `Deed::choose`.
-That is a real behavioural change and it has not been measured against population outcomes.
+`DRIFT` = 0.045/yr for a contested practice in a village of 100 is at the top of what is
+defensible, and it is load-bearing — it is exactly the rate at which small populations can
+escape the pull of their own practice, so lowering it much switches drift-driven divergence
+off entirely. It also means the `norms` of a twenty-soul quarter now swing by ±0.19 around
+what its people actually do, and those norms feed conformity in `Deed::choose`. Since that
+is a real behavioural change to every small place in every world, it was measured rather
+than assumed — six seeds, eighty founders, a hundred and twenty years, on both sides of the
+change:
+
+| | mean alive | mean ever lived |
+|---|---|---|
+| Norms rebuilt each census | 191.5 | 366.2 |
+| Norms carried by culture | 192.2 | 368.5 |
+
+No effect. The spread narrowed (sd 76 → 46 on the living) but at six seeds that is an F of
+2.7 against a critical 7.2, so it is not a finding — only a reason not to worry. Note the
+comparison is between distributions and not paired: once norms carry, the trajectories
+diverge from the first census, so the same seed is not the same world on both sides.
 
 ### 24.4 What is deliberately not here
 

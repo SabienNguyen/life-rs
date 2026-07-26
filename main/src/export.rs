@@ -30,7 +30,13 @@ pub fn snapshot(world: &World, series: &[YearSample], balance: &Balance) -> Stri
         "factorNames",
         r#"["openness","conscientiousness","extraversion","agreeableness","neuroticism"]"#,
     );
+    // What the `ways` on a people are, in order, so the viewer does not have to hardcode
+    // the deed list to label them.
+    let ways: Vec<String> = person::Deed::ALL.iter().map(|d| quoted(d.label())).collect();
+    push(&mut out, "wayNames", &format!("[{}]", ways.join(", ")));
     push(&mut out, "planet", &planet(world));
+    push(&mut out, "countries", &countries(world));
+    push(&mut out, "peoples", &peoples(world));
     push(&mut out, "places", &places(world));
     push(&mut out, "people", &people(world));
     push(&mut out, "events", &events(world));
@@ -136,6 +142,85 @@ fn biome_map(surface: &sim::Surface) -> String {
         }
     }
     out
+}
+
+/// The countries, largest first, each naming the places in it.
+///
+/// Places are given by name rather than index, because the roster a country is expressed in
+/// is `culture`'s own numbering and includes places that have since emptied — so an index
+/// here would not line up with the `places` array and would be a trap for the viewer.
+fn countries(world: &World) -> String {
+    let entries: Vec<String> = world
+        .countries()
+        .iter()
+        .map(|country| {
+            let souls: u32 = country
+                .places
+                .iter()
+                .filter_map(|at| world.souls_at(*at))
+                .sum();
+            let within: Vec<String> = country
+                .places
+                .iter()
+                .filter_map(|at| world.place_named(*at))
+                .map(quoted)
+                .collect();
+            format!(
+                "{{{}}}",
+                [
+                    field("name", &quoted(&country.name)),
+                    field(
+                        "people",
+                        &quoted(
+                            world
+                                .peoples()
+                                .get(country.culture)
+                                .map(|p| p.name.as_str())
+                                .unwrap_or("")
+                        )
+                    ),
+                    field("souls", &format!("{souls}")),
+                    format!("\"places\": [{}]", within.join(", ")),
+                ]
+                .join(", ")
+            )
+        })
+        .collect();
+    format!("[{}]", entries.join(", "))
+}
+
+/// Every people who still have anybody practising them, with their descent.
+///
+/// `from` is a name rather than an index for the same reason, and because a people's parent
+/// may itself be extinct — the line of descent is the interesting part and it has to survive
+/// the death of everybody on it.
+fn peoples(world: &World) -> String {
+    let all = world.peoples();
+    let entries: Vec<String> = all
+        .iter()
+        .filter(|people| people.living())
+        .map(|people| {
+            let ways: Vec<String> = people.ways.iter().map(|w| num(*w)).collect();
+            format!(
+                "{{{}}}",
+                [
+                    field("name", &quoted(&people.name)),
+                    field("souls", &format!("{}", people.souls)),
+                    field(
+                        "from",
+                        &match people.parent.and_then(|of| all.get(of)) {
+                            Some(parent) => quoted(&parent.name),
+                            None => "null".to_string(),
+                        }
+                    ),
+                    field("arose", &format!("{}", people.arose)),
+                    format!("\"ways\": [{}]", ways.join(", ")),
+                ]
+                .join(", ")
+            )
+        })
+        .collect();
+    format!("[{}]", entries.join(", "))
 }
 
 fn places(world: &World) -> String {
@@ -513,6 +598,56 @@ mod tests {
             "a rounded-away negative must not read as \"-\""
         );
         assert_eq!(num(0.1234), "0.123");
+    }
+
+    #[test]
+    fn the_peoples_and_countries_go_out_with_the_world() {
+        let world = a_world();
+        let json = snapshot(&world, &[], &observer::measure(&world));
+        assert!(json.contains("\"countries\":"), "no countries in the export");
+        assert!(json.contains("\"peoples\":"), "no peoples in the export");
+        // The ways need their labels alongside them or the array is seven bare numbers.
+        assert!(json.contains("\"wayNames\":"), "no way names in the export");
+        for deed in person::Deed::ALL {
+            assert!(json.contains(deed.label()), "no label for {}", deed.label());
+        }
+
+        // Every country names a people that is actually in the export, and places that
+        // are actually in the world — indices would not survive the roster keeping
+        // emptied places, so these are names and they have to resolve.
+        for country in world.countries() {
+            assert!(json.contains(&country.name), "a country missing from the export");
+            for at in &country.places {
+                let named = world.place_named(*at).expect("a country holds a real place");
+                assert!(
+                    world.places.iter().any(|(_, p)| p.name == named),
+                    "country names a place {named} that is not in this world",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn nobody_in_the_export_is_from_a_country_that_is_not_in_it() {
+        // The property the deleted enum could never have had: a person's country is one of
+        // the countries this world actually has, because it was looked up from where they
+        // live rather than carried around.
+        let world = a_world();
+        let json = snapshot(&world, &[], &observer::measure(&world));
+        let named: Vec<String> = world.countries().into_iter().map(|c| c.name).collect();
+
+        let mut checked = 0;
+        for (id, person) in world.people.iter() {
+            if !person.is_alive() {
+                continue;
+            }
+            if let Some(from) = world.country_of(id) {
+                assert!(named.contains(&from), "somebody is from {from}, which does not exist");
+                assert!(json.contains(&from));
+                checked += 1;
+            }
+        }
+        assert!(checked > 0, "nobody in this world is from anywhere");
     }
 
     #[test]
