@@ -305,6 +305,12 @@ pub struct Place {
     /// ground will feed once the place sits on one.
     pub capacity: u32,
     pub env: EnvironmentVector,
+    /// How well its own economy did at the last reckoning, 0 to 1.
+    ///
+    /// Kept on the place rather than recomputed, because the things that read it — a
+    /// conception, a household deciding where to live — happen between reckonings and must
+    /// not each rebuild a region's economy to ask one question.
+    pub prosperity: f32,
     /// The ground under it, if it stands on any.
     ///
     /// `None` is a place that is not on a map — every world before the join, and every
@@ -338,6 +344,10 @@ impl Place {
             name: name.into(),
             capacity: capacity.max(1),
             env: EnvironmentVector::unremarkable(),
+            // Unremarkable until a reckoning says otherwise, for the same reason the
+            // census defaults there: nought is a claim, and a place nobody has looked at
+            // should make none.
+            prosperity: 0.5,
             terrain: None,
         }
     }
@@ -363,6 +373,7 @@ impl Place {
     /// residents have; safety and services follow affluence; bonding capital is what
     /// low turnover builds; norms are literally what people did.
     pub fn observe(&mut self, census: &Census) {
+        self.prosperity = census.prosperity;
         self.build_for(census.households);
         let occupancy = (census.households as f32 / self.capacity as f32).clamp(0.0, 1.5);
 
@@ -407,15 +418,27 @@ impl Place {
             // has no more work in it than an empty one; a crowded rich one has a great
             // deal. Letting occupancy add opportunity on its own would quietly make
             // slums the best places in the world to look for a job.
-            // Work is what the place's economy has for people to do, plus what its
-            // residents make for each other. The first term is the correction: before it,
-            // opportunity was read entirely off the standing of the people already here,
-            // so a place had work because it was well off and was well off because it had
-            // work. A surplus is where work actually comes from.
-            job_opportunity: (0.26
-                + 0.46 * census.prosperity
-                + 0.24 * census.mean_standing
-                + 0.10 * occupancy * census.mean_standing)
+            // Density multiplies opportunity, it does not create it — the same rule as
+            // bridging capital, and for the same reason. A crowded poor neighbourhood
+            // has no more work in it than an empty one; a crowded rich one has a great
+            // deal.
+            //
+            // The place's *economy* is deliberately not in here, and that is a measured
+            // decision rather than an oversight. Wiring surplus into opportunity was tried
+            // at five strengths. At the strong end the economy dominated, and because
+            // per-head surplus equalises across places — people move to where it is and
+            // have more children there, both of which level it — opportunity stopped
+            // varying between neighbourhoods at all: the poorest quarter in a world came
+            // out with *more* work than the richest, being thinly settled on decent land.
+            // At the weak end the whole level fell and populations with it. Real economies
+            // do not equalise like that because of capital, agglomeration and institutions,
+            // and this one has none of the three.
+            //
+            // So the economy reaches people through fertility, where the equalising is the
+            // point rather than the problem, and channel two stays what §14 says it is.
+            job_opportunity: (0.30
+                + 0.50 * census.mean_standing
+                + 0.20 * occupancy * census.mean_standing)
                 .clamp(0.0, 1.0),
             services: (0.1 + 0.8 * census.mean_standing).clamp(0.0, 1.0),
             pollution: (0.15 + 0.5 * occupancy - 0.2 * census.mean_standing).clamp(0.0, 1.0),

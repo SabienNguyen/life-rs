@@ -128,10 +128,136 @@ impl Ledger {
     }
 }
 
+/// How many people it takes to keep an ordinary body of technique alive.
+///
+/// The Tasmanian number, and the reason technology is a *population* variable rather than
+/// a clock. Technique is not written down here; it lives in people who know it, and every
+/// one of them is an imperfect copy of the person they learned from. A large group has
+/// enough learners that the best copy in each generation is nearly as good as the original;
+/// a small one does not, and loses a little every generation until the technique is gone.
+/// Tasmania was cut off at about four thousand people and over eight thousand years lost
+/// bone tools, cold-weather clothing, fishing and hafted implements — not through any
+/// catastrophe, through arithmetic.
+const MINDS_TO_KEEP: f32 = 900.0;
+
+/// How fast technique accumulates where there are minds enough, per year.
+///
+/// Slow. Pre-modern growth in productivity is a fraction of a per cent a century, and
+/// anything faster here would run a stone-age valley to industry inside a simulated
+/// lifetime.
+const LEARNING: f32 = 0.0026;
+
+/// How fast it is lost where there are not.
+///
+/// Faster than it is gained, which is the asymmetry that makes the record look the way it
+/// does: accumulating takes millennia and losing takes generations.
+const FORGETTING: f32 = 0.011;
+
+/// The most technique can multiply what land yields.
+///
+/// Three. This is a pre-industrial ceiling on purpose — crop rotation, the mouldboard
+/// plough, drainage and selective breeding between them roughly trebled European yields
+/// over a thousand years, and everything past that needs the chemistry and the machines
+/// §23 puts out of scope.
+const TECHNIQUE_CEILING: f32 = 3.0;
+
+/// What a people know how to do, as a multiplier on what their land yields.
+///
+/// One is bare subsistence farming. It is deliberately *not* a tech tree: there are no
+/// discoveries, no prerequisites and no names, because §23 draws that boundary and a tree
+/// is a project of its own. What is here is the part that has consequences at this scale —
+/// that technique **accumulates where there are people to carry it and is lost where there
+/// are not**, and that raising what land yields does not make anybody better off for long.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Technique(f32);
+
+impl Technique {
+    /// Knowing how to farm, and nothing beyond it.
+    pub const BARE: Technique = Technique(1.0);
+
+    pub fn level(self) -> f32 {
+        self.0
+    }
+
+    /// A year of a people either learning or forgetting.
+    ///
+    /// Which of those happens is decided by how many of them there are — and by how well
+    /// connected they are, because a technique lost in one valley can be relearned from
+    /// the next one if anybody is travelling. That second term is why isolation is the
+    /// thing that impoverishes rather than poverty itself.
+    pub fn after_a_year(self, minds: f32, reach: f32) -> Technique {
+        // Connection multiplies the pool of people you can learn from. An isolated group
+        // is on its own; a well-connected one draws on everybody its roads reach.
+        let carriers = minds * (0.5 + 1.5 * reach.clamp(0.0, 1.0));
+        let level = if carriers >= MINDS_TO_KEEP {
+            // Room to grow, and less of it the more there already is to know: each new
+            // technique is harder than the last, which is why growth was so slow for so
+            // long.
+            let room = (TECHNIQUE_CEILING - self.0).max(0.0) / TECHNIQUE_CEILING;
+            self.0 + LEARNING * room * (carriers / MINDS_TO_KEEP).min(4.0)
+        } else {
+            // Below the threshold, the copies degrade. Never below bare subsistence —
+            // people do not forget how to eat.
+            let shortfall = 1.0 - carriers / MINDS_TO_KEEP;
+            self.0 - FORGETTING * shortfall * (self.0 - 1.0).max(0.0)
+        };
+        Technique(level.clamp(1.0, TECHNIQUE_CEILING))
+    }
+}
+
+impl Default for Technique {
+    fn default() -> Technique {
+        Technique::BARE
+    }
+}
+
+/// How hard births respond to how well the place is doing.
+///
+/// The steepness of the check. Too shallow and it is not a feedback; too steep and the
+/// population oscillates or dies.
+const RESPONSE: f32 = 1.7;
+
+/// The most and least a place's economy can do to how many children are born there.
+const FEWEST: f32 = 0.45;
+const MOST: f32 = 1.65;
+
+/// How many children are born here, against how many are born in an ordinary place *of
+/// this world*.
+///
+/// The centring point is the world's own typical place, and getting there took three goes
+/// that are worth recording because they are the same mistake in three costumes.
+///
+/// The first multiplied every birth by `1 − 0.72·(1 − opportunity)`. Opportunity averages a
+/// little under a half, so the typical place — which should have been left alone — took a
+/// forty per cent cut. The mean surviving population fell from a hundred and eighty to
+/// eighty-two and three worlds in eight emptied.
+///
+/// The second centred on a *constant* living standard, chosen from what preindustrial
+/// people plausibly had. But whether a model's places sit above or below any particular
+/// constant is a fact about the model, not about history, and these sit below it: the
+/// population runs to what the land carries, so surplus per head is small nearly
+/// everywhere. Centring on 0.24 when the typical place is at 0.12 is the first mistake
+/// again with better manners, and it took the mean population to eighty-eight.
+///
+/// So the centre is measured, not chosen. Against the world's own mean the multiplier
+/// averages one **by construction**, whatever level that world happens to sit at, and the
+/// check can only ever move births from worse places to better ones. Which is what a
+/// Malthusian check is: the absolute number of people is set by mortality and by the land,
+/// and what the check decides is *where they are born*.
+pub fn births_relative(prosperity: f32, typical: f32) -> f32 {
+    let spare = prosperity.clamp(0.0, 1.0) - typical.clamp(0.0, 1.0);
+    (1.0 + RESPONSE * spare).clamp(FEWEST, MOST)
+}
+
 /// What a place makes, before trade.
 ///
 /// `workers` is people, not households — the economy counts hands.
 pub fn produce(terrain: &Terrain, workers: f32) -> Ledger {
+    produce_knowing(terrain, workers, Technique::BARE)
+}
+
+/// What a place makes, given what its people know how to do.
+pub fn produce_knowing(terrain: &Terrain, workers: f32, technique: Technique) -> Ledger {
     if workers <= 0.0 {
         return Ledger::EMPTY;
     }
@@ -142,7 +268,8 @@ pub fn produce(terrain: &Terrain, workers: f32) -> Ledger {
 
     // Cobb–Douglas. Neither factor is substitutable for the other, which is the point:
     // hands with no land make nothing and land with no hands makes nothing.
-    let output = YIELD * land.powf(LAND_SHARE) * workers.powf(1.0 - LAND_SHARE);
+    let output =
+        YIELD * technique.level() * land.powf(LAND_SHARE) * workers.powf(1.0 - LAND_SHARE);
     let subsistence = workers * SUBSISTENCE;
     let surplus = output - subsistence;
 
@@ -190,11 +317,23 @@ pub fn trade(ledgers: &mut [Ledger], reach: &[f32]) {
 /// then does anybody trade. Interleaving them would let a place trade away what it has not
 /// grown yet, which is a different and much later kind of economy.
 pub fn year(places: &[(Terrain, f32)]) -> Vec<Ledger> {
+    let knowing: Vec<(Terrain, f32, Technique)> = places
+        .iter()
+        .map(|(t, w)| (t.clone(), *w, Technique::BARE))
+        .collect();
+    year_knowing(&knowing)
+}
+
+/// A year for a region whose places each know something different.
+pub fn year_knowing(places: &[(Terrain, f32, Technique)]) -> Vec<Ledger> {
     let mut ledgers: Vec<Ledger> = places
         .iter()
-        .map(|(terrain, workers)| produce(terrain, *workers))
+        .map(|(terrain, workers, technique)| produce_knowing(terrain, *workers, *technique))
         .collect();
-    let reach: Vec<f32> = places.iter().map(|(t, _)| t.reach.clamp(0.0, 1.0)).collect();
+    let reach: Vec<f32> = places
+        .iter()
+        .map(|(t, _, _)| t.reach.clamp(0.0, 1.0))
+        .collect();
     trade(&mut ledgers, &reach);
     ledgers
 }

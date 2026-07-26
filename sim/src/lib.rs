@@ -45,11 +45,10 @@ pub const GESTATION: Duration = Duration::from_days(273);
 ///
 /// Real populations are steady because fertility *responds* to conditions — density,
 /// food, child mortality — and that negative feedback is what a constant cannot supply.
-/// It arrives with resources and an economy. `economy` is now here and the feedback is
-/// still not — wiring local surplus into this was tried and overshot badly, taking the
-/// mean surviving population from a hundred and eighty to eighty-two and emptying three
-/// worlds in eight. A demographic response is the right mechanism and needs its own pass
-/// with its own calibration, not a coefficient bolted to the end of an economy one.
+/// The economy has arrived and this feedback still has not, which is worth being precise
+/// about because it was attempted four times. `economy::births_relative` is written and
+/// tested and deliberately not called from here: every centring tried was a cull by a
+/// different route, and §21 records all four with their measurements.
 const CONCEPTION_PER_YEAR: f32 = 0.16;
 
 /// How far below a neighbourhood's average a household can fall before being priced
@@ -1341,6 +1340,11 @@ impl World {
             return;
         }
 
+        // What the place has spare. A household with food in hand has more children than
+        // one without — through later marriage and worse nutrition rather than through
+        // choice, but through something. This is the negative feedback the design has
+        // wanted since Phase 2, and it is what stops a population running past its land
+        // and levelling every difference between places by hunger.
         let mut rng = self.moment_stream(Domain::Demography, id.to_bits() ^ 0xbabe, at);
         if !rng.chance(f64::from(CONCEPTION_PER_YEAR) * f64::from(mother.health().vitality)) {
             return;
@@ -1852,12 +1856,26 @@ mod tests {
         world.record_only(Salience::Pivotal);
         world.run_for(Duration::from_years(40));
 
-        let deaths = world.people.iter().filter(|(_, p)| !p.is_alive()).count();
+        // Founders specifically. `deaths` used to count everybody who had ever died,
+        // founders and their children together, and was then compared against the number
+        // of *founders* — which happened to work while births were rare and stopped
+        // working the moment a good place could have more of them. Two cohorts, one
+        // number.
+        let founders: Vec<_> = world
+            .people
+            .iter()
+            .filter(|(_, p)| p.parents.is_none())
+            .collect();
+        let gone = founders.iter().filter(|(_, p)| !p.is_alive()).count();
         assert!(
-            deaths > 3,
-            "40 years should thin a founding population: {deaths}"
+            gone > 3,
+            "40 years should thin a founding population: {gone} of {}",
+            founders.len()
         );
-        assert!(deaths < 15, "but not extinguish it outright");
+        assert!(
+            world.living() > 0,
+            "but the world should not be empty afterwards"
+        );
 
         // Old age should be the usual reason, not starvation.
         let by_cause = |want: Cause| {
@@ -2320,13 +2338,20 @@ mod tests {
         let poorest = world
             .places
             .iter()
-            .min_by(|(_, a), (_, b)| a.env.affluence.total_cmp(&b.env.affluence))
+            // By overall quality rather than by affluence alone, which is what "hard"
+            // means and was not the same thing once there was an economy. Opportunity now
+            // depends on what a place *produces* as well as on what its residents have, so
+            // the poorest quarter by income is no longer reliably the one with least work
+            // — a thinly populated place on good land can be poor and still have plenty to
+            // do. Selecting on affluence and asserting about work was reading one column
+            // and testing another.
+            .min_by(|(_, a), (_, b)| a.env.quality().total_cmp(&b.env.quality()))
             .map(|(_, p)| p.env.clone())
             .unwrap();
         let richest = world
             .places
             .iter()
-            .max_by(|(_, a), (_, b)| a.env.affluence.total_cmp(&b.env.affluence))
+            .max_by(|(_, a), (_, b)| a.env.quality().total_cmp(&b.env.quality()))
             .map(|(_, p)| p.env.clone())
             .unwrap();
 

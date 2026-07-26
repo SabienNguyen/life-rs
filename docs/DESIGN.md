@@ -1428,19 +1428,62 @@ with many mouths has *nothing* spare rather than a little less. Trade carries a 
 neighbour's surplus, weighted at both ends, so a road is worth having and cannot abolish
 geography.
 
-Wiring it into opportunity is a real trade and both sides are worth stating. It fixed the
-thing the last section could not: **four or five of five quarters stay occupied, where
-before two or three did**, because crowding now costs something economically rather than
-only as a nuisance. The intergenerational elasticity fell from 0.63 to 0.56. Against that,
-the shared-environment share fell from 0.41 to 0.20 — still in band, but only just — chance
-rose from 0.46 to 0.53, and the mean surviving population fell from 208 to 180.
+Wiring it into *opportunity* was tried at five strengths and is not shipped. At the strong
+end the economy dominated, and because per-head surplus equalises across places — people
+move to where it is, and the check would have them bear more children there, both of which
+level it — opportunity stopped varying between neighbourhoods at all: the poorest quarter in
+a world came out with **more** work than the richest, being thinly settled on decent land,
+and a test encoding §14's second channel failed on it. At the weak end the whole level fell
+and populations with it, to 123. Real economies do not equalise like that, because of
+capital, agglomeration and institutions, and this one has none of the three.
 
-The missing piece is the one Phase 2 named and could not have: **fertility does not respond
-to the economy**, so population runs to the Malthusian ceiling everywhere and levels the
-differences between places by hunger. Wiring surplus into conception was tried and
-overshot — the mean surviving population went from 180 to 82 and three worlds in eight
-emptied. A demographic response is the right mechanism and needs its own pass with its own
-calibration, not a coefficient bolted to the end of an economy one.
+So the economy is computed, stored on every place and shown in the neighbourhood readout —
+a place now says what it *makes* as well as what its residents have — and channel two stays
+what §14 says it is. That is less than was hoped for and it is what the measurements
+support.
+
+**Technique, and the Malthusian trap.** What a people know how to do is a multiplier on what
+their land yields, and it is a *population* variable rather than a clock. Technique is not
+written down; it lives in people who know it, each an imperfect copy of whoever taught them.
+A large group has enough learners that the best copy each generation is nearly as good as
+the original; a small one loses a little every generation until the technique is gone. That
+is Tasmania — cut off at about four thousand people and over eight thousand years it lost
+bone tools, cold-weather clothing, fishing and hafted implements, through arithmetic rather
+than catastrophe. Connection multiplies the pool you can learn from, which is why isolation
+is the thing that impoverishes rather than poverty itself.
+
+The trap closes on its own, and it is the point of putting technique next to the economy
+rather than in a crate of its own. Better technique raises what the land yields; the extra
+food feeds more people; more people on the same land drive the surplus per head back down.
+Living standards return to where they were and what grew was the *population*. The most
+robust finding about the ten thousand years before 1800, here as arithmetic rather than as
+a claim — and there is a test that says so.
+
+**The demographic check: four attempts, four culls.** Phase 2 set fertility to a constant
+and said the feedback "arrives with resources and an economy". The economy arrived and the
+feedback did not, and the four failures are worth recording because each is the same mistake
+in a different costume. Every one of them is a *cull* — a reduction in births dressed as a
+redistribution — and each was caught by measuring the surviving population across eight
+worlds against a baseline of 208.
+
+| Centring | Mean surviving population |
+| --- | --- |
+| None: `1 − 0.72·(1 − opportunity)` | 82 |
+| On a constant living standard | 88 |
+| On the world's unweighted mean over places | 46 |
+| On the mean weighted by where people live | 138 |
+
+The third is the instructive one. Centred on the mean over *places*, the multiplier averages
+exactly one across places — and still culls, because places are not where the arithmetic
+happens. Crowded places are poor places and crowded places hold most of the people, so most
+of the population sits on the below-one side and the births lost there outnumber those
+gained on the thinly settled good ground. Weighting by households fixes that and still lands
+at 138, which means there is a fourth interaction — most likely with sorting, which moves
+people towards the places the check is already favouring.
+
+`economy::births_relative` is written, tested and deliberately not called. A demographic
+response is the right mechanism; it needs a pass of its own with the sorting loop in view,
+not a coefficient bolted to the end of an economy one.
 
 **And the tension that makes this hard.** The last two are the same knob. Fixing emptiness —
 by letting a household prefer somewhere it can afford — keeps all five quarters occupied and

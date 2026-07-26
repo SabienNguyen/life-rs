@@ -203,3 +203,212 @@ fn the_numbers_land_where_a_pre_industrial_economy_lands() {
         "ordinary land should not beat good land"
     );
 }
+
+// ── the Malthusian check ────────────────────────────────────────────────────────
+
+#[test]
+fn an_ordinary_place_is_left_alone_whatever_ordinary_means_here() {
+    // The property two earlier attempts got wrong, and the reason they emptied worlds. A
+    // feedback has a fixed point; a multiplier below one almost everywhere is a cull. And
+    // the fixed point has to be where this world's places actually are, not where a
+    // constant says they should be.
+    for typical in [0.02, 0.12, 0.24, 0.5, 0.9] {
+        assert!(
+            (births_relative(typical, typical) - 1.0).abs() < 1e-6,
+            "a typical place at {typical} was not left alone"
+        );
+    }
+}
+
+#[test]
+fn the_check_cannot_cull_a_world() {
+    // Stronger than the last, and the one that actually guarantees it: averaged over any
+    // spread of places, centred on that spread's own mean, the multiplier is one. So the
+    // check moves births about and never removes them.
+    for spread in [
+        vec![0.02, 0.05, 0.08, 0.11, 0.14],
+        vec![0.1, 0.3, 0.5, 0.7, 0.9],
+        vec![0.25; 5],
+    ] {
+        let typical: f32 = spread.iter().sum::<f32>() / spread.len() as f32;
+        let mean: f32 = spread.iter().map(|p| births_relative(*p, typical)).sum::<f32>()
+            / spread.len() as f32;
+        assert!(
+            (mean - 1.0).abs() < 0.02,
+            "across {spread:?} centred at {typical:.2} the check averaged {mean:.3}"
+        );
+    }
+}
+
+#[test]
+fn plenty_makes_children_and_want_does_not() {
+    assert!(births_relative(0.7, 0.24) > 1.0, "a place with food to spare should grow");
+    assert!(births_relative(0.02, 0.24) < 1.0, "a place with none should not");
+    let mut last = 0.0;
+    for step in 0..=20 {
+        let now = births_relative(step as f32 / 20.0, 0.24);
+        assert!(now >= last, "births fell as the place got richer");
+        last = now;
+    }
+}
+
+#[test]
+fn the_check_is_bounded_at_both_ends() {
+    // A place with nothing still has some children, and a rich one does not breed without
+    // limit. Both bounds are what stop the loop oscillating.
+    assert!(births_relative(0.0, 0.5) >= FEWEST);
+    assert!(births_relative(1.0, 0.1) <= MOST);
+    assert!(births_relative(-5.0, 0.2) >= FEWEST, "and it survives nonsense");
+    assert!(births_relative(5.0, 0.2) <= MOST);
+}
+
+#[test]
+fn the_check_moves_births_towards_the_places_that_can_feed_them() {
+    // The point of it. Two places, one with a surplus and one without, should differ in
+    // births by enough to matter over a few generations.
+    let good = produce(&land(0.85, 0.6, 0.0), 30.0).prosperity();
+    let poor = produce(&land(0.2, 0.3, 0.4), 90.0).prosperity();
+    let typical = (good + poor) / 2.0;
+    let good = births_relative(good, typical);
+    let poor = births_relative(poor, typical);
+    assert!(
+        good > poor * 1.3,
+        "good land {good:.2} against poor {poor:.2} — not enough to redistribute anybody"
+    );
+}
+
+// ── what a people know how to do ────────────────────────────────────────────────
+
+#[test]
+fn technique_raises_what_land_yields() {
+    let ground = land(0.6, 0.5, 0.0);
+    let bare = produce_knowing(&ground, 50.0, Technique::BARE);
+    let skilled = produce_knowing(&ground, 50.0, Technique::BARE.after_a_year(5_000.0, 0.8));
+    assert!(skilled.output >= bare.output);
+    // And `produce` is the bare case, so nothing that predates technique changed meaning.
+    assert_eq!(produce(&ground, 50.0), bare);
+}
+
+#[test]
+fn a_crowd_learns_and_a_handful_forgets() {
+    // The Tasmanian result, which is why this is a population variable and not a clock.
+    let mut crowd = Technique::BARE;
+    let mut few = Technique::BARE;
+    for _ in 0..400 {
+        crowd = crowd.after_a_year(8_000.0, 0.7);
+    }
+    assert!(crowd.level() > 1.05, "a large people learned nothing: {}", crowd.level());
+
+    // Now cut the large one off and shrink it, and watch it go.
+    let mut stranded = crowd;
+    for _ in 0..400 {
+        stranded = stranded.after_a_year(300.0, 0.1);
+    }
+    assert!(
+        stranded.level() < crowd.level(),
+        "a stranded people kept everything it knew"
+    );
+
+    for _ in 0..400 {
+        few = few.after_a_year(200.0, 0.2);
+    }
+    assert_eq!(few, Technique::BARE, "a handful invented something");
+}
+
+#[test]
+fn nobody_forgets_how_to_eat() {
+    let mut destitute = Technique::BARE;
+    for _ in 0..5_000 {
+        destitute = destitute.after_a_year(1.0, 0.0);
+    }
+    assert_eq!(destitute.level(), 1.0, "technique fell below bare subsistence");
+}
+
+#[test]
+fn isolation_is_what_impoverishes() {
+    // The same number of people, connected and not. This is the term that makes a road
+    // worth having in knowledge as well as in grain.
+    let mut connected = Technique::BARE;
+    let mut alone = Technique::BARE;
+    for _ in 0..600 {
+        connected = connected.after_a_year(800.0, 0.95);
+        alone = alone.after_a_year(800.0, 0.05);
+    }
+    assert!(
+        connected.level() > alone.level(),
+        "connected {:.3} against isolated {:.3}",
+        connected.level(),
+        alone.level()
+    );
+}
+
+#[test]
+fn learning_slows_as_there_is_more_to_know() {
+    let mut level = Technique::BARE;
+    let early = {
+        let before = level.level();
+        for _ in 0..200 {
+            level = level.after_a_year(6_000.0, 0.8);
+        }
+        level.level() - before
+    };
+    let late = {
+        let before = level.level();
+        for _ in 0..200 {
+            level = level.after_a_year(6_000.0, 0.8);
+        }
+        level.level() - before
+    };
+    assert!(late < early, "each technique should be harder than the last");
+}
+
+#[test]
+fn technique_never_passes_the_pre_industrial_ceiling() {
+    let mut level = Technique::BARE;
+    for _ in 0..200_000 {
+        level = level.after_a_year(100_000.0, 1.0);
+    }
+    assert!(level.level() <= 3.0 + 1e-6, "{}", level.level());
+    assert!(level.level() > 2.5, "it should get most of the way there eventually");
+}
+
+#[test]
+fn the_malthusian_trap_closes() {
+    // The most important consequence, and the reason technique belongs next to the
+    // Malthusian check rather than in a crate of its own. Better technique raises what the
+    // land yields; the extra food feeds more people; more people on the same land drives
+    // the surplus per head back down. Living standards return to where they were and the
+    // *population* is what grew.
+    //
+    // This is the single most robust finding about the ten thousand years before 1800, and
+    // here it is arithmetic rather than a claim.
+    let ground = land(0.6, 0.5, 0.0);
+    let learned = Technique::BARE.after_a_year(1e9, 1.0);
+    let better = Technique(3.0);
+
+    // The land now feeds more people at the same standard of living.
+    let before_at = |w| produce_knowing(&ground, w, Technique::BARE).per_head();
+    let after_at = |w| produce_knowing(&ground, w, better).per_head();
+    let _ = learned;
+
+    let standard = before_at(40.0);
+    assert!(standard > 0.0);
+    assert!(
+        after_at(40.0) > standard,
+        "before the population responds, technique makes people better off"
+    );
+
+    // Find where the improved economy returns to the old standard of living.
+    let mut carried = 40.0;
+    while after_at(carried) > standard && carried < 100_000.0 {
+        carried *= 1.05;
+    }
+    assert!(
+        carried > 40.0 * 2.0,
+        "trebling the yield should carry far more people, not slightly more: {carried:.0}"
+    );
+    assert!(
+        (after_at(carried) - standard).abs() < 0.05,
+        "and at that size they are no better off than they started"
+    );
+}

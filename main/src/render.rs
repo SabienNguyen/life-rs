@@ -269,13 +269,13 @@ pub fn family(world: &World, id: person::PersonId) -> Vec<String> {
 /// Every neighbourhood, as it currently reads.
 pub fn neighbourhoods(world: &World) -> Vec<String> {
     let mut lines = vec![format!(
-        "  {:<13} {:<18} {:>6} {:>6} {:>6} {:>6} {:>6} {:>5}",
-        "place", "reads as", "afflu", "safety", "bond", "bridge", "jobs", "hholds"
+        "  {:<13} {:<18} {:>6} {:>6} {:>6} {:>6} {:>6} {:>6} {:>5}",
+        "place", "reads as", "afflu", "safety", "bond", "bridge", "jobs", "makes", "hholds"
     )];
     for (id, place) in world.places.iter() {
         let households = world.society.households_in(id).count();
         lines.push(format!(
-            "  {:<13} {:<18} {:>6.2} {:>6.2} {:>6.2} {:>6.2} {:>6.2} {:>5}",
+            "  {:<13} {:<18} {:>6.2} {:>6.2} {:>6.2} {:>6.2} {:>6.2} {:>6.2} {:>5}",
             place.name,
             place.archetype().label(),
             place.env.affluence,
@@ -283,6 +283,7 @@ pub fn neighbourhoods(world: &World) -> Vec<String> {
             place.env.bonding_capital,
             place.env.bridging_capital,
             place.env.job_opportunity,
+            place.prosperity,
             households,
         ));
         // The ground under it, indented under the reading it produced — because the
