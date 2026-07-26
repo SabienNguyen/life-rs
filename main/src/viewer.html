@@ -173,6 +173,15 @@
   .tip-row { display: flex; align-items: center; gap: 7px; justify-content: space-between; }
   .tip-row .who { display: inline-flex; align-items: center; gap: 6px; }
 
+  /* ---- the little map ----------------------------------------------------- */
+  .worldmap { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+  .map-frame { position: relative; line-height: 0; }
+  .map-frame canvas {
+    display: block; width: 100%; height: auto; border: 1px solid var(--line);
+    border-radius: 3px; image-rendering: pixelated; background: var(--raised);
+  }
+  .map-frame svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+
   /* ---- quarters ---------------------------------------------------------- */
   .quarters { display: grid; grid-template-columns: repeat(auto-fit, minmax(196px, 1fr)); gap: 12px; }
   .quarter {
@@ -308,6 +317,14 @@
         were placed on it because somebody could live there.</p>
     </div>
     <div class="readout" id="planet"></div>
+    <figure class="worldmap">
+      <div class="map-frame">
+        <canvas id="map" width="640" height="320" role="img"
+                aria-label="Biome map of the founding planet, with the quarters marked"></canvas>
+        <svg id="map-pins" viewBox="0 0 640 320" preserveAspectRatio="none" aria-hidden="true"></svg>
+      </div>
+      <figcaption class="note" id="map-caption"></figcaption>
+    </figure>
   </section>
 
   <section class="panel">
@@ -481,6 +498,49 @@ plotWrap.addEventListener("mouseleave", () => {
 });
 
 /* ---- the planet --------------------------------------------------------- */
+/* Biome colours, in the order the `biome` crate declares them. Shared with the
+   deep-time globe page on purpose: the same biome is the same colour wherever it
+   is drawn, or nobody can carry a reading from one page to the other. */
+const BIOME_COLOURS = [
+  [238, 242, 245], [166, 170, 152], [ 48,  86,  70], [196, 190, 168],
+  [190, 190, 108], [ 96, 140,  70], [ 44, 104,  74], [166, 152,  92],
+  [216, 190, 136], [200, 172,  92], [110, 148,  56], [ 30, 104,  44],
+  [122, 168, 196], [ 44,  86, 132], [214, 228, 236],
+];
+
+function drawMap() {
+  const g = WORLD.planet;
+  if (!g || !g.map) return;
+  const canvas = $("map"), w = g.mapWide, h = g.mapTall;
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  const image = ctx.createImageData(w, h);
+  for (let i = 0; i < w * h; i++) {
+    const [r, gr, b] = BIOME_COLOURS[g.map.charCodeAt(i) - 65] ?? [0, 0, 0];
+    image.data[i * 4] = r; image.data[i * 4 + 1] = gr;
+    image.data[i * 4 + 2] = b; image.data[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(image, 0, 0);
+
+  // The quarters, over the top. Dots only, in each quarter\u2019s own colour: they sit in
+  // one country by construction, so five names here overlap into an unreadable smudge and
+  // the cards below already carry the names against the same colours.
+  const PINS_W = 640, PINS_H = 320;
+  const pins = $("map-pins");
+  pins.innerHTML = WORLD.places.map((p, i) => {
+    if (p.atX === null || p.atX === undefined) return "";
+    const x = (p.atX * PINS_W).toFixed(1), y = (p.atY * PINS_H).toFixed(1);
+    return `<circle cx="${x}" cy="${y}" r="6" fill="${placeColor(i)}"
+              stroke="var(--surface)" stroke-width="2.5" />`;
+  }).join("");
+
+  const named = WORLD.places.filter(p => p.atX !== null && p.atX !== undefined);
+  $("map-caption").textContent = named.length
+    ? `${named.length} quarters, coloured as below, on a ${g.cells}-cell grid. \u200b` +
+      `The colours of the map itself are biomes \u2014 read off the climate, not painted on.`
+    : `A ${g.cells}-cell grid. Colours are biomes, read off the climate rather than painted on.`;
+}
+
 function drawPlanet() {
   const g = WORLD.planet;
   if (!g) return;                       // a world with no ground under it
@@ -703,7 +763,7 @@ function drawEvents() {
 }
 
 /* ---- go ----------------------------------------------------------------- */
-drawLegend(); drawPlot(); drawPlanet(); drawQuarters(); drawRegister(); drawBalance(); drawEvents();
+drawLegend(); drawPlot(); drawPlanet(); drawMap(); drawQuarters(); drawRegister(); drawBalance(); drawEvents();
 const opener = matching()[0];
 if (opener) select(opener.i);
 window.addEventListener("resize", drawPlot);

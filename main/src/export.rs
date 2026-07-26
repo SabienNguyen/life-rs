@@ -80,9 +80,47 @@ fn planet(world: &World) -> String {
             field("arid", &num(surface.life.desert_share(planet))),
             field("productionGt", &num(surface.life.total_production_gt(planet))),
             field("cells", &format!("{}", planet.grid().len())),
+            field("mapWide", &format!("{MAP_WIDE}")),
+            field("mapTall", &format!("{MAP_TALL}")),
+            field("map", &quoted(&biome_map(surface))),
         ]
         .join(",")
     )
+}
+
+/// How wide the little map of the founding planet is, in pixels.
+///
+/// Small on purpose. This is not the deep-time globe — it is one still frame whose only
+/// job is to show *where the towns are*, and a hundred and sixty pixels across is enough
+/// to recognise a continent at a glance without adding fifty kilobytes to the page.
+const MAP_WIDE: usize = 160;
+const MAP_TALL: usize = MAP_WIDE / 2;
+
+/// The planet's biomes, one character a pixel, row-major from the north pole.
+///
+/// A character rather than base64 because the alphabet is fifteen long: one biome index
+/// per pixel written as a printable byte reads straight out of a string in the viewer
+/// with no decoding at all, and gzips to nothing.
+fn biome_map(surface: &sim::Surface) -> String {
+    let grid = surface.planet.grid();
+    let mut out = String::with_capacity(MAP_WIDE * MAP_TALL);
+    // Scanline order with the previous pixel as the search hint: neighbouring pixels are
+    // neighbouring places, so each lookup finishes in a hop or two.
+    let mut hint = 0u32;
+    for row in 0..MAP_TALL {
+        let latitude = (90.0 - 180.0 * (row as f64 + 0.5) / MAP_TALL as f64).to_radians();
+        for column in 0..MAP_WIDE {
+            let longitude = (-180.0 + 360.0 * (column as f64 + 0.5) / MAP_WIDE as f64).to_radians();
+            let direction = geo::Vec3::new(
+                latitude.cos() * longitude.cos(),
+                latitude.cos() * longitude.sin(),
+                latitude.sin(),
+            );
+            hint = grid.nearest_to(direction, hint);
+            out.push((b'A' + surface.life.biome(hint) as u8) as char);
+        }
+    }
+    out
 }
 
 fn places(world: &World) -> String {
@@ -143,6 +181,22 @@ fn places(world: &World) -> String {
                             .terrain
                             .as_ref()
                             .map_or("null".to_string(), |t| num(t.hardship())),
+                    ),
+                    // Where to draw it on the little map, as a fraction across and down.
+                    // Computed here rather than in the page because the projection is the
+                    // map's business and the map is written here.
+                    field(
+                        "atX",
+                        &place.terrain.as_ref().map_or("null".to_string(), |t| {
+                            num((t.longitude + 180.0) / 360.0)
+                        }),
+                    ),
+                    field(
+                        "atY",
+                        &place
+                            .terrain
+                            .as_ref()
+                            .map_or("null".to_string(), |t| num((90.0 - t.latitude) / 180.0)),
                     ),
                 ]
                 .join(",")
@@ -437,5 +491,43 @@ mod tests {
             "a rounded-away negative must not read as \"-\""
         );
         assert_eq!(num(0.1234), "0.123");
+    }
+
+    #[test]
+    fn the_planet_and_its_map_go_out_with_the_world() {
+        let world = a_world();
+        let json = snapshot(&world, &[], &observer::measure(&world));
+        assert!(json.contains("\"planet\":"), "no planet in the export");
+        assert!(json.contains("\"map\":"), "no map in the export");
+
+        // Every quarter carries a place on that map, and it is inside it.
+        for place in world.places.iter().filter_map(|(_, p)| p.terrain.as_ref()) {
+            let x = (place.longitude + 180.0) / 360.0;
+            let y = (90.0 - place.latitude) / 180.0;
+            assert!((0.0..=1.0).contains(&x), "a quarter at {x} across the map");
+            assert!((0.0..=1.0).contains(&y), "a quarter at {y} down the map");
+        }
+    }
+
+    #[test]
+    fn the_map_is_one_readable_character_per_pixel() {
+        let world = a_world();
+        let surface = world.surface().expect("a founded world has ground");
+        let map = biome_map(surface);
+        assert_eq!(map.len(), MAP_WIDE * MAP_TALL);
+        for byte in map.bytes() {
+            // Printable, inside the alphabet, and a biome that exists — the viewer
+            // subtracts 'A' and indexes a table of fifteen.
+            let index = byte - b'A';
+            assert!(
+                (index as usize) < biome::Biome::COUNT,
+                "the map claimed biome {index}"
+            );
+        }
+        // A planet is not one biome from pole to pole.
+        let distinct: std::collections::BTreeSet<u8> = map.bytes().collect();
+        assert!(distinct.len() > 4, "only {} biomes on the map", distinct.len());
+        // And it needs no escaping, which is why it is written as a bare string.
+        assert!(!map.contains('"') && !map.contains('\\'));
     }
 }
