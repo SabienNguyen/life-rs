@@ -1795,6 +1795,12 @@ still bounded. And **pre-filtering the relief table gained nothing**, because th
 was already folding the filter over a static slice; it was reverted rather than kept as
 duplication that could drift.
 
+**A run with no reader now records nothing small.** The salience floor already existed to
+say what a run does not care about; `--quiet` with no dossier and no file has said it
+already, and honouring that rather than asking again takes a sixty-year world from 10.5 s to
+8.8 s. Anything that reads the chronicle — a dossier, a JSON or HTML export, or simply
+printing events — keeps every record it always did.
+
 **The test suite was six times slower than it needed to be**, and not for any subtle reason:
 `cargo test` builds unoptimised, and this suite founds planets, solves climates and lives out
 centuries, so it is bound by how fast the simulation runs and not by how fast it compiles.

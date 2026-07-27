@@ -65,6 +65,23 @@ struct Options {
     quiet: bool,
 }
 
+impl Options {
+    /// The least important thing this run has any way of showing anybody.
+    ///
+    /// `--min` is the direct answer where it is given. Otherwise a silent run that wants
+    /// no dossier and writes no file will never surface a routine act however many it
+    /// keeps, so it keeps none — which is the same judgement `--min` makes, read off the
+    /// flags that are already there rather than asked for again.
+    fn floor(&self) -> Salience {
+        let anybody_reading = !self.quiet || self.dossier || self.json || self.html;
+        if anybody_reading {
+            self.min_salience
+        } else {
+            self.min_salience.max(Salience::Notable)
+        }
+    }
+}
+
 impl Default for Options {
     fn default() -> Self {
         Options {
@@ -145,7 +162,14 @@ fn main() -> ExitCode {
             // Don't record what won't be shown. A century of one person's every meal is
             // tens of millions of records; asking to see only the pivotal moments should
             // also mean not paying to store the rest.
-            world.record_only(options.min_salience);
+            //
+            // And a run that has been told to be quiet, and asked for no life story and no
+            // file, has no reader for the small stuff at all. Recording it anyway costs a
+            // sixth of the running time and a gigabyte of memory to produce twenty-six
+            // million records that are dropped on the floor when the process exits. The
+            // salience floor already exists to say what a run does not care about; this is
+            // reading what the rest of the flags have already said.
+            world.record_only(options.floor());
             if let Some(budget) = options.detail {
                 world.set_detail_budget(budget);
             }
