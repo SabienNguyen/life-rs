@@ -1706,7 +1706,13 @@ impl World {
     /// `evenings` is how many the one call stands for: one in the fine tier, a season's
     /// worth in the coarse. Everything below is per-evening and scales with it, so the two
     /// tiers make the same friendships out of the same year.
-    fn spend_an_evening(&mut self, id: PersonId, rng: &mut Rng, evenings: u32) {
+    fn spend_an_evening(
+        &mut self,
+        id: PersonId,
+        through: &[(PersonId, u32)],
+        rng: &mut Rng,
+        evenings: u32,
+    ) {
         let Some(place) = self.society.place_of(id) else {
             return;
         };
@@ -1732,7 +1738,7 @@ impl World {
         }
         to_hand.sort_unstable();
         to_hand.dedup();
-        let chosen = self.bonds.choose_company(id, &to_hand, rng);
+        let chosen = self.bonds.choose_company(id, &to_hand, through, rng);
         self.company = to_hand;
 
         let Some(other) = chosen else {
@@ -2361,8 +2367,12 @@ impl World {
                 continue;
             }
             let mut rng = self.moment_stream(Domain::Behavior, who.to_bits() ^ 0x_50c1, at);
+            // Whose friends stand with whom, tabulated once for the year rather than once an
+            // evening. It is very nearly the same table all year and rebuilding it sixteen
+            // times was a third of a coarsely simulated world.
+            let through = self.bonds.friends_of_friends(who);
             for _ in 0..COMPANY_A_YEAR {
-                self.spend_an_evening(who, &mut rng, each);
+                self.spend_an_evening(who, &through, &mut rng, each);
             }
         }
     }

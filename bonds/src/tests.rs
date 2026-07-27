@@ -315,7 +315,7 @@ fn company_is_chosen_and_strangers_are_still_met() {
     let mut r = rng(0x50);
     let mut counts = std::collections::BTreeMap::new();
     for _ in 0..400 {
-        if let Some(picked) = bonds.choose_company(who[0], &who, &mut r) {
+        if let Some(picked) = bonds.choose_company(who[0], &who, &bonds.friends_of_friends(who[0]), &mut r) {
             *counts.entry(picked).or_insert(0) += 1;
         }
     }
@@ -429,7 +429,7 @@ fn the_same_seed_makes_the_same_evening() {
     let run = || {
         let mut r = rng(0x51);
         (0..30)
-            .filter_map(|_| bonds.choose_company(who[0], &who, &mut r))
+            .filter_map(|_| bonds.choose_company(who[0], &who, &bonds.friends_of_friends(who[0]), &mut r))
             .collect::<Vec<_>>()
     };
     assert_eq!(run(), run());

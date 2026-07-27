@@ -420,21 +420,18 @@ impl Bonds {
     /// a walk of the chooser's own ties per candidate, which Dunbar bounds — but nothing
     /// bounds how many people live in a town, and nobody surveys the whole town before
     /// deciding who to spend an evening with. The caller samples; this picks.
-    pub fn choose_company(
-        &self,
-        who: PersonId,
-        to_hand: &[PersonId],
-        rng: &mut Rng,
-    ) -> Option<PersonId> {
-        // Friends of friends, counted **once** rather than once per candidate.
-        //
-        // The obvious way to write this is to ask, for each candidate, how many of my friends
-        // stand with them — and that was how it was written, and it was *sixty per cent of a
-        // coarsely simulated world*, nearly all of it walking a `BTreeMap`. Candidates times
-        // allies times a tree search each, sixteen times a year for everybody alive.
-        //
-        // Walking my friends' ties instead is quadratic in *my* friendships, which Dunbar
-        // bounds, and it happens once. The answer is identical.
+    /// How many of somebody's friends stand with each other person they could meet.
+    ///
+    /// Triadic closure, tabulated. Pulled out of `choose_company` and computed **once a year
+    /// rather than once an evening**, because it is very nearly the same table all year and
+    /// rebuilding it sixteen times was, after one round of fixing, still a third of a coarsely
+    /// simulated world.
+    ///
+    /// Walking a person's friends' ties is quadratic in their own friendships, which Dunbar
+    /// bounds. Asking the question the obvious way round — for each candidate, how many of my
+    /// friends know them — is quadratic in the size of the *town*, which nothing bounds, and
+    /// was sixty per cent of a run before that.
+    pub fn friends_of_friends(&self, who: PersonId) -> Vec<(PersonId, u32)> {
         let mut through: Vec<(PersonId, u32)> = Vec::new();
         for (friend, mine) in self.of(who) {
             if !mine.allied() {
@@ -450,6 +447,20 @@ impl Bonds {
                 }
             }
         }
+        through
+    }
+
+    pub fn choose_company(
+        &self,
+        who: PersonId,
+        to_hand: &[PersonId],
+        through: &[(PersonId, u32)],
+        rng: &mut Rng,
+    ) -> Option<PersonId> {
+        // What this person holds, fetched once. `tie` does two tree lookups — the holder and
+        // then the subject — and the holder is the same for every candidate, so asking it per
+        // candidate does half the work twice.
+        let mine = self.ties.get(&who);
 
         let mut best: Option<PersonId> = None;
         let mut total = 0.0;
@@ -457,7 +468,10 @@ impl Bonds {
             if *other == who {
                 continue;
             }
-            let tie = self.tie(who, *other);
+            let tie = mine
+                .and_then(|held| held.get(other))
+                .copied()
+                .unwrap_or(Tie::STRANGERS);
             // A stranger is worth meeting; a friend is worth more; a friend of a friend
             // sits between, which is triadic closure and is why groups close into circles.
             let mutual = through
