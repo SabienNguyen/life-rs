@@ -1756,6 +1756,52 @@ The honest risk: Full-LOD agent throughput and the scale-crossing projections ar
 two places these numbers could be wrong by an order of magnitude. Both are exercised
 by the M1 vertical slice for exactly that reason.
 
+### 22.1 Measured, and what was actually slow
+
+A profile rather than an estimate. Eighty founders, sixty years, two hundred and twenty-three
+lives — 13.8 s before, 10.5 s after, producing the identical world down to the event count.
+Where it went, by instruction count:
+
+| Cost | Share | What it was |
+|---|---|---|
+| `expf` | 10.5% | discounting delayed payoffs, and the softmax |
+| `score_all` | 12% | pricing seven options per decision |
+| scheduler | 11% | a heap pop and push per deed |
+| `malloc`/`free` | 4.8% | **one heap allocation per event recorded** |
+| chronicle + map lookups | 4% | filing every act under whoever it concerned |
+
+Four things were wrong rather than merely expensive, and all four are fixed with no change
+to any result:
+
+1. **Every recorded event allocated.** `Happening::subjects` returned a `Vec` — twenty-six
+   million allocations and frees in a sixty-year world, almost all holding a single
+   identifier. Nothing concerns more than three parties, so it is a fixed array now.
+2. **Four sevenths of one `exp` caller computed `exp(0)`.** Only three deeds pay off later
+   than immediately, and two of those at the same remove, so seven calls per decision were
+   really two.
+3. **The softmax allocated too**, collecting seven weights into a `Vec` per decision, and
+   spent an `exp` computing the best option's weight — which is exactly one by construction.
+4. **The chronicle index was a `BTreeMap`** on the hottest path in the simulation. Nothing
+   ever iterates it in order, so it is a hash map with a deterministic integer hasher —
+   deliberately not `std`'s default, which is randomly seeded and would break the promise
+   that a seed reproduces a world.
+
+Two more findings are recorded because they are *not* wins. **Compaction cannot pay for
+itself**: it rebuilds every surviving record and the whole index, so its cost falls on the
+total ever recorded rather than on the budget — trimming to one million cost 18% of the
+running time and so did trimming to eight million. It is wired as a safety valve at twenty
+million records, where an ordinary run never reaches it and a run heading for gigabytes is
+still bounded. And **pre-filtering the relief table gained nothing**, because the compiler
+was already folding the filter over a static slice; it was reverted rather than kept as
+duplication that could drift.
+
+**The test suite was six times slower than it needed to be**, and not for any subtle reason:
+`cargo test` builds unoptimised, and this suite founds planets, solves climates and lives out
+centuries, so it is bound by how fast the simulation runs and not by how fast it compiles.
+The same test takes 3.34 s at `opt-level = 0` and 0.53 s at 2 — inside a quarter of release,
+for about thirty seconds of extra compilation across the whole workspace. The full suite runs
+in five and a half minutes.
+
 ## 23. Open questions
 
 1. **Planet fidelity vs. speed.** Grid level 6 (40k cells, ~112 km) or level 7 (164k,

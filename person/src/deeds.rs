@@ -250,9 +250,17 @@ impl Choice {
 
 /// Price every option for this person, here, now.
 pub fn score_all(mind: &Mind<'_>, situation: &Situation) -> [f32; Deed::COUNT] {
-    let discount = situation.env.discount_rate();
     let conformity = mind.personality.conformity(mind.age_years);
     let mut scores = [0.0; Deed::COUNT];
+
+    // What a payoff is worth at each remove. Four of the seven deeds pay off the moment
+    // they are done, so their discount is exactly one and calling `exp` on nought to find
+    // that out is pure waste — and Wash and Socialize pay off at the same remove as each
+    // other, so between them there are two distinct answers rather than seven. `expf` was
+    // the most expensive function in the whole simulation at a tenth of all instructions;
+    // this is five sevenths of one of its two callers, for no change in any result.
+    let rate = situation.env.discount_rate();
+    let (mut known_delay, mut known_discount) = (f32::NAN, 1.0f32);
 
     for deed in Deed::ALL {
         let i = deed as usize;
@@ -276,7 +284,16 @@ pub fn score_all(mind: &Mind<'_>, situation: &Situation) -> [f32; Deed::COUNT] {
 
         // Channels 2 and 3: what it returns, discounted by how far off the return is.
         let delay = deed.payoff_delay_days();
-        let payoff_term = situation.env.payoff[i] * (-discount * delay).exp();
+        let discount = if delay == 0.0 {
+            1.0
+        } else if delay == known_delay {
+            known_discount
+        } else {
+            known_delay = delay;
+            known_discount = (-rate * delay).exp();
+            known_discount
+        };
+        let payoff_term = situation.env.payoff[i] * discount;
 
         // Channel 4: local practice pulls, in proportion to how much this person yields.
         let norm_term = (1.0 + conformity * (situation.env.norms[i] - 0.5)).max(0.05);
@@ -315,16 +332,20 @@ pub fn choose(mind: &Mind<'_>, situation: &Situation, rng: &mut Rng) -> Choice {
     // desperate a person is. Comparing each against the best makes the temperature mean
     // the same thing in every situation — and dividing by the best also keeps the
     // exponent negative, which is the overflow guard.
-    let weights: Vec<f32> = scores
-        .iter()
-        .map(|s| {
-            if *s <= 0.0 {
-                0.0
-            } else {
-                ((s / best - 1.0) / temperature).exp()
-            }
-        })
-        .collect();
+    // A fixed array, not a `Vec`. There are seven deeds and there always will be, so
+    // collecting them was a heap allocation and a free on every decision anybody made —
+    // twenty-six million of each in a sixty-year world.
+    let mut weights = [0.0f32; Deed::COUNT];
+    for (i, s) in scores.iter().enumerate() {
+        weights[i] = if *s <= 0.0 {
+            0.0
+        } else if *s >= best {
+            // The best option's exponent is exactly nought, so its weight is exactly one.
+            1.0
+        } else {
+            ((s / best - 1.0) / temperature).exp()
+        };
+    }
 
     let total: f32 = weights.iter().sum();
     let mut target = rng.unit_f32() * total;
@@ -565,3 +586,4 @@ mod tests {
         assert!(energy > 0.0, "and should be tiring");
     }
 }
+

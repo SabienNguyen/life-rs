@@ -241,23 +241,61 @@ impl Happening {
     /// A biography is the log filtered by participant, and this is the filter. Note that
     /// a birth is about three people: without the parents in the list, a life's record
     /// would not mention its own children.
-    pub fn subjects(&self) -> Vec<sim_core::chronicle::Subject> {
+    pub fn subjects(&self) -> Subjects {
+        use sim_core::chronicle::Subject;
+        let one = |a: Subject| Subjects::of(&[a]);
         match self {
-            Happening::WorldBegins { planet } => vec![planet.to_bits()],
-            Happening::PhaseBegins { planet, .. } => vec![planet.to_bits()],
+            Happening::WorldBegins { planet } => one(planet.to_bits()),
+            Happening::PhaseBegins { planet, .. } => one(planet.to_bits()),
             Happening::PersonArrives { person }
             | Happening::PersonDoes { person, .. }
             | Happening::PersonDies { person, .. }
-            | Happening::PersonMentored { person } => vec![person.to_bits()],
-            Happening::PersonPairs { person, with } => vec![person.to_bits(), with.to_bits()],
+            | Happening::PersonMentored { person } => one(person.to_bits()),
+            Happening::PersonPairs { person, with } => {
+                Subjects::of(&[person.to_bits(), with.to_bits()])
+            }
             Happening::PersonBorn {
                 child,
                 mother,
                 father,
-            } => vec![child.to_bits(), mother.to_bits(), father.to_bits()],
-            Happening::PersonMoves { person, to } => vec![person.to_bits(), to.to_bits()],
-            Happening::PlaceChanges { place, .. } => vec![place.to_bits()],
+            } => Subjects::of(&[child.to_bits(), mother.to_bits(), father.to_bits()]),
+            Happening::PersonMoves { person, to } => {
+                Subjects::of(&[person.to_bits(), to.to_bits()])
+            }
+            Happening::PlaceChanges { place, .. } => one(place.to_bits()),
         }
+    }
+}
+
+/// Who a happening concerns, without touching the heap.
+///
+/// This was a `Vec` and it was the single largest source of allocation in the simulation:
+/// one heap allocation and one free for **every event recorded**, twenty-six million of
+/// them in a sixty-year world, almost all of which hold exactly one identifier. Nothing
+/// concerns more than three parties — a birth, which is the child and both parents — so the
+/// whole thing fits in a fixed array and never leaves the stack.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Subjects {
+    who: [sim_core::chronicle::Subject; 3],
+    many: u8,
+}
+
+impl Subjects {
+    fn of(who: &[sim_core::chronicle::Subject]) -> Subjects {
+        let mut all = [0; 3];
+        all[..who.len()].copy_from_slice(who);
+        Subjects {
+            who: all,
+            many: who.len() as u8,
+        }
+    }
+
+    pub fn as_slice(&self) -> &[sim_core::chronicle::Subject] {
+        &self.who[..self.many as usize]
+    }
+
+    pub fn contains(&self, who: &sim_core::chronicle::Subject) -> bool {
+        self.as_slice().contains(who)
     }
 }
 
@@ -406,6 +444,29 @@ impl Surface {
         self.life = biome::Biosphere::read(&self.planet, &self.climate);
     }
 }
+
+/// How many records a world will hold before it starts forgetting the small and old.
+///
+/// The chronicle was never compacted. `compact_chronicle` has existed the whole time, with
+/// a comment saying that retaining every routine act for decades "is not affordable until
+/// compaction exists" — and compaction did exist, and nothing ever called it. A sixty-year
+/// world of two hundred people logs twenty-six million records at forty-eight bytes each;
+/// a hundred and fifty years of four hundred logged two hundred and thirteen million, which
+/// is ten gigabytes of memory nobody asked for.
+///
+/// A **safety valve, not housekeeping**, and the number is set from measurement rather than
+/// taste. Compaction rebuilds every surviving record and the whole index, so its cost falls
+/// on the total ever recorded and not on the budget: trimming to one million cost 18% of
+/// the running time, and so did trimming to eight million. There is no budget at which
+/// routine compaction is cheap. Set high enough that an ordinary run never reaches it and
+/// only a run heading for gigabytes ever pays, which is the right place for a valve.
+///
+/// Nothing above `Pivotal` is ever dropped, so what goes is what the design says should go.
+const CHRONICLE_BUDGET: usize = 20_000_000;
+
+/// How far over budget the chronicle drifts before it is trimmed, so the rebuild is
+/// amortised across those records rather than repeated at the threshold.
+const CHRONICLE_SLACK: usize = CHRONICLE_BUDGET / 2;
 
 /// How fine the grid under a populated world is.
 ///
@@ -1240,7 +1301,7 @@ impl World {
     /// Put something in the chronicle, filed under everyone it concerns.
     fn remember(&mut self, at: Time, salience: Salience, kind: Happening) {
         let about = kind.subjects();
-        self.chronicle.record_about(at, salience, kind, &about);
+        self.chronicle.record_about(at, salience, kind, about.as_slice());
     }
 
     /// Forget enough of the small and old to stay inside the budget.
@@ -1517,6 +1578,11 @@ impl World {
     /// in, then households reconsider where they live. Sorting last means a household
     /// moves on this year's reading, not on a stale one.
     fn reckoning(&mut self, at: Time) {
+        // Yearly, and only for a world that has recorded so much that the memory matters
+        // more than the time — see `CHRONICLE_BUDGET`.
+        if self.chronicle.len() > CHRONICLE_BUDGET + CHRONICLE_SLACK {
+            self.compact_chronicle(CHRONICLE_BUDGET);
+        }
         self.take_census(at);
         self.reckon_cultures(at);
         self.assign_detail();
@@ -3958,3 +4024,4 @@ mod detail_neutrality {
         );
     }
 }
+
