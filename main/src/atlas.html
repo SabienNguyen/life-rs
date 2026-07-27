@@ -195,6 +195,10 @@
           <div class="plate-head">Inhabited</div>
           <div class="tiles" id="world-places"></div>
         </div>
+        <div class="plate" style="margin-bottom:14px">
+          <div class="plate-head">What has been worked out</div>
+          <div id="world-advances"></div>
+        </div>
         <div class="plate">
           <div class="plate-head">Peoples</div>
           <div id="world-peoples"></div>
@@ -901,6 +905,21 @@ function drawWorldPanel() {
         <span class="tile-sub">${p.residents} living</span>
       </span>
     </button>`).join("") || `<p class="empty">Nobody lives anywhere.</p>`;
+  // The only events in the chronicle that changed what was *possible* rather than what
+  // happened. Most worlds have none, which is what being stuck in an age looks like.
+  const advances = (WORLD.events || []).filter(e => e.kind === "advance");
+  $("world-advances").innerHTML = advances.length
+    ? advances.slice(-8).reverse().map(e => `
+        <div style="margin-bottom:8px">
+          <div class="tile-name">${e.text}</div>
+          <div class="tile-sub">year ${e.year}</div>
+        </div>`).join("") +
+      (advances.length > 8
+        ? `<p class="tile-sub">${advances.length} in all.</p>`
+        : "")
+    : `<p class="empty">Nobody here has yet worked out anything their
+       grandparents did not already know.</p>`;
+
   const peoples = (WORLD.peoples || []);
   $("world-peoples").innerHTML = peoples.length ? peoples.map(who => `
     <div style="margin-bottom:10px">

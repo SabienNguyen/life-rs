@@ -491,6 +491,9 @@ fn events(world: &World) -> String {
                 Happening::PersonMoves { .. } => "move",
                 Happening::PersonMentored { .. } => "patron",
                 Happening::PlaceChanges { .. } => "place",
+                // The rarest thing in the chronicle and the only one that changes what is
+                // *possible* rather than what happened.
+                Happening::PersonWorksItOut { .. } => "advance",
                 _ => "other",
             };
             format!(
