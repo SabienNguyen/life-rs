@@ -2889,6 +2889,38 @@ The levels are left standing and labelled rather than quietly restated, because 
 centuries is an afternoon and pretending the old numbers still apply is worse than saying they
 do not.
 
+### 29.7.2 Thinking capacity is conserved while the population is still growing
+
+Re-measuring after §30 turned up something that looked like a regression and is not. The
+repaired worlds are larger, richer, better connected and less hungry — seed 0x221 at year 300
+reads 2,957 alive against 1,691, with 2,104 people in touch against 887 and hunger 0.264
+against 0.365 — and they produce *fewer* advances: 9 against 13, with the frontier at 1.010
+against 1.023.
+
+The reason is visible in one probe. §29 makes an advance need `prosperity - want`, a place's
+spare per head, and the thing that rolls for one is a head standing in it. So what a world can
+think with is the product: heads times how idle each of them is. Over two hundred years, seed
+0x221, that product reads
+
+    84, 124, 81, 94, 134, 148, 124, 119, 135, 130
+
+while the population it is drawn from goes from 120 to about 800. **It is flat.** Spare per
+head falls exactly as fast as heads accumulate, which is what a Malthusian world *is* — every
+gain in what the ground yields is spent on more people to yield it to, including the gain in
+slack. A world still filling has a fixed budget for having ideas no matter how many people it
+puts in the field.
+
+Which means the compounding in §29.7 was never a property of the growth phase. It began when
+that world's population stopped at its ceiling — 1,888 then 1,870 — and technique kept climbing
+into a population that was no longer eating the difference. §30's world is bigger and better
+fed and has therefore *not finished filling* by year 300, so it is still in the flat part. The
+trajectory is not worse; the threshold is later, because the ceiling is higher.
+
+Stated as a prediction so it can be wrong: the compounding should appear in these worlds too,
+one or two centuries further out than it did before, and it should appear at the point where
+`living` stops rising rather than at any particular date. Runs to six centuries are what will
+say.
+
 ### 29.8 An advance is a thing that happened to somebody
 
 `Happening::PersonWorksItOut` is the rarest thing in the chronicle and the only one that
