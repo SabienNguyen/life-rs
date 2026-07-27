@@ -109,12 +109,19 @@ fn planet(world: &World) -> String {
     )
 }
 
-/// How wide the little map of the founding planet is, in pixels.
+/// How wide the map of the founding planet is, in pixels.
 ///
-/// Small on purpose. This is not the deep-time globe — it is one still frame whose only
-/// job is to show *where the towns are*, and a hundred and sixty pixels across is enough
-/// to recognise a continent at a glance without adding fifty kilobytes to the page.
-const MAP_WIDE: usize = 160;
+/// It was a hundred and sixty, which is enough to recognise a continent at a glance and
+/// was the whole job when the only reader was a thumbnail with the towns marked. The atlas
+/// reads it differently: it wraps the same pixels onto a globe and then magnifies a corner
+/// of them until a single cell fills a hand's breadth of screen, so what was once "enough
+/// to recognise" has to survive being looked at closely.
+///
+/// Three hundred and twenty is a quarter-degree of longitude at the equator — still coarser
+/// than the level-three grid underneath it, so no detail is being invented — and costs
+/// about fifty kilobytes in the page, which compresses to almost nothing because a map is
+/// mostly runs of the same biome.
+const MAP_WIDE: usize = 320;
 const MAP_TALL: usize = MAP_WIDE / 2;
 
 /// The planet's biomes, one character a pixel, row-major from the north pole.

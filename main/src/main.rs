@@ -17,6 +17,8 @@ mod render;
 const VIEWER: &str = include_str!("viewer.html");
 /// The deep-time page, with a placeholder where the planet goes.
 const GLOBE: &str = include_str!("globe.html");
+/// The atlas: a globe you can turn, and four steps down from it to one person.
+const ATLAS: &str = include_str!("atlas.html");
 
 const USAGE: &str = "\
 life-rs — run a world and watch it
@@ -35,6 +37,8 @@ options:
   --detail <n>     how many people to simulate finely (default: 400)
   --json           write the whole world out as JSON
   --html           write a self-contained page you can open in a browser
+  --atlas          write a page with a globe you can turn and click down
+                   through — world, region, settlement, person
   --globe <myr>    run the solid planet for this many megayears instead, and
                    write a page you can scrub through
   --ages <myr>     run a *populated* world for this many megayears: the planet
@@ -57,6 +61,7 @@ struct Options {
     detail: Option<usize>,
     json: bool,
     html: bool,
+    atlas: bool,
     globe: Option<f64>,
     ages: Option<f64>,
     grid: u8,
@@ -73,7 +78,8 @@ impl Options {
     /// keeps, so it keeps none — which is the same judgement `--min` makes, read off the
     /// flags that are already there rather than asked for again.
     fn floor(&self) -> Salience {
-        let anybody_reading = !self.quiet || self.dossier || self.json || self.html;
+        let anybody_reading =
+            !self.quiet || self.dossier || self.json || self.html || self.atlas;
         if anybody_reading {
             self.min_salience
         } else {
@@ -95,6 +101,7 @@ impl Default for Options {
             detail: None,
             json: false,
             html: false,
+            atlas: false,
             globe: None,
             ages: None,
             grid: 4,
@@ -181,7 +188,7 @@ fn main() -> ExitCode {
     // The JSON path walks the run a year at a time so the viewer has a series to plot;
     // otherwise it is one jump to the horizon.
     let mut series = Vec::new();
-    if options.json || options.html {
+    if options.json || options.html || options.atlas {
         let years = options.span.as_years().ceil() as u64;
         for year in 0..=years {
             if year > 0 {
@@ -195,7 +202,9 @@ fn main() -> ExitCode {
         }
         let balance = observer::measure(&world);
         let data = export::snapshot(&world, &series, &balance);
-        if options.html {
+        if options.atlas {
+            println!("{}", ATLAS.replace("__WORLD_DATA__", &data));
+        } else if options.html {
             // The viewer is a template with one hole in it, filled at run time. Keeping
             // it a template rather than a written-out file means any seed can produce
             // its own page.
@@ -526,6 +535,7 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Option<Options>, Str
             "--balance" => options.balance = true,
             "--json" => options.json = true,
             "--html" => options.html = true,
+            "--atlas" => options.atlas = true,
             "--save" => options.save = Some(value()?),
             "--load" => options.load = Some(value()?),
             "--ages" => {
@@ -666,6 +676,24 @@ mod tests {
             "the world is substituted in exactly once"
         );
         assert!(VIEWER.contains("<title>"), "a page needs a name");
+        // The atlas is the same contract: one hole for the world, a name, and nothing
+        // fetched from anywhere. A page that reaches for a font or a script is a page
+        // that shows a broken world to anybody offline.
+        assert_eq!(
+            ATLAS.matches("__WORLD_DATA__").count(),
+            1,
+            "the atlas takes the world in exactly one place"
+        );
+        assert!(ATLAS.contains("<title>"), "the atlas needs a name");
+        assert!(
+            !ATLAS.contains("http://") && !ATLAS.contains("https://"),
+            "the atlas must stand on its own with nothing fetched"
+        );
+        // Every scene the rail can reach has to exist in the markup, or a click lands
+        // on nothing.
+        for scene in ["scene-world", "scene-region", "scene-place", "scene-person"] {
+            assert!(ATLAS.contains(scene), "the atlas is missing {scene}");
+        }
         assert!(
             !VIEWER.contains("http://") && !VIEWER.contains("https://"),
             "the page must be self-contained — no external fetches"

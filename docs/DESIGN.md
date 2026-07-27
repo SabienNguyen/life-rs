@@ -942,6 +942,28 @@ scoring table showing which options were *gated off* rather than merely outscore
 hide a thin one. The globe and phylogeny views need real rendering (`wgpu`) and come
 with deep time in M4; both read the same `Observer` API.
 
+### 18.1 The atlas
+
+One page, four scenes, and the same gesture at every level: point at a thing and go
+inside it. A globe you turn with the mouse; click it and you are in a region three
+thousand kilometres across; click a settlement and you are in it; click somebody and you
+are reading a life. The rail across the top is the way back up, and every step of it names
+what you actually chose rather than "level 2".
+
+It is drawn **pixelated on purpose**, and the reason is honesty rather than nostalgia. The
+map is a quarter-degree per pixel because that is genuinely all the ground the simulation
+solved; magnifying it into smooth coastlines would be inventing detail nobody computed. A
+hard-edged pixel says *this is the resolution of what is known*, and a limited palette with
+banded shading and a dither says the same thing about the shading. Where the atlas draws
+something that is not in the data — a figure standing in a settlement — it is plainly a
+token, built from the person's own numbers: their name picks the palette, their age picks
+the height, and how they have done picks the collar.
+
+The person scene shows the §15 decomposition rather than hiding it: every one of the five
+factors is three bars — what came down the genome, what the household put there, and what
+was nobody's doing — because "why is she like that" having an answer is the point of
+carrying the three separately.
+
 ## 19. Fidelity: what's real and what's approximated
 
 Being explicit about this is what separates a coarse simulation from a fake one.

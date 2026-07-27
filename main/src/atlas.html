@@ -1,0 +1,806 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Atlas of a world</title>
+
+<style>
+  /* ---- the palette -------------------------------------------------------
+     A fantasy atlas read by candlelight: deep violet dark, parchment ink, and
+     one gold that means "you may touch this". Nothing here is round — every
+     edge is a whole pixel, and every shadow is a hard offset rather than a
+     blur, because a blur is the one thing a pixel display cannot do. */
+  :root {
+    --void:   #0b0a14;
+    --ground: #14121f;
+    --panel:  #1d1a2e;
+    --raised: #272341;
+    --line:   #3d3760;
+    --ink:    #ece2c8;
+    --dim:    #9186b0;
+    --gold:   #e0a94a;
+    --ember:  #b8503f;
+    --leaf:   #6f9a52;
+    --px: 4px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--void);
+    color: var(--ink);
+    font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: none;
+    font-smooth: never;
+  }
+
+  canvas, img { image-rendering: pixelated; image-rendering: crisp-edges; }
+
+  .frame { max-width: 1120px; margin: 0 auto; padding: 24px 20px 64px; }
+
+  /* ---- the rail ---------------------------------------------------------- */
+  .rail {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 0;
+    border: 2px solid var(--line); background: var(--panel);
+    box-shadow: var(--px) var(--px) 0 var(--void);
+    margin-bottom: 20px;
+  }
+  .crumb {
+    font: inherit; color: var(--dim); background: none; border: 0;
+    border-right: 2px solid var(--line);
+    padding: 10px 14px; cursor: pointer;
+    text-transform: uppercase; letter-spacing: 0.16em; font-size: 11px;
+  }
+  .crumb:last-of-type { border-right: 0; }
+  .crumb[aria-current="true"] { color: var(--gold); background: var(--raised); }
+  .crumb:hover:not([aria-current="true"]) { color: var(--ink); background: var(--raised); }
+  .crumb:disabled { opacity: 0.35; cursor: default; }
+  .rail-tail {
+    margin-left: auto; padding: 10px 14px; font-size: 11px; color: var(--dim);
+    text-transform: uppercase; letter-spacing: 0.16em;
+  }
+
+  /* ---- scenes ------------------------------------------------------------ */
+  .scene { display: none; }
+  .scene[data-on="true"] { display: block; }
+
+  h1 {
+    font-size: 26px; margin: 0 0 4px; letter-spacing: 0.04em;
+    text-shadow: 2px 2px 0 var(--void);
+  }
+  .eyebrow {
+    text-transform: uppercase; letter-spacing: 0.22em; font-size: 10px;
+    color: var(--gold); margin: 0 0 6px;
+  }
+  .note { color: var(--dim); margin: 0 0 18px; max-width: 62ch; font-size: 12.5px; }
+
+  .stage { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; align-items: start; }
+  @media (max-width: 820px) { .stage { grid-template-columns: 1fr; } }
+
+  .plate {
+    border: 2px solid var(--line); background: var(--panel);
+    box-shadow: var(--px) var(--px) 0 var(--void);
+    padding: 14px;
+  }
+  .plate-head {
+    text-transform: uppercase; letter-spacing: 0.18em; font-size: 10px;
+    color: var(--gold); margin-bottom: 10px;
+  }
+
+  /* the globe and its map sit on the void, centred, with a hard border */
+  .viewport {
+    position: relative; display: flex; justify-content: center; align-items: center;
+    border: 2px solid var(--line); background: var(--void);
+    box-shadow: var(--px) var(--px) 0 var(--void);
+    padding: 12px; overflow: hidden;
+  }
+  /* Canvas and overlay share one box that scales with the column, so the marks stay
+     on the ground they mark. Pinning the overlay to the *viewport* instead lines it
+     up only at one window width, and clips the canvas at every other. */
+  .plot { position: relative; width: 100%; }
+  .plot canvas { display: block; width: 100%; height: auto; touch-action: none; }
+  .plot svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  #globe { cursor: grab; }
+  #globe.dragging { cursor: grabbing; }
+  #region { cursor: crosshair; }
+
+  .hint {
+    position: absolute; left: 12px; bottom: 12px;
+    font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--dim); background: rgb(11 10 20 / 0.8); padding: 4px 8px;
+    border: 1px solid var(--line);
+  }
+
+  /* ---- readouts ---------------------------------------------------------- */
+  dl.readout { margin: 0; display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; font-size: 12px; }
+  dl.readout dt { color: var(--dim); }
+  dl.readout dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* The row sizes itself to the number, so a bar left to its own devices comes out
+     forty pixels wide and says nothing. Give it a width of its own. */
+  .bar {
+    width: 120px; height: 7px; margin-top: 3px;
+    background: var(--raised); border: 1px solid var(--line);
+    display: flex;
+  }
+  .bar span { display: block; height: 100%; background: var(--gold); }
+  dl.readout dd { display: flex; flex-direction: column; align-items: flex-end; }
+
+  /* ---- pickable tiles ---------------------------------------------------- */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .tile {
+    font: inherit; color: inherit; text-align: left; cursor: pointer;
+    border: 2px solid var(--line); background: var(--raised);
+    box-shadow: 3px 3px 0 var(--void);
+    padding: 10px 12px; display: flex; gap: 10px; align-items: center;
+  }
+  .tile:hover { border-color: var(--gold); background: var(--panel); }
+  .tile:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .tile canvas { flex: none; }
+  .tile-name { font-size: 13px; }
+  .tile-sub { font-size: 10.5px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.1em; }
+
+  .folk { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 8px; }
+  .folk .tile { padding: 8px 10px; box-shadow: 2px 2px 0 var(--void); }
+  .dead { opacity: 0.45; }
+
+  .kin { display: flex; flex-wrap: wrap; gap: 8px; }
+  .kin button {
+    font: inherit; font-size: 12px; color: var(--ink); cursor: pointer;
+    background: var(--raised); border: 2px solid var(--line); padding: 5px 9px;
+  }
+  .kin button:hover { border-color: var(--gold); }
+
+  .empty { color: var(--dim); font-size: 12px; }
+</style>
+
+<div class="frame">
+  <nav class="rail" id="rail" aria-label="Where you are"></nav>
+
+  <!-- ---- the world ---------------------------------------------------- -->
+  <section class="scene" id="scene-world" data-on="true">
+    <p class="eyebrow">The world entire</p>
+    <h1 id="world-title">A world</h1>
+    <p class="note">Drag to turn it. Every pixel is a quarter-degree of ground the
+      simulation actually solved — no coastline was drawn by hand. Gold marks where
+      somebody lives; click anywhere to go down.</p>
+    <div class="stage">
+      <div class="viewport">
+        <div class="plot" style="max-width:520px">
+          <canvas id="globe" width="130" height="130"></canvas>
+          <svg id="globe-pins" viewBox="0 0 520 520" preserveAspectRatio="none" aria-hidden="true"></svg>
+        </div>
+        <div class="hint">drag to spin &middot; click to descend</div>
+      </div>
+      <div>
+        <div class="plate" style="margin-bottom:14px">
+          <div class="plate-head">The planet</div>
+          <dl class="readout" id="world-readout"></dl>
+        </div>
+        <div class="plate" style="margin-bottom:14px">
+          <div class="plate-head">Inhabited</div>
+          <div class="tiles" id="world-places"></div>
+        </div>
+        <div class="plate">
+          <div class="plate-head">Peoples</div>
+          <div id="world-peoples"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---- a region ------------------------------------------------------ -->
+  <section class="scene" id="scene-region">
+    <p class="eyebrow">A region of it</p>
+    <h1 id="region-title">Somewhere</h1>
+    <p class="note" id="region-note"></p>
+    <div class="stage">
+      <div class="viewport">
+        <div class="plot" style="max-width:700px">
+          <canvas id="region" width="140" height="105"></canvas>
+          <svg id="region-pins" viewBox="0 0 700 525" preserveAspectRatio="none" aria-hidden="true"></svg>
+        </div>
+        <div class="hint" id="region-hint">click a settlement</div>
+      </div>
+      <div>
+        <div class="plate" style="margin-bottom:14px">
+          <div class="plate-head">Settlements here</div>
+          <div class="tiles" id="region-places"></div>
+        </div>
+        <div class="plate">
+          <div class="plate-head">The ground</div>
+          <div id="region-legend"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---- a place ------------------------------------------------------- -->
+  <section class="scene" id="scene-place">
+    <p class="eyebrow">A settlement</p>
+    <h1 id="place-title">Somewhere</h1>
+    <p class="note" id="place-note"></p>
+    <div class="stage">
+      <div>
+        <div class="plate">
+          <div class="plate-head">Who lives here</div>
+          <div class="folk" id="place-folk"></div>
+        </div>
+      </div>
+      <div class="plate">
+        <div class="plate-head">The ground and the reading</div>
+        <dl class="readout" id="place-readout"></dl>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---- a person ------------------------------------------------------ -->
+  <section class="scene" id="scene-person">
+    <p class="eyebrow">One life</p>
+    <h1 id="person-title">Somebody</h1>
+    <p class="note" id="person-note"></p>
+    <div class="stage">
+      <div class="plate">
+        <div class="plate-head">Temperament</div>
+        <dl class="readout" id="person-factors"></dl>
+        <div class="plate-head" style="margin-top:18px">Kin</div>
+        <div class="kin" id="person-kin"></div>
+      </div>
+      <div class="plate">
+        <div class="plate-head">The person</div>
+        <div style="display:flex;justify-content:center;padding:10px 0 16px">
+          <canvas id="person-portrait" width="24" height="32" style="width:144px;height:192px"></canvas>
+        </div>
+        <dl class="readout" id="person-readout"></dl>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+const WORLD = __WORLD_DATA__;
+
+// The fifteen biomes, in the order the simulation numbers them, pushed towards a
+// limited palette so the map reads as a drawn thing rather than a photograph.
+const BIOME = [
+  [232, 238, 244], [150, 158, 148], [ 46,  82,  70], [186, 178, 156],
+  [178, 176, 106], [ 88, 130,  66], [ 42,  98,  72], [156, 142,  88],
+  [206, 178, 126], [190, 162,  86], [104, 140,  54], [ 34,  96,  46],
+  [ 62,  96, 138], [ 34,  56,  96], [206, 220, 232],
+];
+const SEA = new Set([12, 13, 14]);
+const BIOME_NAME = [
+  "glacier", "tundra", "taiga", "cold desert", "grassland", "temperate forest",
+  "temperate rainforest", "shrubland", "desert", "savanna", "seasonal forest",
+  "rainforest", "shelf sea", "open ocean", "sea ice",
+];
+
+const $ = id => document.getElementById(id);
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const G = WORLD.planet;
+
+/* ---- where we are ------------------------------------------------------- */
+let view = { scene: "world", region: null, place: null, person: null };
+
+function go(scene, what) {
+  if (scene === "region") view.region = what;
+  if (scene === "place") { view.place = what; }
+  if (scene === "person") view.person = what;
+  view.scene = scene;
+  draw();
+}
+
+function draw() {
+  for (const name of ["world", "region", "place", "person"]) {
+    $("scene-" + name).dataset.on = String(view.scene === name);
+  }
+  drawRail();
+  if (view.scene === "region") drawRegion();
+  if (view.scene === "place") drawPlace();
+  if (view.scene === "person") drawPerson();
+  window.scrollTo(0, 0);
+}
+
+function drawRail() {
+  const steps = [
+    { key: "world", label: "World", on: true },
+    { key: "region", label: view.region ? view.region.label : "Region", on: !!view.region },
+    { key: "place", label: view.place != null ? WORLD.places[view.place].name : "Settlement", on: view.place != null },
+    { key: "person", label: view.person != null ? WORLD.people[view.person].name : "Person", on: view.person != null },
+  ];
+  $("rail").innerHTML = steps.map(s => `
+    <button type="button" class="crumb" data-go="${s.key}"
+            aria-current="${view.scene === s.key}" ${s.on ? "" : "disabled"}>${s.label}</button>
+  `).join("") + `<span class="rail-tail">${WORLD.living} living &middot; year ${WORLD.year}</span>`;
+  $("rail").querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", () => {
+    const key = b.dataset.go;
+    if (key === "world") { view.scene = "world"; draw(); }
+    else if (key === "region" && view.region) go("region", view.region);
+    else if (key === "place" && view.place != null) go("place", view.place);
+    else if (key === "person" && view.person != null) go("person", view.person);
+  }));
+}
+
+/* ---- reading the map ---------------------------------------------------- */
+// The map is one character a pixel, row-major from the north pole.
+function biomeAt(lonDeg, latDeg) {
+  const x = Math.floor(((lonDeg + 180) / 360) * G.mapWide);
+  const y = Math.floor(((90 - latDeg) / 180) * G.mapTall);
+  const col = ((x % G.mapWide) + G.mapWide) % G.mapWide;
+  const row = clamp(y, 0, G.mapTall - 1);
+  return G.map.charCodeAt(row * G.mapWide + col) - 65;
+}
+
+// Places carry their position as a fraction across the same map.
+const placeLon = p => p.atX * 360 - 180;
+const placeLat = p => 90 - p.atY * 180;
+const inhabited = () => WORLD.places.map((p, i) => ({ p, i })).filter(({ p }) => p.residents > 0);
+
+/* ---- the globe ---------------------------------------------------------- */
+let spin = 0, tilt = 0.35, dragging = false, lastX = 0, lastY = 0, idle = true;
+
+function drawGlobe() {
+  const canvas = $("globe"), n = canvas.width, r = n / 2;
+  const ctx = canvas.getContext("2d");
+  const image = ctx.createImageData(n, n);
+  const cosT = Math.cos(tilt), sinT = Math.sin(tilt);
+
+  for (let py = 0; py < n; py++) {
+    for (let px = 0; px < n; px++) {
+      const i = (py * n + px) * 4;
+      // Centre of the pixel, in units of the radius.
+      const x = (px + 0.5 - r) / (r - 1), y = (r - py - 0.5) / (r - 1);
+      const d2 = x * x + y * y;
+      if (d2 > 1) {
+        // Off the sphere: the void, with stars on a fixed lattice so they hold still
+        // while the globe turns under them. Sparse on purpose — one in ninety pixels,
+        // not one in twenty. A dense field is not a night sky, it is grey static, and
+        // it fights the thing it is meant to sit behind.
+        const scatter = (((px * 73856093) ^ (py * 19349663)) >>> 0) % 900;
+        const star = scatter === 0 ? 2 : scatter < 9 ? 1 : 0;
+        const v = star === 2 ? 170 : star === 1 ? 70 : 13;
+        image.data[i] = v; image.data[i + 1] = v;
+        image.data[i + 2] = star ? Math.min(255, v + 45) : 22;
+        image.data[i + 3] = 255;
+        continue;
+      }
+      // The rim: one ring of pixels lit like an atmosphere, which is what tells the
+      // eye this is a ball and not a disc.
+      if (d2 > 0.978) {
+        image.data[i] = 96; image.data[i + 1] = 130; image.data[i + 2] = 178;
+        image.data[i + 3] = 255;
+        continue;
+      }
+      const z = Math.sqrt(1 - d2);
+      // Tilt about the horizontal axis, then read the latitude off the result.
+      const yr = y * cosT + z * sinT;
+      const zr = -y * sinT + z * cosT;
+      const lat = Math.asin(clamp(yr, -1, 1)) * 180 / Math.PI;
+      const lon = Math.atan2(x, zr) * 180 / Math.PI + spin;
+      const b = biomeAt(lon, lat);
+      let [cr, cg, cb] = BIOME[b] ?? [0, 0, 0];
+      // Banded shading rather than a gradient — bands are what a limited palette can
+      // actually express, and a gradient on four colours is just noise. Mostly frontal
+      // so the world is lit and legible, with the falloff kept at the limb where it
+      // reads as roundness instead of as gloom.
+      const light = clamp(0.30 + 0.30 * x + 0.18 * y + 0.62 * z, 0, 1.2);
+      const step = light > 0.90 ? 1.18 : light > 0.68 ? 1.04 : light > 0.48 ? 0.90 : 0.74;
+      image.data[i] = clamp(cr * step, 0, 255);
+      image.data[i + 1] = clamp(cg * step, 0, 255);
+      image.data[i + 2] = clamp(cb * step, 0, 255);
+      image.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(image, 0, 0);
+  drawGlobePins();
+}
+
+// Where a lat/lon lands on the globe canvas, and whether it is facing us.
+function onGlobe(lonDeg, latDeg) {
+  const lat = latDeg * Math.PI / 180, lon = (lonDeg - spin) * Math.PI / 180;
+  const x = Math.cos(lat) * Math.sin(lon);
+  const yv = Math.sin(lat);
+  const zv = Math.cos(lat) * Math.cos(lon);
+  const cosT = Math.cos(tilt), sinT = Math.sin(tilt);
+  const y = yv * cosT - zv * sinT;
+  const z = yv * sinT + zv * cosT;
+  return { x, y, facing: z > 0.02 };
+}
+
+function drawGlobePins() {
+  const size = 520, r = size / 2;
+  $("globe-pins").innerHTML = inhabited().map(({ p, i }) => {
+    const at = onGlobe(placeLon(p), placeLat(p));
+    if (!at.facing) return "";
+    const cx = r + at.x * (r - 6), cy = r - at.y * (r - 6);
+    // A plus, not a disc — a disc at this size is a smudge.
+    return `<g>
+      <rect x="${cx - 7}" y="${cy - 2}" width="14" height="4" fill="#0b0a14" />
+      <rect x="${cx - 2}" y="${cy - 7}" width="4" height="14" fill="#0b0a14" />
+      <rect x="${cx - 5}" y="${cy - 1}" width="10" height="2" fill="#e0a94a" />
+      <rect x="${cx - 1}" y="${cy - 5}" width="2" height="10" fill="#e0a94a" />
+    </g>`;
+  }).join("");
+}
+
+function globePoint(event) {
+  const canvas = $("globe"), box = canvas.getBoundingClientRect();
+  const x = ((event.clientX - box.left) / box.width) * 2 - 1;
+  const y = 1 - ((event.clientY - box.top) / box.height) * 2;
+  const d2 = x * x + y * y;
+  if (d2 > 1) return null;
+  const z = Math.sqrt(1 - d2);
+  const cosT = Math.cos(tilt), sinT = Math.sin(tilt);
+  const yr = y * cosT + z * sinT, zr = -y * sinT + z * cosT;
+  return {
+    lat: Math.asin(clamp(yr, -1, 1)) * 180 / Math.PI,
+    lon: Math.atan2(x, zr) * 180 / Math.PI + spin,
+  };
+}
+
+function wireGlobe() {
+  const canvas = $("globe");
+  let moved = 0;
+  canvas.addEventListener("pointerdown", e => {
+    dragging = true; idle = false; moved = 0;
+    lastX = e.clientX; lastY = e.clientY;
+    canvas.classList.add("dragging"); canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener("pointermove", e => {
+    if (!dragging) return;
+    const dx = e.clientX - lastX, dy = e.clientY - lastY;
+    moved += Math.abs(dx) + Math.abs(dy);
+    spin -= dx * 0.4;
+    tilt = clamp(tilt + dy * 0.006, -1.2, 1.2);
+    lastX = e.clientX; lastY = e.clientY;
+    drawGlobe();
+  });
+  const release = () => { dragging = false; canvas.classList.remove("dragging"); };
+  canvas.addEventListener("pointerup", e => {
+    release();
+    if (moved > 6) return;                       // a drag, not a click
+    const at = globePoint(e);
+    if (at) descend(at.lon, at.lat);
+  });
+  canvas.addEventListener("pointercancel", release);
+  // Hovering stops it. A world that keeps turning under the cursor makes every
+  // settlement a moving target, and the gesture the whole page is built around is
+  // pointing at one — so reaching for it is taken as asking it to hold still.
+  canvas.addEventListener("pointerenter", () => { idle = false; });
+  canvas.addEventListener("pointerleave", () => {
+    if (dragging) release();
+    idle = true;
+  });
+}
+
+// Turning idly until somebody takes hold of it.
+function turn() {
+  if (idle && view.scene === "world") { spin += 0.08; drawGlobe(); }
+  requestAnimationFrame(turn);
+}
+
+/* ---- descending --------------------------------------------------------- */
+const REGION_SPAN = 26;   // degrees of longitude across a region view
+
+function descend(lon, lat) {
+  // Snap to a nearby settlement if the click landed close to one, so the obvious
+  // gesture — click the gold mark — does the obvious thing.
+  let best = null, bestGap = Infinity;
+  for (const { p, i } of inhabited()) {
+    const dLon = Math.abs(((placeLon(p) - lon + 540) % 360) - 180);
+    const gap = Math.hypot(dLon, placeLat(p) - lat);
+    if (gap < bestGap) { bestGap = gap; best = { p, i }; }
+  }
+  const near = bestGap < REGION_SPAN / 2 ? best : null;
+  const centre = near ? { lon: placeLon(near.p), lat: placeLat(near.p) } : { lon, lat };
+  go("region", {
+    ...centre,
+    label: near ? `Near ${near.p.name}` : "Open country",
+  });
+}
+
+function regionPlaces(region) {
+  const half = REGION_SPAN / 2;
+  return inhabited().filter(({ p }) => {
+    const dLon = Math.abs(((placeLon(p) - region.lon + 540) % 360) - 180);
+    return dLon < half && Math.abs(placeLat(p) - region.lat) < half * 0.75;
+  });
+}
+
+function drawRegion() {
+  const region = view.region;
+  const canvas = $("region"), w = canvas.width, h = canvas.height;
+  const ctx = canvas.getContext("2d");
+  const image = ctx.createImageData(w, h);
+  const spanLon = REGION_SPAN, spanLat = REGION_SPAN * (h / w);
+
+  for (let py = 0; py < h; py++) {
+    const lat = region.lat + spanLat * (0.5 - (py + 0.5) / h);
+    for (let px = 0; px < w; px++) {
+      const lon = region.lon + spanLon * ((px + 0.5) / w - 0.5);
+      const b = biomeAt(lon, clamp(lat, -89.9, 89.9));
+      const [r, g, bl] = BIOME[b] ?? [0, 0, 0];
+      // A dither on alternate pixels, which is how a limited palette suggests
+      // texture without inventing detail the simulation never solved.
+      const rough = ((px + py) % 2 === 0) ? 1.0 : 0.92;
+      const i = (py * w + px) * 4;
+      image.data[i] = clamp(r * rough, 0, 255);
+      image.data[i + 1] = clamp(g * rough, 0, 255);
+      image.data[i + 2] = clamp(bl * rough, 0, 255);
+      image.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(image, 0, 0);
+
+  const here = regionPlaces(region);
+  $("region-title").textContent = region.label;
+  $("region-note").textContent = here.length
+    ? `${REGION_SPAN} degrees across — some three thousand kilometres. ${here.length} settlement${
+        here.length === 1 ? " stands" : "s stand"} here, and the ground under each is what decides what it becomes.`
+    : `${REGION_SPAN} degrees across, and nobody lives in it. Turn the globe and try somewhere gold.`;
+
+  const box = { w: 700, h: 525 };
+  $("region-pins").innerHTML = here.map(({ p }) => {
+    const x = ((((placeLon(p) - region.lon + 540) % 360) - 180) / spanLon + 0.5) * box.w;
+    const y = (0.5 - (placeLat(p) - region.lat) / spanLat) * box.h;
+    return `<g>
+      <rect x="${x - 9}" y="${y - 9}" width="18" height="18" fill="#0b0a14" />
+      <rect x="${x - 7}" y="${y - 7}" width="14" height="14" fill="#e0a94a" />
+      <rect x="${x - 4}" y="${y - 4}" width="8" height="8" fill="#0b0a14" />
+      <text x="${x}" y="${y + 26}" fill="#ece2c8" font-size="13"
+            font-family="ui-monospace, monospace" text-anchor="middle"
+            stroke="#0b0a14" stroke-width="3" paint-order="stroke">${p.name}</text>
+    </g>`;
+  }).join("");
+
+  $("region-hint").textContent = here.length ? "click a settlement" : "nobody lives here";
+  $("region-places").innerHTML = here.length ? here.map(({ p, i }) => `
+    <button type="button" class="tile" data-place="${i}">
+      <span>
+        <span class="tile-name">${p.name}</span><br />
+        <span class="tile-sub">${p.residents} living &middot; ${p.archetype}</span>
+      </span>
+    </button>`).join("") : `<p class="empty">Nobody lives within sight.</p>`;
+  // A legend of what is actually in view, commonest first — so the colours mean
+  // something without a table of all fifteen, most of which are elsewhere.
+  const tally = new Map();
+  for (let py = 0; py < h; py += 2) {
+    const lat = region.lat + spanLat * (0.5 - (py + 0.5) / h);
+    for (let px = 0; px < w; px += 2) {
+      const lon = region.lon + spanLon * ((px + 0.5) / w - 0.5);
+      const b = biomeAt(lon, clamp(lat, -89.9, 89.9));
+      tally.set(b, (tally.get(b) || 0) + 1);
+    }
+  }
+  const total = [...tally.values()].reduce((a, b) => a + b, 0) || 1;
+  // Only what rounds to something. A legend line reading "shrubland 0%" is a line
+  // about a colour that is not really on the screen.
+  const seen = [...tally.entries()]
+    .filter(([, n]) => Math.round(n / total * 100) >= 1)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6);
+  $("region-legend").innerHTML = seen.map(([b, n]) => {
+    const [r, g, bl] = BIOME[b] ?? [0, 0, 0];
+    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <span style="width:14px;height:14px;flex:none;background:rgb(${r},${g},${bl});border:1px solid var(--line)"></span>
+      <span style="font-size:12px">${BIOME_NAME[b] ?? "?"}</span>
+      <span style="margin-left:auto;font-size:11px;color:var(--dim)">${Math.round(n / total * 100)}%</span>
+    </div>`;
+  }).join("");
+
+  $("region-places").querySelectorAll("[data-place]").forEach(b =>
+    b.addEventListener("click", () => go("place", Number(b.dataset.place))));
+
+  // Clicking the map itself picks the nearest settlement in view.
+  canvas.onclick = e => {
+    if (!here.length) return;
+    const rect = canvas.getBoundingClientRect();
+    const lon = region.lon + spanLon * ((e.clientX - rect.left) / rect.width - 0.5);
+    const lat = region.lat + spanLat * (0.5 - (e.clientY - rect.top) / rect.height);
+    let best = here[0], gap = Infinity;
+    for (const cand of here) {
+      const d = Math.hypot(placeLon(cand.p) - lon, placeLat(cand.p) - lat);
+      if (d < gap) { gap = d; best = cand; }
+    }
+    go("place", best.i);
+  };
+}
+
+/* ---- a place ------------------------------------------------------------ */
+function drawPlace() {
+  const p = WORLD.places[view.place];
+  $("place-title").textContent = p.name;
+  $("place-note").textContent = p.ground
+    ? `${p.ground}. It reads as ${p.archetype} — not because anybody said so, but because that is what its numbers come to.`
+    : `It reads as ${p.archetype}.`;
+
+  const rows = [
+    ["Living here", `${p.residents}`],
+    ["Households", `${p.households}`],
+    ["Room for", `${p.capacity}`],
+    ["Soil", pct(p.fertility)],
+    ["Roads", pct(p.reach)],
+    ["Short of food", p.want > 0 ? pct(p.want) : "no"],
+  ];
+  const bars = [
+    ["Affluence", p.affluence], ["Safety", p.safety],
+    ["Bonds", p.bonding], ["Ways out", p.bridging], ["Work", p.opportunity],
+  ];
+  $("place-readout").innerHTML =
+    rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("") +
+    bars.map(([k, v]) => `<dt>${k}</dt><dd>${n2(v)}<div class="bar"><span style="width:${Math.round(clamp(v || 0,0,1)*100)}%"></span></div></dd>`).join("");
+
+  const folk = WORLD.people
+    .map((who, i) => ({ who, i }))
+    .filter(({ who }) => who.place === view.place)
+    .sort((a, b) => (b.who.alive - a.who.alive) || (b.who.age - a.who.age));
+
+  $("place-folk").innerHTML = folk.length ? folk.map(({ who, i }) => `
+    <button type="button" class="tile ${who.alive ? "" : "dead"}" data-person="${i}">
+      <canvas width="12" height="16" style="width:36px;height:48px" data-sprite="${i}"></canvas>
+      <span>
+        <span class="tile-name">${who.name.split(" ")[0]}</span><br />
+        <span class="tile-sub">${who.alive ? who.age + " yr" : "died"}</span>
+      </span>
+    </button>`).join("") : `<p class="empty">Nobody lives here now.</p>`;
+
+  $("place-folk").querySelectorAll("[data-sprite]").forEach(c =>
+    paintPerson(c, WORLD.people[Number(c.dataset.sprite)], 1));
+  $("place-folk").querySelectorAll("[data-person]").forEach(b =>
+    b.addEventListener("click", () => go("person", Number(b.dataset.person))));
+}
+
+const pct = v => Number.isFinite(v) ? `${Math.round(clamp(v, 0, 1) * 100)}%` : "—";
+// Anything the export could not put a number to comes through as null, and a page
+// that throws on one missing value shows nothing at all — as this one did.
+const n2 = v => Number.isFinite(v) ? Number(v).toFixed(2) : "—";
+
+/* ---- one person --------------------------------------------------------- */
+// A little standing figure, drawn from the person rather than picked: the palette
+// is their name, the build is their age, and what they are wearing is how they
+// have done. Nothing here is a photograph — it is a token that varies the way the
+// person varies.
+function paintPerson(canvas, who, scale) {
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  const u = Math.max(1, Math.floor(w / 12));      // one "pixel" of the figure
+
+  let hash = 0;
+  for (const ch of who.name) hash = (hash * 31 + ch.charCodeAt(0)) & 0xffff;
+  const skins = ["#c9a17a", "#8d5f43", "#e3bd97", "#6b452f", "#a9764f"];
+  const hairs = ["#2b2118", "#5a3a22", "#8a6a3a", "#c8b48a", "#7a2f2f", "#3d3d4a"];
+  const cloth = who.alive
+    ? ["#4a6ea8", "#7a4a86", "#3f7a5e", "#a8663f", "#5a5f7a"][hash % 5]
+    : "#3a3648";
+  const skin = who.alive ? skins[hash % skins.length] : "#7d7690";
+  const hair = who.alive ? hairs[(hash >> 3) % hairs.length] : "#4a4560";
+  const trim = who.standing > 0.66 ? "#e0a94a" : who.standing > 0.33 ? "#9186b0" : "#3d3760";
+
+  const px = (x, y, cw, ch, colour) => {
+    ctx.fillStyle = colour;
+    ctx.fillRect(x * u, y * u, cw * u, ch * u);
+  };
+  const child = who.age < 14;
+  const top = child ? 4 : 1;                       // children stand shorter
+
+  px(4, top, 4, 1, hair);                          // hair
+  px(3, top + 1, 6, 3, skin);                      // face
+  px(3, top + 1, 6, 1, hair);
+  px(4, top + 2, 1, 1, "#221c2e");                 // eyes
+  px(7, top + 2, 1, 1, "#221c2e");
+  px(3, top + 4, 6, 5, cloth);                     // body
+  px(3, top + 4, 6, 1, trim);                      // collar, by standing
+  px(2, top + 5, 1, 3, skin);                      // arms
+  px(9, top + 5, 1, 3, skin);
+  // Leather, not the near-black they were: at #2f2a44 the legs were within a shade
+  // of the tile they stand on and every figure looked like a bust on a plinth.
+  px(3, top + 9, 2, 3, "#5c452c");                 // legs, with a gap between them,
+  px(7, top + 9, 2, 3, "#5c452c");                 // or they read as one block
+  px(2, top + 12, 3, 1, "#3a2b1c");                // boots
+  px(7, top + 12, 3, 1, "#3a2b1c");
+  if (!who.alive) {                                // a mark over the departed
+    px(2, top + 6, 8, 1, "#0b0a14");
+  }
+  return scale;
+}
+
+function drawPerson() {
+  const who = WORLD.people[view.person];
+  $("person-title").textContent = who.name;
+  const from = WORLD.places[who.place];
+  $("person-note").textContent =
+    `${who.alive ? `${who.age} years old` : `died at ${who.age}`}, ${who.outlook}` +
+    (from ? `, of ${from.name}.` : ".") +
+    (who.mentored ? " Somebody took them up, which is the largest single fact about a life here." : "");
+
+  paintPerson($("person-portrait"), who, 6);
+
+  $("person-readout").innerHTML = [
+    ["Name", who.name],
+    ["Age", who.alive ? `${who.age}` : `${who.age} at death`],
+    ["Sex", who.sex],
+    ["Outlook", who.outlook],
+    ["Standing", n2(who.standing)],
+    ["Mentored", who.mentored ? "yes" : "no"],
+    ["Upbringing", n2(who.upbringing)],
+  ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+
+  // Each factor arrives as three numbers, not one: what came down the genome, what
+  // the household put there, and what was nobody's doing. That split is the whole
+  // point of §15 — "why is she like that" has an answer — so it is shown rather
+  // than summed away. The bar is each source's share of the total pull, so a trait
+  // that is mostly luck looks mostly like luck.
+  $("person-factors").innerHTML = (WORLD.factorNames || []).map((name, i) => {
+    const parts = (who.factors || [])[i] || [0, 0, 0];
+    const [genes, home, luck] = parts.map(v => Number(v) || 0);
+    const total = genes + home + luck;
+    const pull = Math.abs(genes) + Math.abs(home) + Math.abs(luck) || 1;
+    const seg = (v, colour) =>
+      `<span style="width:${(Math.abs(v) / pull * 100).toFixed(1)}%;background:${colour}"></span>`;
+    return `<dt>${name}</dt><dd>${total.toFixed(2)}
+      <div class="bar" style="display:flex">
+        ${seg(genes, "var(--gold)")}${seg(home, "var(--leaf)")}${seg(luck, "var(--dim)")}
+      </div></dd>`;
+  }).join("") + `<dt style="grid-column:1/-1;padding-top:8px;font-size:10.5px;letter-spacing:0.1em">
+      <span style="color:var(--gold)">&#9632;</span> genes
+      <span style="color:var(--leaf)">&#9632;</span> household
+      <span style="color:var(--dim)">&#9632;</span> chance
+    </dt><dd></dd>`;
+
+  const kin = [];
+  for (const p of who.parents || []) kin.push(["parent", p]);
+  for (const c of who.children || []) kin.push(["child", c]);
+  $("person-kin").innerHTML = kin.length ? kin.map(([how, i]) => {
+    const other = WORLD.people[i];
+    return other ? `<button type="button" data-kin="${i}">${how}: ${other.name}</button>` : "";
+  }).join("") : `<p class="empty">No kin in the record.</p>`;
+  $("person-kin").querySelectorAll("[data-kin]").forEach(b =>
+    b.addEventListener("click", () => go("person", Number(b.dataset.kin))));
+}
+
+/* ---- the world panel ---------------------------------------------------- */
+function drawWorldPanel() {
+  $("world-title").textContent = `Year ${WORLD.year} of a world nobody drew`;
+  $("world-readout").innerHTML = [
+    ["Land", pct(G.land)],
+    ["Mean", `${G.meanC.toFixed(1)} °C`],
+    ["Rain", `${Math.round(G.rainMm)} mm`],
+    ["Under ice", pct(G.ice)],
+    ["Forest", pct(G.forest)],
+    ["Star", `${G.starMass.toFixed(2)} solar`],
+    ["Gravity", `${G.gravity.toFixed(2)} g`],
+    ["Living", `${WORLD.living}`],
+  ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+
+  $("world-places").innerHTML = inhabited().map(({ p, i }) => `
+    <button type="button" class="tile" data-place="${i}">
+      <span>
+        <span class="tile-name">${p.name}</span><br />
+        <span class="tile-sub">${p.residents} living</span>
+      </span>
+    </button>`).join("") || `<p class="empty">Nobody lives anywhere.</p>`;
+  const peoples = (WORLD.peoples || []);
+  $("world-peoples").innerHTML = peoples.length ? peoples.map(who => `
+    <div style="margin-bottom:10px">
+      <div class="tile-name">the ${who.name}</div>
+      <div class="tile-sub">${who.souls} living &middot; ${
+        who.from ? `from the ${who.from}, year ${who.arose}` : "here from the founding"
+      }</div>
+    </div>`).join("") : `<p class="empty">Nobody yet.</p>`;
+
+  $("world-places").querySelectorAll("[data-place]").forEach(b =>
+    b.addEventListener("click", () => {
+      const p = WORLD.places[Number(b.dataset.place)];
+      view.region = { lon: placeLon(p), lat: placeLat(p), label: `Near ${p.name}` };
+      go("place", Number(b.dataset.place));
+    }));
+}
+
+drawWorldPanel();
+drawGlobe();
+wireGlobe();
+draw();
+turn();
+</script>
