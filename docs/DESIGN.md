@@ -1846,6 +1846,14 @@ in five and a half minutes.
 2. **Does human history run to the present, or stop early?** Agriculture, cities,
    industry, and technology each multiply the design surface. M4 phase 14 assumes a
    simple economy; a full tech tree is a project of its own.
+
+   *Partly answered, and not by building a tree.* §29 makes the technique ceiling a
+   **frontier** that a particular person moves by working something out, so a world can leave
+   the age it started in without anybody writing down what it discovers. There are still no
+   named technologies and no prerequisites, and there are not going to be: what a world has is
+   a limit on how far each trade can be taken, and people who occasionally push it. Whether
+   that is enough to produce anything recognisable as an industrial revolution is now a
+   measurement rather than a design question — see §29.8.
 3. **How mobile should society be?** §15 proposes IGE 0.30–0.40. Worth choosing
    deliberately, since it decides whether this is a story about inheritance or
    circumstance.
