@@ -198,6 +198,16 @@ fn main() -> ExitCode {
                 year,
                 living: world.living(),
                 affluence: world.places.iter().map(|(_, p)| p.env.affluence).collect(),
+                practised: world
+                    .places
+                    .ids()
+                    .map(|id| world.technique_of(id).level())
+                    .fold(1.0f32, f32::max),
+                knowledge: world
+                    .places
+                    .ids()
+                    .map(|id| world.technique_of(id).reach_of_knowledge())
+                    .fold(1.0f32, f32::max),
             });
         }
         let balance = observer::measure(&world);

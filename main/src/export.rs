@@ -17,6 +17,11 @@ pub struct YearSample {
     pub living: usize,
     /// Affluence of each place, in arena order.
     pub affluence: Vec<f32>,
+    /// The best any place practises, against bare subsistence.
+    pub practised: f32,
+    /// How far past an ordinary tradition anybody has worked out it is possible to get.
+    /// One for a world nobody has had an idea in, which is most of them.
+    pub knowledge: f32,
 }
 
 pub fn snapshot(world: &World, series: &[YearSample], balance: &Balance) -> String {
@@ -520,6 +525,8 @@ fn samples(series: &[YearSample]) -> String {
                 [
                     field("year", &format!("{}", s.year)),
                     field("living", &format!("{}", s.living)),
+                    field("practised", &num(s.practised)),
+                    field("knowledge", &num(s.knowledge)),
                     field("affluence", &format!("[{}]", affluence.join(","))),
                 ]
                 .join(",")
