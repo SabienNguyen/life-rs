@@ -68,6 +68,27 @@ const DISPLACEMENT_MARGIN: f32 = 0.18;
 /// inherits its parents' neighbourhood without passing admission at all. So the best
 /// quarter accumulated everyone: measured at 160 years, all 1,260 survivors lived in one
 /// place at twenty-five times its capacity while the other four stood empty.
+///
+/// It bites only *past* capacity, and at the sizes this project runs it therefore never
+/// bites at all. Housing is built out to meet demand, so a quarter that absorbs its
+/// neighbours' households absorbs them while staying inside its own walls: measured across
+/// four seeds, no place in any of those worlds ever exceeded its capacity, so the term was
+/// identically zero for the whole of the project's history. What that leaves is an
+/// absorbing state — a quarter emptied to nobody has no residents to make it worth
+/// anything, so its `env` freezes at whatever it fell to and nothing draws anyone back —
+/// and a fifth to a third of every world is permanently dead ground.
+///
+/// Making it continuous and convex (`aversion · occupancy²`, the hundredth household
+/// costing more than the tenth) fixes exactly that, and was tried at 0.05, 0.20 and 0.40,
+/// and was reverted at all three. It costs the thing this project will not spend. With
+/// crowding driving migration at every occupancy rather than only past capacity, the two
+/// detail tiers put households in different quarters, and under a thin detail budget
+/// **25 people starved at 0.20 and 13 at 0.05, against none under an ample budget, across
+/// six seeds, never once the other way**. The gate form measures 2 and 0 on the same six.
+/// That is §21.1 — the observer deciding who dies — and it is not for sale.
+///
+/// So the mechanism stays inert and is labelled inert, pending a way to make crowding felt
+/// that does not route the coarse tier's differences into a death. §30.5 has the sweep.
 const CROWDING_AVERSION: f32 = 0.5;
 
 /// How much better a neighbourhood has to be before a household will move to it.
@@ -385,6 +406,15 @@ pub enum Happening {
         person: PersonId,
         trade: economy::Trade,
     },
+    /// Somebody who had already settled into a trade gave it up for another.
+    ///
+    /// Only for the settled. The young trying things is how anybody arrives at a trade at all
+    /// and is not an event in a life; a smith of forty putting down the hammer is.
+    PersonRetrains {
+        person: PersonId,
+        from: economy::Trade,
+        to: economy::Trade,
+    },
     PlaceChanges {
         place: PlaceId,
         into: society::Archetype,
@@ -406,7 +436,8 @@ impl Happening {
             Happening::PersonArrives { person }
             | Happening::PersonDoes { person, .. }
             | Happening::PersonDies { person, .. }
-            | Happening::PersonWorksItOut { person, .. } => one(person.to_bits()),
+            | Happening::PersonWorksItOut { person, .. }
+            | Happening::PersonRetrains { person, .. } => one(person.to_bits()),
             // Taking somebody up is an event in the patron's life as much as in theirs.
             Happening::PersonMentored { person, by } => {
                 Subjects::of(&[person.to_bits(), by.to_bits()])
@@ -2189,6 +2220,22 @@ impl World {
             if let Some(person) = self.people.get_mut(id) {
                 person.take_up(best);
             }
+            // Only the settled: the young are still finding out what they are, and every one
+            // of those would drown the record. Pivotal because what somebody does all year is
+            // most of what their life consists of — and because a life that shows a trade
+            // taken up and put down again every few years is the shape of a bug, which is
+            // exactly what the moving-house record turned out to be.
+            if settled {
+                self.remember(
+                    at,
+                    Salience::Pivotal,
+                    Happening::PersonRetrains {
+                        person: id,
+                        from: mine,
+                        to: best,
+                    },
+                );
+            }
         }
     }
 
@@ -3057,6 +3104,34 @@ impl World {
                     .map(|p| world.society.households_in(id).count() as f32 / p.capacity as f32)
                     .unwrap_or(0.0)
             };
+            // The same, but counting this household as living there — which it does not
+            // yet, and would the moment it arrived.
+            //
+            // This distinction is the whole of the churn fix. Judged by the plain count, a
+            // household compares the place it is packed into against a place with a
+            // vacancy that it would itself fill on arrival: the discount is real when the
+            // move is decided and gone by the time it is made. Then, standing in the new
+            // place, the same asymmetry points back the way it came, so households
+            // oscillated between two quarters for their whole lives — 65% of all moves
+            // were a return to where the household had been two moves before, and the
+            // aggregate never showed it because the flows in each direction cancelled.
+            // Only reading one life end to end made it visible.
+            //
+            // Charging the arrival makes the comparison symmetric, so the gain from A to B
+            // is exactly the negation of the gain from B to A, and a positive threshold
+            // cannot be met in both directions. Moving back now requires the world itself
+            // to have changed.
+            let occupancy_with_me = |world: &World, id: PlaceId| {
+                let joining = u32::from(current != Some(id));
+                world
+                    .places
+                    .get(id)
+                    .map(|p| {
+                        (world.society.households_in(id).count() as u32 + joining) as f32
+                            / p.capacity as f32
+                    })
+                    .unwrap_or(0.0)
+            };
             // What a place is worth to this household: what it offers, less how packed
             // it is. Crowding has to enter here rather than only in admission, or a
             // desirable quarter fills without limit and nobody ever leaves.
@@ -3069,46 +3144,74 @@ impl World {
                 } else {
                     place.env.quality()
                 };
-                offered - CROWDING_AVERSION * (occupancy_of(world, id) - 1.0).max(0.0)
+                offered - CROWDING_AVERSION * (occupancy_with_me(world, id) - 1.0).max(0.0)
             };
 
-            // Can they still afford where they are? Falling well behind the local
-            // average means leaving, whether or not anywhere better will have them.
+            // What a place would take this household on: their own standing, what their
+            // allies inside will lend them, and the extra room the young are given because
+            // they are renting a room rather than buying a house.
+            let means_at = |world: &World, id: PlaceId| {
+                backing(world, id)
+                    + standing
+                    + if restless { YOUNG_MOVER_SLACK } else { 0.0 }
+            };
+
+            // Can they still afford where they are? Falling well behind the local average
+            // means leaving, whether or not anywhere better will have them.
+            //
+            // Nobody can be turned out of somewhere that would admit them today. The two
+            // tests used to disagree in two ways at once — the young were given
+            // `YOUNG_MOVER_SLACK` to arrive and only the smaller `DISPLACEMENT_MARGIN` to
+            // stay, and their allies' backing counted for getting in and not for staying.
+            // Either gap on its own is a revolving door: admitted on Monday's terms, priced
+            // out on Tuesday's, admitted again on Wednesday's. Between them they had
+            // households commuting between two quarters for their whole lives — half to two
+            // thirds of every move ever made was a household going straight back where it
+            // had just come from.
+            //
+            // Allowed the *most* backing anybody could have rather than their own, which
+            // `backing` bounds at `VOUCHING` in either direction. Two reasons, and the
+            // second is the important one. Eviction is the harsher act, so where the two
+            // tests could differ it should be the one that errs towards leaving people
+            // where they are. And reading this household's actual allies here would put a
+            // tie count in the path to a death: the coarse tier is known to understate how
+            // tight a place is by up to a half, so an unwatched household would be turned
+            // out of somewhere a watched one keeps, and some of them would starve for it.
+            // Measured, when this test did read real backing: 25 people starved under a
+            // thin detail budget against none under an ample one, over six seeds, never
+            // once the other way. That is §21.1 — the observer deciding who dies — and no
+            // amount of churn is worth reintroducing it.
+            let grace = if restless {
+                YOUNG_MOVER_SLACK + VOUCHING + DISPLACEMENT_MARGIN
+            } else {
+                VOUCHING + DISPLACEMENT_MARGIN
+            };
             let priced_out = current.is_some_and(|c| {
-                self.places.get(c).is_some_and(|place| {
-                    !place.admits(standing + DISPLACEMENT_MARGIN, occupancy_of(self, c))
-                })
+                self.places
+                    .get(c)
+                    .is_some_and(|place| !place.admits(standing + grace, occupancy_of(self, c)))
             });
 
             let best = self
                 .places
                 .ids()
                 .filter(|id| {
-                    // Backing counts only towards somewhere they do not already live.
-                    // Ties are overwhelmingly local — company is drawn from neighbours — so
-                    // a term that also applied to where you already are would be a bonus for
-                    // staying put dressed up as a bonus for having friends, and it was: it
-                    // stopped displacement dead and left every world with one inhabited
-                    // quarter out of five. Pointed outward it is chain migration, which is
-                    // the thing it should have been all along — your friends who left are
-                    // what makes it possible to follow them.
-                    let means = if current == Some(*id) {
-                        standing
-                    } else {
-                        backing(self, *id)
-                            + if restless {
-                                standing + YOUNG_MOVER_SLACK
-                            } else {
-                                standing
-                            }
-                    };
-                    // Staying put needs no admitting — unless they have been priced
-                    // out of it, in which case it is no longer an option either.
+                    // Staying put needs no admitting — unless they have been priced out of
+                    // it, in which case it is no longer an option either.
+                    //
+                    // Backing gates admission and never preference. That distinction is
+                    // what makes it chain migration rather than a bonus for staying put
+                    // dressed up as a bonus for having friends: your allies can get you in
+                    // somewhere, and they cannot make you want to be there. `appeal` has no
+                    // term for them at all.
                     (current == Some(*id) && !priced_out)
-                        || self
-                            .places
-                            .get(*id)
-                            .is_some_and(|p| p.admits(means, occupancy_of(self, *id)))
+                        || self.places.get(*id).is_some_and(|p| {
+                            // Counting this household as one of the place's own, since it
+                            // would be one the moment it arrived. Judging a candidate on a
+                            // vacancy you would yourself fill is the same revolving door
+                            // from the other side.
+                            p.admits(means_at(self, *id), occupancy_with_me(self, *id))
+                        })
                 })
                 .max_by(|a, b| appeal(self, *a).total_cmp(&appeal(self, *b)));
 
@@ -4003,6 +4106,37 @@ mod tests {
             .filter(|r| matches!(r.kind, Happening::PersonMoves { .. }))
             .count();
         assert!(movers > 5, "only {movers} moves in seventy years");
+    }
+
+    #[test]
+    fn moving_is_not_a_thing_people_do_back_and_forth() {
+        // A household that leaves somewhere should mostly stay left. Migration and churn
+        // look identical in the aggregate — a hundred moves each way is the same net flow
+        // as none — so the only way to tell them apart is to follow individual households
+        // and count how often one returns to the place it was two moves ago.
+        //
+        // It used to be 65% of every move made, because the bar to get into a place was
+        // lower than the bar to stay in it, so households were admitted and evicted in
+        // alternate years for their whole lives. Reading one life end to end in the atlas
+        // is what showed it: the same two town names, alternating, for twenty years.
+        // Measured across four seeds afterwards it is 1%, so a band of a tenth is loose.
+        let world = lineages();
+        let mut path: std::collections::BTreeMap<PersonId, Vec<PlaceId>> = Default::default();
+        for record in world.chronicle.iter() {
+            if let Happening::PersonMoves { person, to } = record.kind {
+                path.entry(person).or_default().push(to);
+            }
+        }
+        let (mut moves, mut returns) = (0, 0);
+        for steps in path.values() {
+            moves += steps.len();
+            returns += (2..steps.len()).filter(|i| steps[*i] == steps[i - 2]).count();
+        }
+        assert!(moves > 20, "too few moves to say anything: {moves}");
+        assert!(
+            returns * 10 < moves,
+            "{returns} of {moves} moves went straight back where they came from"
+        );
     }
 
     #[test]
@@ -5898,7 +6032,12 @@ mod the_land_holds {
         // carry and look, rather than to breed them slowly and hope. `founding_a_world_crowded_does_not_kill_it`
         // already establishes that a crowded founding is survivable, so this asks what such a
         // world *feels* like rather than whether it exists.
-        let mut world = World::genesis(WorldSeed::from_u128(0x221), 400);
+        //
+        // Four hundred was enough until households stopped commuting (§30.4), and the number
+        // is now what it should always have been — more people than *the world* will carry
+        // rather than more than one corner of it. Measured at forty years: 400, 700 and 1,000
+        // leave nobody short, 1,400 leaves one quarter 0.025 short, 2,000 leaves it 0.104.
+        let mut world = World::genesis(WorldSeed::from_u128(0x221), 2_000);
         world.record_only(Salience::Pivotal);
         world.run_for(Duration::from_years(40));
 

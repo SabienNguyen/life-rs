@@ -2787,8 +2787,11 @@ Before that the binding constraint was carriers; after it, the frontier. That is
 the discovery model starts to matter at all.
 
 **And then knowledge compounds while the population does not.** Advances run 5, 7, 13, 25, 49 —
-**doubling every century** — against a flat population. Hunger falls through it: 0.365, 0.321,
+doubling every century — against a flat population. Hunger falls through it: 0.365, 0.321,
 0.267. What is being produced is going into knowing things rather than into more mouths.
+
+(That doubling is one seed and it does not replicate; two more and one more century are in
+§29.7.1, and they change the claim.)
 
 That is the escape, in the only form it ever takes. Nothing in the model schedules it, and
 nothing in the model rules it out; what decides it is whether the compounding in
@@ -2800,6 +2803,39 @@ seed. What the table establishes is that the mechanism has the right *shape*: a 
 Malthusian flat, a threshold, and then a curve that bends. Whether it keeps bending is a longer
 run and it is now affordable — see §28.4.
 
+### 29.7.1 It does not replicate, and the claim above was one seed
+
+§29.7 said advances **double every century**. Two more seeds and two more centuries say that is
+not a law of this world, it is what seed 0x221 did.
+
+| century | 0x221 | 0x11 | 0x31 |
+|---|---|---|---|
+| 100 | 5 | — | — |
+| 200 | 7 | 7 | 10 |
+| 300 | 13 | 11 | 15 |
+| 400 | 25 | — | 15 |
+| 500 | 49 | — | — |
+| 600 | 80 | — | — |
+
+0x221 runs 7 → 13 → 25 → 49, which is a doubling, and then 80, which is not — the sixth
+century grows by 63%. 0x11 grows by 57% in its third century. 0x31 grows by half in its third
+and **not at all in its fourth**: fifteen advances, then fifteen.
+
+What survives is the shape and not the rate. Every seed measured grows its rate of discovery
+rather than holding it, none of them stalls at the medieval ceiling the model had before §29,
+and none of them runs away either. What does not survive is the number: a century's growth
+ranges from 0% to 100% across three worlds, so "doubling" was a description of one trajectory
+that happened to be the first one run long enough to see.
+
+One more thing the sixth century says, against §29.7's other claim. That world's population was
+supposed to be pinned at its Malthusian ceiling — 1888, then 1870 — and between years 500 and
+600 it went to 4,787. So knowledge did not only fail to be eaten by more mouths; past some
+point it *bought* more mouths, and the ceiling moved. That is the mechanism working (a better
+plough feeds more people) and it means the phrase "against a flat population" in §29.7 holds
+for centuries four and five and stops holding in century six. Whether hunger comes back with
+the extra people is the next thing to measure: it read 0.267 at 500 and 0.243 at 600, so not
+yet.
+
 ### 29.8 An advance is a thing that happened to somebody
 
 `Happening::PersonWorksItOut` is the rarest thing in the chronicle and the only one that
@@ -2808,3 +2844,202 @@ trade, and it reads out like any other event in a life: *"Vasta Laen works out a
 make tools."* There is no tree, no prerequisite and no name for the thing discovered — what is
 recorded is that the people who do this trade can now go further than they could, and how far
 they actually get is still a matter of there being enough of them to carry it.
+
+## 30. One life, end to end
+
+Everything in §18's omniscient view reads the world *across* people: a town's roll-call, a
+people's descent, a plot of what the whole world knew in each year. The chronicle has recorded
+who each event was about since §16, and `Happening::subjects` exists precisely so that "a
+biography is the log filtered by participant" — and nothing had ever displayed one.
+
+The person scene now does. It is four lines of javascript and no new simulation: take the
+events the world panel already reads, keep the ones this person appears in, and print them by
+year. Births show up in three lives, being taken up shows in two, and each side reads it in the
+same words. Nothing is written for the subject; a life is an angle on the record, not a record
+of its own.
+
+### 30.1 The handles in the chronicle are not typed, and that mattered
+
+`Id<T>::to_bits` packs a generation and an index and throws the type away — which is correct
+for what it is for, seeding an RNG stream and writing a save file, and correct for the
+chronicle's own index, which files everything under one map. It is wrong as a way to ask "which
+*people* is this about". Place 3 generation 0 and person 3 generation 0 are the same `u64`, and
+`Happening::PersonMoves` carries a place. Filtering the chronicle by bare bits would have filed
+somebody's move into the life of whichever person happened to share a slot number with the town
+they moved to, silently, for the first forty people in every world.
+
+So the export matches on the happening and returns typed `PersonId`s. It duplicates a match arm
+list that `subjects` already has, which looked like waste until it was the thing that made the
+bug impossible.
+
+### 30.2 The first life read out had moved house twenty-two times
+
+Thoumiaste Sern, a cook, sixty-seven years old, of Twycrag. Her record:
+
+> 156 moves to Stanhythe · 157 moves to Stanquay · 158 moves to Twycrag · 159 moves to Stanquay
+> · 160 moves to Twycrag · 162 moves to Stanquay · 163 moves to Stanhythe · 164 moves to
+> Stanquay · 165 moves to Stanhythe · 166 moves to Twycrag · …
+
+Two towns, alternating, for twenty years. Counted across the whole world: **65% of every move
+ever made was a return to the place that household had left two moves before**, a mean of six
+moves per mover and one household with twenty-eight.
+
+The aggregate could never have shown this. A hundred households moving A→B and a hundred moving
+B→A is the same net flow as nobody moving at all, so every measurement the project had — where
+people live, how sorted the quarters are, how far displacement gets — read exactly as it should
+have. Churn is invisible to any statistic that does not follow an individual through time, and
+until the life panel existed there was no such statistic.
+
+### 30.3 A first guess that was wrong, and worth keeping
+
+The obvious suspect was the crowding term. `sort_households` scores a place as what it offers
+less how packed it is, and *how packed* counted the households living there — including, when
+scoring the place you already lived, you. So a household weighed a town it was crowding
+against a town with a vacancy it would fill the instant it arrived; the discount is real when
+the move is decided and gone by the time it is made.
+
+That is a genuine defect and it was fixed — every candidate is now charged the crowding the
+household would itself add, which makes the gain from A to B the exact negation of the gain
+from B to A, so a positive `MOVE_THRESHOLD` cannot be met in both directions. It is also the
+true statement of what a place is worth to you: what it is worth *once you are in it*.
+
+It changed the churn rate by nothing at all. 64%, before and after.
+
+Worth recording as its own thing. A plausible mechanism, correctly identified as broken and
+correctly repaired, that was not the mechanism — the second time in this project that a
+convincing story about a number survived until it was measured (§22.1). The fix was kept
+because it is right, not because it helped.
+
+### 30.4 The cause: the bar to get in was lower than the bar to stay
+
+What did it was two constants that had never been compared with each other.
+
+A household is admitted to a place if `standing + backing + slack >= affluence`, and a young
+household — one whose working members are all under `RESTLESS_UNTIL` — is given
+`YOUNG_MOVER_SLACK`, 0.30, because it is renting a room rather than buying a house. A
+household is *priced out* of where it lives when `standing + DISPLACEMENT_MARGIN < affluence`,
+where the margin is 0.18.
+
+0.30 to arrive and 0.18 to stay. And `backing` — what your allies inside a place will lend you
+— counted for getting in and not at all for staying. So a young household with friends
+somewhere was admitted on Monday's terms, failed Tuesday's, was turned out, and was admitted
+again on Wednesday's. Neither number is wrong on its own. Together they are a revolving door,
+and it turned for people's whole lives.
+
+The fix is one sentence: **nobody can be turned out of somewhere that would admit them
+today.** The eviction test is now the admission test plus a grace, built from the same
+`means_at` the door uses, so the two cannot drift apart again. Backing counts for both or
+neither; the slack the young get to arrive is the slack they get to stay.
+
+Churn went from 51% of all moves to **1%**, and the number of moves in a ninety-year world from
+3,298 to 909 — the difference being, exactly, the moves that were never a decision about
+anywhere. Sorting is untouched: the spread of affluence across inhabited quarters reads 0.199
+against 0.208 before.
+
+`moving_is_not_a_thing_people_do_back_and_forth` pins it, written the only way that detects the
+failure — group every move by household, walk each path, count the steps that land where the
+one before last did.
+
+### 30.5 One dead mechanism underneath, and no fix for it yet
+
+Following the households through year by year turned up something the churn had been hiding:
+four of five quarters emptying to nobody at all, permanently, while the fifth took everything.
+Fixing the churn made it worse rather than better — with the sorting loop no longer too busy
+shuffling households to sort them, it now runs to completion. Across four seeds the biggest
+quarter went from 0.65 of all households to 0.89, and on seed 0x221 it went to **1.00**: every
+household in the world, in one quarter, with the other four empty.
+
+It costs people. The same world read 326 alive at year 220 before any of this and 203 after —
+one quarter's ground feeding everybody is less ground than five quarters' was. That is the
+price of the churn fix as shipped, stated plainly, and it is paid because the alternative is
+worse: the world it replaces was not feeding 326 people honestly, it was shuffling them
+between towns often enough that no quarter ever finished emptying.
+
+`CROWDING_AVERSION` exists to prevent precisely that, and its comment says so — it was added
+after a world where *"all 1,260 survivors lived in one place at twenty-five times its capacity
+while the other four stood empty"*. But it was written as `(occupancy - 1).max(0.0)`: crowding
+is felt only *past* capacity. Housing is built out to meet demand, so a quarter absorbing its
+neighbours absorbs them while staying inside its own walls. Measured across four seeds, **no
+place in any world this project runs has ever exceeded its capacity**, so the term is
+identically zero and always has been. A documented negative feedback that has never once
+fired — §29.5 again, in a different room.
+
+What that leaves is an absorbing state, which is what makes it a bug rather than just
+concentration. A quarter emptied to nobody has no residents to make it worth anything, so its
+`env` freezes at whatever it fell to, and nothing can ever draw anyone back.
+
+#### The obvious fix, and why it was reverted
+
+Crowding felt continuously and convexly — `aversion · occupancy²`, since the hundredth
+household costs more than the tenth. Swept over four seeds at ninety years, against the two
+failures it sits between, and it does what it says:
+
+| aversion | biggest quarter | quarters empty | spread of affluence |
+|---|---|---|---|
+| gate (never fires) | 0.89 | 0.40 | 0.140 |
+| 0.05 | 0.77 | 0.45 | 0.054 |
+| 0.20 | 0.61 | 0.20 | 0.111 |
+| 0.40 | 0.53 | 0.20 | 0.123 |
+
+Then it was checked against §21.1, and it fails:
+
+| crowding | starved on a thin detail budget | on an ample one |
+|---|---|---|
+| gate (never fires) | 2 | 0 |
+| 0.05 | 13 | 0 |
+| 0.20 | 25 | 0 |
+
+Six seeds, never once the other way. Crowding computed from where households actually are
+makes migration sensitive to the population's distribution, and the population's distribution
+is exactly where the two detail tiers differ — so an unwatched household is pushed somewhere a
+watched one is not, and some of them starve for it. That is the observer setting the death
+rate, which is the one fault this project treats as disqualifying. It is not worth a
+better-looking map.
+
+So the term stays inert and is now *labelled* inert, with the measurement in its doc comment,
+and the concentration is an open problem rather than a fixed one. What is wanted is a
+counterforce to sorting that does not read the population's distribution — something like a
+place's ground being worth less per head the more heads work it, which is already in
+`work::make` through the Cobb–Douglas exponent and simply does not reach `appeal`. That is the
+next thing to try and it has not been tried.
+
+### 30.5.1 And the same shape again, in trades — not yet fixed
+
+The very next life the panel was pointed at, with the moving fixed, read:
+
+> 143 gives up cook for keeper · 147 gives up keeper for cook · 160 gives up cook for farmer ·
+> 167 gives up farmer for cook · 181 gives up cook for farmer
+
+`Happening::PersonRetrains` was added for this — the chronicle had never recorded a change of
+trade, so nothing could have shown it. Measured across the world: 11% of all retrainings go
+back to the trade before last, and **88% of a year's switches are to the same trade**. That
+second number is the diagnosis. `worth_taking_up` values each trade by re-running the year with
+one more hand in it, everybody in a place reads the same array in the same year, and everybody
+picks the same argmax — so the trade that was short is oversupplied by the people who noticed,
+and next year the signal points back. A cobweb, textbook.
+
+Two things are wrong and they are separable. The comparison is asked the wrong way — for
+somebody already at the forge, the question is what a year is worth with their hands moved
+from A to B, not the marginal value of an extra hand in each, which is the housing bug in
+another costume. And the response is simultaneous: `RETRAINING`'s 8% damps the settled, and the
+young are ungated, so they move as one.
+
+Left as it is, deliberately. The first is a bug and the second is a modelling choice about what
+people can know about each other's plans, and running them together would make it impossible to
+say which did what.
+
+### 30.6 What this says about the instruments
+
+§18 argues the omniscient view exists to catch exactly this class of thing, and it has now paid
+for itself twice: `Bonds::repaid` was dead code found by an atlas line reading "thought of:
+poorly", and this. Both were found by *displaying* something rather than by asserting it, and
+both were invisible to every assertion in the suite at the time.
+
+The general shape is worth naming. Aggregates hide anything that is symmetric in the
+population and antisymmetric in time — churn, oscillation, any flow that cancels. The only
+instrument that sees those is one that follows a single subject through the whole run. This
+project had six views and, until now, not one of them did.
+
+And it compounds: the churn was itself hiding the dead crowding term underneath it, which had
+been hiding an absorbing state. Three defects in one stack, none of them visible to anything
+the suite measured, all of them found by printing one woman's life in order.

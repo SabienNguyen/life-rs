@@ -483,29 +483,55 @@ fn people(world: &World) -> String {
 
 fn events(world: &World) -> String {
     let calendar = world.planets.iter().next().map(|(_, p)| p.calendar);
+    // Which slot in `people` each identifier belongs to, so an event can say who it is about
+    // and a reader can ask for one life. A biography is the chronicle filtered by participant
+    // — that is what the chronicle is *for* — and until now nothing displayed it.
+    let slot: std::collections::HashMap<PersonId, usize> =
+        world.people.ids().enumerate().map(|(at, id)| (id, at)).collect();
     let entries: Vec<String> = world
         .chronicle
         .at_least(Salience::Pivotal)
         .map(|record| {
             let year = calendar.map(|c| c.date_at(record.at).year).unwrap_or(0);
-            let kind = match record.kind {
-                Happening::WorldBegins { .. } => "world",
-                Happening::PersonBorn { .. } => "birth",
-                Happening::PersonDies { .. } => "death",
-                Happening::PersonPairs { .. } => "pairing",
-                Happening::PersonMoves { .. } => "move",
-                Happening::PersonMentored { .. } => "patron",
-                Happening::PlaceChanges { .. } => "place",
+            // What kind of thing it was, and everybody it concerns — one question, because
+            // both are read off the same shape. A birth is about three people and being
+            // taken up is about two, so each of those lives carries the event.
+            //
+            // Deliberately not `subjects()`: that is the chronicle's own index, and its
+            // handles are erased to bare bits, where a place and a person of the same age
+            // and slot are the same number. Filing by it would post somebody's move into
+            // a stranger's life. Matching here keeps the handles typed.
+            let (kind, folk): (&str, Vec<PersonId>) = match record.kind {
+                Happening::WorldBegins { .. } => ("world", vec![]),
+                Happening::PersonBorn {
+                    child,
+                    mother,
+                    father,
+                } => ("birth", vec![child, mother, father]),
+                Happening::PersonDies { person, .. } => ("death", vec![person]),
+                Happening::PersonPairs { person, with } => ("pairing", vec![person, with]),
+                Happening::PersonMoves { person, .. } => ("move", vec![person]),
+                Happening::PersonMentored { person, by } => ("patron", vec![person, by]),
+                Happening::PlaceChanges { .. } => ("place", vec![]),
                 // The rarest thing in the chronicle and the only one that changes what is
                 // *possible* rather than what happened.
-                Happening::PersonWorksItOut { .. } => "advance",
-                _ => "other",
+                Happening::PersonWorksItOut { person, .. } => ("advance", vec![person]),
+                Happening::PersonRetrains { person, .. } => ("trade", vec![person]),
+                Happening::PersonArrives { person } => ("other", vec![person]),
+                Happening::PersonDoes { person, .. } => ("other", vec![person]),
+                _ => ("other", vec![]),
             };
+            let who: Vec<String> = folk
+                .iter()
+                .filter_map(|id| slot.get(id))
+                .map(|at| at.to_string())
+                .collect();
             format!(
                 "{{{}}}",
                 [
                     field("year", &format!("{year}")),
                     field("kind", &quoted(kind)),
+                    field("who", &format!("[{}]", who.join(","))),
                     field("text", &quoted(&plain(&render::line(world, record)))),
                 ]
                 .join(",")

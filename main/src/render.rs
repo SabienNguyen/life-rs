@@ -98,6 +98,13 @@ fn sentence(world: &World, happening: Happening) -> String {
             }
         ),
 
+        Happening::PersonRetrains { person, from, to } => format!(
+            "{} gives up {} for {}",
+            who(world, person),
+            from.label(),
+            to.label()
+        ),
+
         Happening::PersonMentored { person, by } => format!(
             "{} is taken up by {}",
             who(world, person),

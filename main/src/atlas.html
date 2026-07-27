@@ -165,6 +165,17 @@
   .kin button:hover { border-color: var(--gold); }
 
   .empty { color: var(--dim); font-size: 12px; }
+
+  /* A life, dated. The year is a fixed narrow column so the eye can run down it and
+     see the gaps — decades where nothing was worth writing down are most of a life. */
+  .life { display: grid; grid-template-columns: 44px 1fr; gap: 5px 10px; font-size: 12px; }
+  .life dt {
+    color: var(--dim); font-variant-numeric: tabular-nums; text-align: right;
+    border-right: 2px solid var(--line); padding-right: 8px;
+  }
+  .life dd { margin: 0; }
+  /* Working something out is the one event that outlives the person who had it. */
+  .life dd.advance { color: var(--gold); }
 </style>
 
 <div class="frame">
@@ -274,6 +285,8 @@
         <dl class="readout" id="person-factors"></dl>
         <div class="plate-head" style="margin-top:18px">Kin</div>
         <div class="kin" id="person-kin"></div>
+        <div class="plate-head" style="margin-top:18px">What happened</div>
+        <dl class="life" id="person-life"></dl>
       </div>
       <div class="plate">
         <div class="plate-head">The person</div>
@@ -936,6 +949,17 @@ function drawPerson() {
       <span style="color:var(--leaf)">&#9632;</span> household
       <span style="color:var(--dim)">&#9632;</span> chance
     </dt><dd></dd>`;
+
+  // A biography is the chronicle filtered by participant — nothing here is written for
+  // this person, it is the same records the world panel reads, asked a narrower question.
+  // Events name everybody they concern, so a birth appears in three lives and being taken
+  // up appears in two, told the same way from either side.
+  const life = (WORLD.events || []).filter(e => (e.who || []).includes(view.person));
+  $("person-life").innerHTML = life.length
+    ? life.map(e =>
+        `<dt>${e.year}</dt><dd class="${e.kind}">${e.text}</dd>`).join("")
+    : `<dt>&mdash;</dt><dd class="empty">Nothing in this life was worth
+       writing down, which is true of most lives.</dd>`;
 
   const kin = [];
   for (const p of who.parents || []) kin.push(["parent", p]);
