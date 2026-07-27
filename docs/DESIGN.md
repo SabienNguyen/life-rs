@@ -2171,3 +2171,44 @@ rather than with Dunbar. It now carries only what the speaker knows first hand
 (`known > HEARD_OF`), which bounds it by the sympathy group whatever the town's size, and
 hearing of somebody can never make them familiar. You can learn who a person is by
 reputation; you cannot become close to them that way.
+
+### 25.7 The tie graph cannot yet replace `bonding_capital`
+
+§14 computes a place's bonding capital from its churn and its residents' means — a *model*
+of how densely the people there know each other. Now that they actually do know each other,
+the obvious next move is to delete the formula and measure the thing directly. That would
+remove one of the last authored expressions in the neighbourhood vector, so it was worth
+checking rather than assuming.
+
+It does not work, and the reason is worth more than the change would have been. One world,
+a hundred and twenty founders, sixty years, every inhabited quarter:
+
+| formula | ally count | tie density | churn | adults |
+|---|---|---|---|---|
+| 0.831 | 4.4 | 0.335 | 0.13 | 14 |
+| 0.723 | 17.1 | 0.219 | 0.07 | 79 |
+| 0.481 | 2.2 | 0.550 | 0.53 | 5 |
+| 0.850 | 1.3 | 0.127 | 0.10 | 11 |
+
+Against the formula, the raw ally count correlates at **r = 0.04** and the tie density at
+**r = −0.85**. Neither measures cohesion. The count is a measure of how many people live
+there; the density is the same measure upside down, because in a quarter of five adults you
+can be allied with half the town by arithmetic and in a quarter of eighty you cannot.
+
+Underneath that is the same result the technique model ran into: **Dunbar is not binding at
+these population scales.** Where a quarter holds five to eighty adults, everybody can know
+everybody, so who you know is not yet a choice and the graph has no room to say anything the
+headcount does not already say. Turnover ought to show up — ties decay at 22% a year without
+contact — but a household that moves starts saturating its new neighbourhood within two
+years, so even the quarter with half its households arriving each year is the densest one on
+the list.
+
+The formula stays, and it stays for a stated reason rather than because nobody looked: it
+carries information (that turnover erodes community, that hardship builds it) which the tie
+graph genuinely does not contain, because nothing in the graph yet responds to either. Making
+it respond is a real piece of work and not a tidy-up — hardship would have to raise how much
+company people keep, and the number of *distinct* people a year of company reaches would have
+to grow with it, since at present `COMPANY_A_YEAR` fixes that at sixteen and more evenings buy
+depth rather than breadth. The measurement that says so is kept as
+`measure_whether_ties_could_replace_bonding_capital`, so the answer can be rechecked rather
+than remembered.

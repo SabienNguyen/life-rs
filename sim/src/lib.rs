@@ -3677,6 +3677,81 @@ mod tests {
         );
     }
 
+    /// Whether the tie graph could replace `bonding_capital`.
+    ///
+    /// §14 computes a place's bonding capital from churn and mean standing, which is a
+    /// *model* of how densely its residents know each other. Now that they actually do know
+    /// each other, the question is whether the measurement carries the same information —
+    /// if it does, the formula should go. Ignored: a measurement, not an assertion.
+    #[test]
+    #[ignore]
+    fn measure_whether_ties_could_replace_bonding_capital() {
+        let mut world = World::genesis(WorldSeed::from_u128(0x11), 120);
+        world.record_only(Salience::Pivotal);
+        world.set_detail_budget(100_000);
+        world.run_for(Duration::from_years(60));
+        let now = world.now();
+
+        let mut rows: Vec<(f32, f32, f32, usize)> = Vec::new();
+        for (id, place) in world.places.iter() {
+            let here: Vec<PersonId> = world
+                .society
+                .households_in(id)
+                .flat_map(|(_, h)| h.members.iter().copied())
+                .filter(|m| {
+                    world
+                        .people
+                        .get(*m)
+                        .is_some_and(|p| p.is_alive() && !p.stage(now).is_dependent())
+                })
+                .collect();
+            if here.len() < 4 {
+                continue;
+            }
+            let allies: usize = here
+                .iter()
+                .map(|who| {
+                    world
+                        .bonds
+                        .of(*who)
+                        .filter(|(other, tie)| {
+                            tie.allied() && world.society.place_of(*other) == Some(id)
+                        })
+                        .count()
+                })
+                .sum();
+            // Density, not headcount: the share of the people to hand that somebody
+            // actually stands with. A raw count is a measure of how big the town is.
+            let density = allies as f32 / (here.len() * (here.len() - 1)) as f32;
+            rows.push((place.env.bonding_capital, density, place.env.churn, here.len()));
+        }
+        assert!(rows.len() > 2, "not enough inhabited places to compare");
+
+        let mean = |v: &[f32]| v.iter().sum::<f32>() / v.len() as f32;
+        let formula: Vec<f32> = rows.iter().map(|r| r.0).collect();
+        let measured: Vec<f32> = rows.iter().map(|r| r.1).collect();
+        let (mf, mm) = (mean(&formula), mean(&measured));
+        let cov: f32 = formula
+            .iter()
+            .zip(&measured)
+            .map(|(f, m)| (f - mf) * (m - mm))
+            .sum();
+        let sf: f32 = formula.iter().map(|f| (f - mf) * (f - mf)).sum::<f32>().sqrt();
+        let sm: f32 = measured.iter().map(|m| (m - mm) * (m - mm)).sum::<f32>().sqrt();
+
+        for (f, m, churn, n) in &rows {
+            println!("  formula {f:.3}  density {m:.3}  churn {churn:.2}  n={n}");
+        }
+        println!(
+            "formula spread {:.3}..{:.3}, density spread {:.3}..{:.3}, r = {:.2}",
+            formula.iter().cloned().fold(f32::MAX, f32::min),
+            formula.iter().cloned().fold(f32::MIN, f32::max),
+            measured.iter().cloned().fold(f32::MAX, f32::min),
+            measured.iter().cloned().fold(f32::MIN, f32::max),
+            cov / (sf * sm).max(1e-6)
+        );
+    }
+
     /// What a year of company actually comes to, finely and coarsely.
     ///
     /// Ignored because it is a measurement rather than an assertion — run it when the
