@@ -75,4 +75,61 @@ fn main() {
             println!("    {entry}");
         }
     }
+
+    // And the record for whichever quarter swung hardest, from the same run — because a
+    // decade table and a chronicle taken from two runs of the same seed are two different
+    // worlds if anything at all differed between them, the detail budget included.
+    let watched = std::env::var("WATCH").unwrap_or_default();
+    if watched.is_empty() {
+        return;
+    }
+    let Some(place) = world
+        .places
+        .iter()
+        .find(|(_, p)| p.name == watched)
+        .map(|(id, _)| id)
+    else {
+        println!("\nno quarter called {watched}");
+        return;
+    };
+    let calendar = world.planets.iter().next().map(|(_, p)| p.calendar);
+    println!("\n-- {watched}, from the record --");
+    for record in world.chronicle.iter() {
+        let names = match record.kind {
+            sim::Happening::PersonMoves { person, to } if to == place => Some(format!(
+                "{} arrives",
+                world
+                    .people
+                    .get(person)
+                    .map(|p| p.name.clone())
+                    .unwrap_or_else(|| "somebody".to_string())
+            )),
+            sim::Happening::PlaceChanges { place: at, into } if at == place => {
+                Some(format!("reads as {into:?}"))
+            }
+            _ => None,
+        };
+        if let Some(what) = names {
+            let year = calendar.map(|c| c.date_at(record.at).year).unwrap_or(0);
+            println!("  {year:>4}  {what}");
+        }
+    }
+    if let Some(p) = world.places.get(place) {
+        println!(
+            "\n  {} at the end: {} living, room for {}, reads {:?}",
+            p.name,
+            world
+                .society
+                .households_in(place)
+                .flat_map(|(_, h)| h.members.iter())
+                .filter(|m| world.people.get(**m).is_some_and(|q| q.is_alive()))
+                .count(),
+            p.capacity,
+            p.archetype()
+        );
+        println!(
+            "  fortune {:.3}, gives a head {:.3}, short of food {:.3}",
+            p.fortune, p.prosperity, p.want
+        );
+    }
 }
