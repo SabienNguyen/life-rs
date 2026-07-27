@@ -24,7 +24,7 @@ const ORDINARY: f32 = 1.4;
 fn a_place_where_everybody_farms_is_the_old_one_good_world() {
     // The compatibility that protects every number §21 and §22 calibrated: a world that
     // never specialises has to be the world that existed before there were trades.
-    let (made, _) = make(&Hands::all_farming(30.0), ORDINARY, &Holdings::default());
+    let (made, _) = make(&Hands::all_farming(30.0), Ground::even(ORDINARY), &Holdings::default());
     assert!((made.of(Good::Food) - 30.0 * ORDINARY).abs() < 1e-4);
     for good in [Good::Stock, Good::Tools, Good::Meals, Good::Upkeep] {
         assert_eq!(made.of(good), 0.0, "{good:?} appeared with nobody making it");
@@ -35,12 +35,12 @@ fn a_place_where_everybody_farms_is_the_old_one_good_world() {
 fn a_smith_with_no_stock_makes_no_tools() {
     // The whole of the supply chain in one test. You cannot fill a link before the link
     // below it, however badly the place wants what the link makes.
-    let (made, after) = make(&hands(20.0, 0.0, 5.0, 0.0, 0.0), ORDINARY, &Holdings::default());
+    let (made, after) = make(&hands(20.0, 0.0, 5.0, 0.0, 0.0), Ground::even(ORDINARY), &Holdings::default());
     assert_eq!(made.of(Good::Tools), 0.0, "tools out of nothing");
     assert_eq!(after.tools, 0.0);
 
     // Put hewers in and the same smiths produce.
-    let (made, after) = make(&hands(20.0, 5.0, 5.0, 0.0, 0.0), ORDINARY, &Holdings::default());
+    let (made, after) = make(&hands(20.0, 5.0, 5.0, 0.0, 0.0), Ground::even(ORDINARY), &Holdings::default());
     assert!(made.of(Good::Tools) > 0.0, "hewers and smiths and still no tools");
     assert!(after.tools > 0.0, "nothing was left standing at the end of the year");
 }
@@ -49,8 +49,8 @@ fn a_smith_with_no_stock_makes_no_tools() {
 fn specialising_costs_food_and_that_is_the_point() {
     // Every trade but farming is a claim on somebody else's surplus, and it has to show up
     // as one — otherwise specialisation is free and every place does all of it.
-    let all_farming = make(&Hands::all_farming(30.0), ORDINARY, &Holdings::default()).0;
-    let mixed = make(&hands(20.0, 5.0, 5.0, 0.0, 0.0), ORDINARY, &Holdings::default()).0;
+    let all_farming = make(&Hands::all_farming(30.0), Ground::even(ORDINARY), &Holdings::default()).0;
+    let mixed = make(&hands(20.0, 5.0, 5.0, 0.0, 0.0), Ground::even(ORDINARY), &Holdings::default()).0;
     assert!(
         mixed.of(Good::Food) < all_farming.of(Good::Food),
         "ten people stopped farming and the harvest did not fall"
@@ -62,8 +62,8 @@ fn tools_are_what_lets_it_pay_for_itself() {
     // And the reason a chain is worth having: the hands that came off the land come back as
     // a multiplier on the hands that stayed.
     let equipped = Holdings { tools: 36.0, ..Holdings::default() };
-    let bare = make(&Hands::all_farming(30.0), ORDINARY, &Holdings::default()).0;
-    let kitted = make(&Hands::all_farming(30.0), ORDINARY, &equipped).0;
+    let bare = make(&Hands::all_farming(30.0), Ground::even(ORDINARY), &Holdings::default()).0;
+    let kitted = make(&Hands::all_farming(30.0), Ground::even(ORDINARY), &equipped).0;
     assert!(
         kitted.of(Good::Food) > bare.of(Good::Food) * 1.3,
         "a place with tools grew {:.1} against {:.1} with none",
@@ -72,7 +72,7 @@ fn tools_are_what_lets_it_pay_for_itself() {
     );
 
     // A specialised place with the tools its smiths made beats one that never spared them.
-    let specialised = make(&hands(24.0, 3.0, 3.0, 0.0, 0.0), ORDINARY, &equipped).0;
+    let specialised = make(&hands(24.0, 3.0, 3.0, 0.0, 0.0), Ground::even(ORDINARY), &equipped).0;
     assert!(
         specialised.of(Good::Food) > bare.of(Good::Food),
         "the chain never paid for itself: {:.1} against {:.1}",
@@ -86,14 +86,14 @@ fn capital_runs_down_without_anybody_keeping_it() {
     // The other half of what makes tools capital rather than a number that only grows.
     let mut holdings = Holdings { tools: 30.0, ..Holdings::default() };
     for _ in 0..10 {
-        holdings = make(&Hands::all_farming(30.0), ORDINARY, &holdings).1;
+        holdings = make(&Hands::all_farming(30.0), Ground::even(ORDINARY), &holdings).1;
     }
     assert!(holdings.tools < 12.0, "tools kept themselves: {}", holdings.tools);
 
     // And a keeper holds it very nearly level.
     let mut kept = Holdings { tools: 30.0, ..Holdings::default() };
     for _ in 0..10 {
-        kept = make(&hands(28.0, 0.0, 0.0, 0.0, 2.0), ORDINARY, &kept).1;
+        kept = make(&hands(28.0, 0.0, 0.0, 0.0, 2.0), Ground::even(ORDINARY), &kept).1;
     }
     assert!(
         kept.tools > 24.0,
@@ -108,8 +108,8 @@ fn a_hungry_place_has_nothing_to_gain_from_anything_but_farming() {
     // nothing because a tool is next year's problem, so every trade above the land is worth
     // less than the one that feeds people.
     let hands_now = hands(24.0, 2.0, 2.0, 1.0, 1.0);
-    let (made, holdings) = make(&hands_now, 0.2, &Holdings::default());
-    let worth = worth_taking_up(&made, &holdings, &hands_now, 0.2);
+    let (made, holdings) = make(&hands_now, Ground::even(0.2), &Holdings::default());
+    let worth = worth_taking_up(&made, &holdings, &hands_now, Ground::even(0.2));
     let best = Trade::ALL
         .into_iter()
         .max_by(|a, b| worth[*a as usize].total_cmp(&worth[*b as usize]))
@@ -125,8 +125,8 @@ fn a_want_falls_as_it_is_met() {
     let mut previous = f32::MAX;
     for cooks in [0.0, 2.0, 5.0, 10.0, 20.0] {
         let hands_now = hands(40.0 - cooks, 0.0, 0.0, cooks, 0.0);
-        let (made, holdings) = make(&hands_now, 3.0, &Holdings::default());
-        let worth = worth_taking_up(&made, &holdings, &hands_now, 3.0);
+        let (made, holdings) = make(&hands_now, Ground::even(3.0), &Holdings::default());
+        let worth = worth_taking_up(&made, &holdings, &hands_now, Ground::even(3.0));
         let cooking = worth[Trade::Cook as usize] - worth[Trade::Farmer as usize];
         // Non-increasing rather than strictly falling: past the point where every mouth in
         // the place is already served, another cook adds exactly nothing, and nothing is a
@@ -145,8 +145,8 @@ fn nobody_takes_up_a_trade_whose_input_nobody_makes() {
     // What a person actually looks at when choosing. A place with no hewers should not make
     // smithing look worthwhile however badly it wants tools.
     let hands_now = Hands::all_farming(30.0);
-    let (made, holdings) = make(&hands_now, 3.0, &Holdings::default());
-    let worth = worth_taking_up(&made, &holdings, &hands_now, 3.0);
+    let (made, holdings) = make(&hands_now, Ground::even(3.0), &Holdings::default());
+    let worth = worth_taking_up(&made, &holdings, &hands_now, Ground::even(3.0));
     assert_eq!(
         worth[Trade::Smith as usize],
         0.0,
@@ -161,8 +161,8 @@ fn nobody_takes_up_a_trade_whose_input_nobody_makes() {
 #[test]
 fn a_starving_place_makes_farming_the_only_thing_worth_doing() {
     let hands_now = hands(20.0, 4.0, 3.0, 2.0, 1.0);
-    let (made, holdings) = make(&hands_now, 0.6, &Holdings::default());
-    let worth = worth_taking_up(&made, &holdings, &hands_now, 0.6);
+    let (made, holdings) = make(&hands_now, Ground::even(0.6), &Holdings::default());
+    let worth = worth_taking_up(&made, &holdings, &hands_now, Ground::even(0.6));
     let best = Trade::ALL
         .into_iter()
         .max_by(|a, b| worth[*a as usize].total_cmp(&worth[*b as usize]))
@@ -179,9 +179,9 @@ fn every_link_of_the_chain_can_be_reached_from_the_bottom() {
     let mut holdings = Holdings::default();
     let mut seen = std::collections::BTreeSet::new();
     for _ in 0..60 {
-        let (made, after) = make(&hands_now, 3.0, &holdings);
+        let (made, after) = make(&hands_now, Ground::even(3.0), &holdings);
         holdings = after;
-        let worth = worth_taking_up(&made, &holdings, &hands_now, 3.0);
+        let worth = worth_taking_up(&made, &holdings, &hands_now, Ground::even(3.0));
         let best = Trade::ALL
             .into_iter()
             .max_by(|a, b| worth[*a as usize].total_cmp(&worth[*b as usize]))

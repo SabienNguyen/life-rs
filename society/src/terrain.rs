@@ -67,6 +67,15 @@ impl Terrain {
         }
     }
 
+    /// The same place with a different biome, for the fixtures that are about what grows.
+    ///
+    /// The label is filled in by `settlement`, which needs a biosphere; a test that only
+    /// wants to say "this is forest" should not have to build a planet to say it.
+    pub fn tap_biome(mut self, biome: &'static str) -> Terrain {
+        self.biome = biome;
+        self
+    }
+
     /// The ceiling terrain puts on how well off a place can be.
     ///
     /// Not a floor and not a target: somewhere fertile is *allowed* to be rich and does

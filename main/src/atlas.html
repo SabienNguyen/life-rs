@@ -678,6 +678,13 @@ function drawPlace() {
     ["Short of food", p.want > 0 ? pct(p.want) : "no"],
     // The only thing this world owns that outlives the year it was made in.
     ["Tools in hand", (Number(p.tools) || 0).toFixed(1)],
+    // What they know how to do, against bare subsistence — and how far anybody has ever
+    // worked out that it is possible to get. The second is the only number in this world
+    // that a single person can move, and it moves for everybody after them.
+    ["Know how to", `${(Number(p.practised) || 1).toFixed(2)}× bare living`],
+    ["Ever worked out", (Number(p.knowledge) || 1) > 1.001
+      ? `${(((Number(p.knowledge) || 1) - 1) * 100).toFixed(1)}% past the old limit`
+      : "nothing past the old limit"],
   ];
   const bars = [
     ["Affluence", p.affluence], ["Safety", p.safety],

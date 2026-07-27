@@ -266,6 +266,11 @@ fn places(world: &World) -> String {
                     // What the place owns that outlives the year — the only capital in this
                     // world, and the only thing in it that compounds.
                     field("tools", &num(world.holdings_of(id).tools)),
+                    // What its people actually know how to do, and how far anybody has ever
+                    // worked out that it is possible to get. One is bare subsistence and one
+                    // is an age nobody has left.
+                    field("practised", &num(world.technique_of(id).level())),
+                    field("knowledge", &num(world.technique_of(id).reach_of_knowledge())),
                     // The ground, so the viewer can say why a quarter is what it is
                     // rather than only that it is.
                     field(

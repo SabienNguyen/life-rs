@@ -175,6 +175,41 @@ impl Trade {
     }
 }
 
+/// What a hand at the bottom of the chain gets off *this* ground in a year, good by good.
+///
+/// Two numbers rather than one, and that is the whole of regional specialisation. The ground
+/// under a place is not equally good at everything: a river plain grows a great deal and has
+/// no stone in it, a wooded hillside is the reverse, and until now both were described by a
+/// single figure called "what the land yields" — so every place in every world was good at
+/// exactly the same things in exactly the same proportion, and geography could not produce a
+/// division of labour between *places* however much it produced within one.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Ground {
+    /// Per hand farming.
+    pub food: f32,
+    /// Per hand cutting, quarrying or digging.
+    pub stock: f32,
+    /// How much food a unit of unworked material fetches from the neighbours, 0 to 1.
+    ///
+    /// The other reason to cut timber, and the one that makes a road worth having. Without
+    /// it the only thing material is good for is the tools *this* place can use, so a wooded
+    /// hillside with a market a day's walk away hews exactly as much as one with no
+    /// neighbours at all — and the whole point of two places being different is that they
+    /// can live off each other.
+    pub sells_for: f32,
+}
+
+impl Ground {
+    /// Land equally good at both, which is what every place was before this.
+    pub fn even(per_hand: f32) -> Ground {
+        Ground {
+            food: per_hand,
+            stock: per_hand,
+            sells_for: 0.0,
+        }
+    }
+}
+
 /// How many hands are in each trade in a place.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Hands(pub [f32; Trade::COUNT]);
@@ -316,7 +351,7 @@ impl Made {
 /// first, because everything else is made *out of* them, and a trade that cannot get its
 /// input simply does not produce. Nobody is told to farm; a smith with no stock makes no
 /// tools, and next year smithing is not worth doing.
-pub fn make(hands: &Hands, primary: f32, holdings: &Holdings) -> (Made, Holdings) {
+pub fn make(hands: &Hands, ground: Ground, holdings: &Holdings) -> (Made, Holdings) {
     let workers = hands.total();
     let mut made = Made::default();
     if workers <= 0.0 {
@@ -328,9 +363,9 @@ pub fn make(hands: &Hands, primary: f32, holdings: &Holdings) -> (Made, Holdings
     let equipped = toolage(holdings, workers);
 
     // Off the land, with what they have to work with.
-    let hewn = hands.at(Trade::Hewer) * primary * equipped;
+    let hewn = hands.at(Trade::Hewer) * ground.stock * equipped;
     made.set(Good::Stock, hewn);
-    let raw_food = hands.at(Trade::Farmer) * primary * equipped;
+    let raw_food = hands.at(Trade::Farmer) * ground.food * equipped;
 
     // Out of what came off the land. Leontief: a trade makes what its hands could make, or
     // what its inputs allow, whichever is less. There is no substituting labour for stock.
@@ -396,7 +431,7 @@ const TOOL_LIFE: f32 = 1.0 / WEAR;
 /// `spare` is what the place is not desperate for. A hungry place values a tool at nothing,
 /// because a tool is next year's problem and it is hungry now — and that single weighting is
 /// why famine takes the smiths first.
-fn value_of(made: &Made, holdings: &Holdings, workers: f32, primary: f32, spare: f32) -> f32 {
+fn value_of(made: &Made, holdings: &Holdings, workers: f32, ground: Ground, spare: f32) -> f32 {
     let land_food = made.of(Good::Food);
     // What a given quantity of tools is worth: the extra food it will pull out of the same
     // hands, for as long as it lasts. Saturating, because `toolage` is.
@@ -418,10 +453,14 @@ fn value_of(made: &Made, holdings: &Holdings, workers: f32, primary: f32, spare:
     // about what one is.
     let all_worked = holdings.stock / STOCK_PER_TOOL;
     let unworked = (WORTH_UNWORKED * (tools_worth(holdings.tools + all_worked) - standing)
-        - all_worked * primary)
+        - all_worked * ground.food)
         .max(0.0);
+    // Or what it fetches, if there is anybody to sell it to. Whichever is worth more, because
+    // a place with both a use for its timber and a buyer for it will do whichever pays — and
+    // this is the term that lets somewhere live off ground that grows nothing.
+    let sold = holdings.stock * ground.sells_for;
 
-    land_food + spare.clamp(0.0, 1.0) * (standing + unworked)
+    land_food + spare.clamp(0.0, 1.0) * (standing + unworked.max(sold))
 }
 
 /// How short of feeding itself a place is, from 0 to 1.
@@ -450,7 +489,7 @@ pub fn worth_taking_up(
     made: &Made,
     holdings: &Holdings,
     hands: &Hands,
-    primary: f32,
+    ground: Ground,
 ) -> [f32; Trade::COUNT] {
     let workers = hands.total().max(1.0);
     let spare = 1.0 - hunger(made, workers);
@@ -458,9 +497,9 @@ pub fn worth_taking_up(
     for trade in Trade::ALL {
         let mut more = *hands;
         more.set(trade, more.at(trade) + 1.0);
-        let (made_then, holdings_then) = make(&more, primary, holdings);
+        let (made_then, holdings_then) = make(&more, ground, holdings);
         worth[trade as usize] =
-            value_of(&made_then, &holdings_then, workers + 1.0, primary, spare);
+            value_of(&made_then, &holdings_then, workers + 1.0, ground, spare);
     }
     // Against the least of them, so the numbers read as "how much better than the worst
     // thing you could do", and so `SWITCHING` compares like with like across places.

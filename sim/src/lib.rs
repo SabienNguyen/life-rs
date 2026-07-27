@@ -183,9 +183,12 @@ const RESTLESS_UNTIL: f64 = 32.0;
 
 /// How much better another trade has to look before somebody will change theirs.
 ///
-/// Prices here run from nothing to about one, so this is a fifth of the whole range: a real
-/// difference, not a flicker. Without it the town moves into whatever paid best last year,
-/// makes far too much of it, and moves out again.
+/// **A proportion, not an amount.** It was an amount — a fifth — back when what a trade was
+/// worth was a price between nought and one; now it is a quantity of food, which in a large
+/// town runs to hundreds, and a fifth of a loaf is not a reason to change your life. A flat
+/// threshold that small is no threshold at all, and it showed: a town of a hundred carried
+/// twenty-seven keepers for tools that needed three, because every year everybody moved into
+/// whatever was marginally ahead.
 const SWITCHING: f32 = 0.20;
 
 /// The yearly chance that somebody who has a reason to change trades actually does.
@@ -194,6 +197,29 @@ const SWITCHING: f32 = 0.20;
 /// slowness is not a nuisance to be tuned away — it is what lets an occupational structure
 /// exist at all rather than sloshing between trades every few years.
 const RETRAINING: f64 = 0.08;
+
+/// The yearly chance that somebody with a whole year of slack, in a well-connected place,
+/// works something out.
+///
+/// Everything else scales this down: how much surplus their place actually had, how open they
+/// are to a new way of doing a thing, and how easily its people reach each other.
+///
+/// This is the one number in §29 that had to be chosen rather than derived, and it is worth
+/// being plain about what it is choosing. A real village of three hundred produced, over a
+/// century, essentially no attributable lasting improvement — what reached it came from
+/// populations a thousand times larger. Set to that, the mechanism would be correct and
+/// permanently invisible in any world this machine can run. So it is set instead to about
+/// **one lasting improvement per comfortable country per human lifetime**, which is generous
+/// by a wide margin, and the reason for the generosity is written down here rather than
+/// hidden in the number.
+const WORKING_IT_OUT: f64 = 0.0008;
+
+/// How much surplus per head counts as having time to think.
+///
+/// Half a year's food in hand. Below it people are busy staying alive, and the model says so
+/// rather than assuming a scholar class into existence: **slack is the input to discovery**,
+/// which is why the trap is a trap and why leaving it needs a run of good harvests first.
+const TIME_TO_THINK: f32 = 0.5;
 
 /// What a trade being wanted is worth to what a year's work returns.
 ///
@@ -351,6 +377,14 @@ pub enum Happening {
         person: PersonId,
         by: PersonId,
     },
+    /// Somebody worked out a better way to do the thing they do.
+    ///
+    /// The rarest thing in the chronicle and the only one that changes what is *possible*
+    /// rather than what happened. Nothing else in this world moves a limit.
+    PersonWorksItOut {
+        person: PersonId,
+        trade: economy::Trade,
+    },
     PlaceChanges {
         place: PlaceId,
         into: society::Archetype,
@@ -371,7 +405,8 @@ impl Happening {
             Happening::PhaseBegins { planet, .. } => one(planet.to_bits()),
             Happening::PersonArrives { person }
             | Happening::PersonDoes { person, .. }
-            | Happening::PersonDies { person, .. } => one(person.to_bits()),
+            | Happening::PersonDies { person, .. }
+            | Happening::PersonWorksItOut { person, .. } => one(person.to_bits()),
             // Taking somebody up is an event in the patron's life as much as in theirs.
             Happening::PersonMentored { person, by } => {
                 Subjects::of(&[person.to_bits(), by.to_bits()])
@@ -433,7 +468,8 @@ impl Happening {
             | Happening::PersonDies { person, .. }
             | Happening::PersonPairs { person, .. }
             | Happening::PersonMoves { person, .. }
-            | Happening::PersonMentored { person, .. } => Some(*person),
+            | Happening::PersonMentored { person, .. }
+            | Happening::PersonWorksItOut { person, .. } => Some(*person),
             Happening::PersonBorn { child, .. } => Some(*child),
             _ => None,
         }
@@ -2090,6 +2126,7 @@ impl World {
         self.reckon_cultures(at);
         self.assign_detail();
         self.absorb_upbringings(at);
+        self.work_things_out(at);
         self.sort_households(at);
         self.reckon_bonds();
         self.scheduler
@@ -2142,7 +2179,7 @@ impl World {
             // Somebody who has not yet set into who they are takes up what pays without
             // needing to be dragged; everybody else needs a reason and a nudge.
             let better = worth[best as usize] - worth[mine as usize];
-            if settled && better < SWITCHING {
+            if settled && better < SWITCHING * worth[mine as usize].abs().max(1.0) {
                 continue;
             }
             let mut rng = self.moment_stream(Domain::Chance, id.to_bits() ^ 0x_7ade, at);
@@ -2151,6 +2188,108 @@ impl World {
             }
             if let Some(person) = self.people.get_mut(id) {
                 person.take_up(best);
+            }
+        }
+    }
+
+    /// Somebody works something out.
+    ///
+    /// The only thing in this world that moves a limit rather than a level, and the answer to
+    /// why every world here was permanently medieval: `Technique` had a hard ceiling of three,
+    /// so a people could get better at what it already did and could never come to do anything
+    /// else. Now the ceiling is a *frontier* and this is the only thing that moves it.
+    ///
+    /// Four things decide whether anybody ever does, and none of them is a date:
+    ///
+    /// - **Slack.** Somebody has to have a year they did not spend staying alive. A place with
+    ///   no surplus produces no advances however clever anybody in it is, which is why the
+    ///   Malthusian trap is a trap: the surplus that would buy thinking gets eaten by the
+    ///   children it also buys.
+    /// - **Openness.** The trait for novelty, and the only place in the model where it decides
+    ///   something that outlives the person who has it.
+    /// - **Numbers.** More people have more ideas, and — through `MINDS_TO_KEEP` — more people
+    ///   are needed to hold on to them afterwards. A lone genius in a hamlet is a lost idea.
+    /// - **What they do all day.** An advance is in the discoverer's *own* trade. Nobody works
+    ///   out a better forge who has never stood at one, so a world of farmers gets better at
+    ///   farming and at nothing else, and two worlds that specialised differently end up good
+    ///   at different things.
+    ///
+    /// The advance belongs to the **country**, because a country is exactly the set of people
+    /// who can reach each other to copy something — the same unit `learn_and_forget` uses, and
+    /// for the same reason.
+    fn work_things_out(&mut self, at: Time) {
+        let countries = self.countries();
+        for country in &countries {
+            let places: Vec<PlaceId> = country
+                .places
+                .iter()
+                .filter_map(|slot| self.roster.get(*slot).copied())
+                .collect();
+            if country
+                .places
+                .iter()
+                .filter_map(|slot| self.souls_at(*slot))
+                .sum::<u32>()
+                == 0
+            {
+                continue;
+            }
+
+            let mut found: Vec<(PersonId, economy::Trade)> = Vec::new();
+            for place in &places {
+                // What this place had spare, per head. Nobody thinks on an empty stomach.
+                let slack = self
+                    .places
+                    .get(*place)
+                    .map(|p| (p.prosperity - p.want).clamp(0.0, 1.0))
+                    .unwrap_or(0.0);
+                if slack <= 0.0 {
+                    continue;
+                }
+                let idle = (slack / TIME_TO_THINK).min(1.0) as f64;
+                // How easily the people of this country reach each other. Not how many of
+                // them there are — that is already counted by there being more of them to
+                // roll for. What this is for is that ideas need somebody to have them *at*:
+                // a hamlet at the end of a track and a town on a road produce different
+                // numbers of good ideas from the same number of heads, and roads are this
+                // model's whole vocabulary for that.
+                let talking = self
+                    .places
+                    .get(*place)
+                    .and_then(|p| p.terrain.as_ref())
+                    .map(|t| 0.3 + 0.7 * t.reach.clamp(0.0, 1.0) as f64)
+                    .unwrap_or(0.5);
+
+                let here: Vec<PersonId> = self
+                    .society
+                    .households_in(*place)
+                    .flat_map(|(_, h)| h.members.iter().copied())
+                    .collect();
+                for who in here {
+                    let Some(person) = self.people.get(who) else {
+                        continue;
+                    };
+                    if !person.is_alive() || person.stage(at).is_dependent() {
+                        continue;
+                    }
+                    let curious = (1.0 + 0.6 * person.personality.openness).max(0.0) as f64;
+                    let chance = WORKING_IT_OUT * idle * curious * talking;
+                    let mut rng = self.moment_stream(Domain::Chance, who.to_bits() ^ 0x_1dea, at);
+                    if rng.chance(chance) {
+                        found.push((who, person.trade()));
+                    }
+                }
+            }
+
+            for (who, trade) in found {
+                for place in &places {
+                    self.technique.entry(*place).or_default().worked_out(trade);
+                }
+                self.remember(
+                    at,
+                    Salience::Historic,
+                    Happening::PersonWorksItOut { person: who, trade },
+                );
             }
         }
     }
@@ -3863,6 +4002,152 @@ mod tests {
         world
     }
 
+    // ---- ground that is good at different things (§28) -----------------------------
+
+    #[test]
+    fn the_ground_of_a_world_is_not_all_the_same_ground() {
+        // Before §28 every place in every world was good at exactly the same things in
+        // exactly the same proportion, so geography could not produce a division of labour
+        // between settlements however much it produced within one.
+        let world = lineages();
+        let mut ratios: Vec<f32> = Vec::new();
+        for (id, place) in world.places.iter() {
+            let Some(terrain) = place.terrain.as_ref() else {
+                continue;
+            };
+            let ground = economy::ground_of(terrain, world.technique_of(id));
+            if ground.food > 0.0 {
+                ratios.push(ground.stock / ground.food);
+            }
+        }
+        assert!(ratios.len() > 2, "too few places on the map to compare");
+        let (low, high) = (
+            ratios.iter().cloned().fold(f32::MAX, f32::min),
+            ratios.iter().cloned().fold(f32::MIN, f32::max),
+        );
+        assert!(
+            high > low * 1.2,
+            "every place is good at the same things: {low:.2} to {high:.2}"
+        );
+    }
+
+    #[test]
+    fn a_road_is_what_makes_material_worth_cutting() {
+        // The term that gives a road a reason to exist other than other people's charity.
+        let world = lineages();
+        for (id, place) in world.places.iter() {
+            let Some(terrain) = place.terrain.as_ref() else {
+                continue;
+            };
+            let ground = economy::ground_of(terrain, world.technique_of(id));
+            assert!(
+                ground.sells_for >= 0.0 && ground.sells_for <= 1.0,
+                "{} sells at {}",
+                place.name,
+                ground.sells_for
+            );
+            if terrain.reach <= 0.0 {
+                assert_eq!(
+                    ground.sells_for, 0.0,
+                    "{} is off every road and still selling",
+                    place.name
+                );
+            }
+        }
+    }
+
+    // ---- somebody works something out (§29) ----------------------------------------
+
+    #[test]
+    fn nothing_is_ever_practised_beyond_what_is_possible() {
+        // The invariant that makes the frontier a frontier. A people can be as large and as
+        // well connected as it likes and it will not exceed what anybody has worked out.
+        let world = lineages();
+        for id in world.places.ids() {
+            let know = world.technique_of(id);
+            for trade in economy::Trade::ALL {
+                assert!(
+                    know.at(trade) <= know.frontier(trade) + 1e-4,
+                    "{:?} practised {} against a limit of {}",
+                    trade,
+                    know.at(trade),
+                    know.frontier(trade)
+                );
+                assert!(know.at(trade) >= 1.0, "somebody forgot how to eat");
+            }
+        }
+    }
+
+    #[test]
+    fn the_limit_only_moves_when_somebody_moves_it() {
+        // The answer to why every world here was permanently medieval, stated as a test: the
+        // ceiling is not a constant any more, and the only thing that lifts it is a person.
+        let world = lineages();
+        let advances = world
+            .chronicle
+            .iter()
+            .filter(|r| matches!(r.kind, Happening::PersonWorksItOut { .. }))
+            .count();
+        let moved = world
+            .places
+            .ids()
+            .any(|id| world.technique_of(id).reach_of_knowledge() > 1.0 + 1e-6);
+        assert_eq!(
+            advances > 0,
+            moved,
+            "{advances} advances and the limit {} moved",
+            if moved { "had" } else { "had not" }
+        );
+    }
+
+    #[test]
+    fn what_one_person_works_out_the_whole_country_could_do() {
+        // A country is exactly the set of people who can reach each other to copy something,
+        // which is the same unit `learn_and_forget` uses and for the same reason. An idea had
+        // in one of its quarters is an idea the rest of it could act on.
+        let world = lineages();
+        for country in world.countries() {
+            let mut seen: Option<[f32; economy::Trade::COUNT]> = None;
+            for slot in &country.places {
+                let Some(id) = world.place_at(*slot) else {
+                    continue;
+                };
+                let know = world.technique_of(id);
+                let here = economy::Trade::ALL.map(|t| know.frontier(t));
+                match seen {
+                    None => seen = Some(here),
+                    Some(theirs) => {
+                        for at in 0..economy::Trade::COUNT {
+                            assert!(
+                                (here[at] - theirs[at]).abs() < 1e-3,
+                                "{} knows of things its own country does not: {here:?} against {theirs:?}",
+                                country.name
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn an_advance_is_a_thing_that_happened_to_somebody() {
+        // Not a date and not a tree. Every one of these names a person, and that person was
+        // alive and working when it happened.
+        let world = lineages();
+        for record in world.chronicle.iter() {
+            let Happening::PersonWorksItOut { person, .. } = record.kind else {
+                continue;
+            };
+            let who = world.people.get(person).expect("a discoverer who never existed");
+            assert!(
+                record.at >= who.born,
+                "{} worked something out before they were born",
+                who.name
+            );
+        }
+    }
+
     // ---- a supply chain (§27) ------------------------------------------------------
 
     #[test]
@@ -4419,11 +4704,51 @@ mod tests {
                     *trades.entry(p.trade().label()).or_default() += 1;
                 }
             }
+            let advances = world
+                .chronicle
+                .iter()
+                .filter(|r| matches!(r.kind, Happening::PersonWorksItOut { .. }))
+                .count();
+            let frontier = world
+                .places
+                .ids()
+                .map(|id| world.technique_of(id).reach_of_knowledge())
+                .fold(0.0f32, f32::max);
             println!(
-                "seed {seed:#x}: {} alive of {} ever, tools {tools:.0}, {trades:?}",
+                "seed {seed:#x}: {} alive of {} ever, tools {tools:.0}, {advances} advances, frontier {frontier:.3}, {trades:?}",
                 world.living(),
                 world.people.len()
             );
+            for (id, place) in world.places.iter().take(0) {
+                let mut here: std::collections::BTreeMap<&str, usize> = Default::default();
+                for member in world
+                    .society
+                    .households_in(id)
+                    .flat_map(|(_, h)| h.members.iter())
+                {
+                    if let Some(p) = world.people.get(*member)
+                        && p.is_alive()
+                        && !p.stage(now).is_dependent()
+                    {
+                        *here.entry(p.trade().label()).or_default() += 1;
+                    }
+                }
+                if here.is_empty() {
+                    continue;
+                }
+                let ground = place
+                    .terrain
+                    .as_ref()
+                    .map(|t| economy::ground_of(t, world.technique_of(id)));
+                println!(
+                    "    {:<14} {:<22} soil {:.2} {:>18}  ground {:?}",
+                    place.name,
+                    place.terrain.as_ref().map(|t| t.biome).unwrap_or(""),
+                    place.terrain.as_ref().map(|t| t.fertility).unwrap_or(0.0),
+                    format!("{here:?}"),
+                    ground.map(|g| (g.food, g.stock)),
+                );
+            }
         }
         println!("mean alive {:.1}, mean ever {:.1}", alive / 6.0, ever / 6.0);
     }
@@ -5248,8 +5573,14 @@ mod the_land_holds {
     #[test]
     #[ignore]
     fn measure_whether_the_trap_ever_opens() {
+        let centuries: u64 = std::env::var("CENTURIES")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(5);
         let mut world = World::genesis(WorldSeed::from_u128(0x221), 120);
-        for century in 1..=5 {
+        world.record_only(Salience::Historic);
+        world.set_detail_budget(0);
+        for century in 1..=centuries {
             world.run_for(Duration::from_years(100));
             let biggest = world
                 .countries()
@@ -5261,12 +5592,23 @@ mod the_land_holds {
                 .iter()
                 .map(|(id, _)| world.technique_of(id).level())
                 .fold(0.0f32, f32::max);
+            let frontier = world
+                .places
+                .ids()
+                .map(|id| world.technique_of(id).reach_of_knowledge())
+                .fold(0.0f32, f32::max);
+            let advances = world
+                .chronicle
+                .iter()
+                .filter(|r| matches!(r.kind, Happening::PersonWorksItOut { .. }))
+                .count();
             println!(
-                "year {:>4}: living {:>5} biggest country {:>5} best technique {:.4}",
+                "year {:>5}: living {:>5} biggest country {:>5} practised {:.3} frontier {:.3} advances {advances}",
                 century * 100,
                 world.living(),
                 biggest,
                 best,
+                frontier,
             );
         }
     }

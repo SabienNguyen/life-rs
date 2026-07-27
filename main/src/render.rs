@@ -86,6 +86,18 @@ fn sentence(world: &World, happening: Happening) -> String {
                 .unwrap_or("elsewhere")
         ),
 
+        Happening::PersonWorksItOut { person, trade } => format!(
+            "{} works out a better way to {}",
+            who(world, person),
+            match trade {
+                economy::Trade::Farmer => "grow things",
+                economy::Trade::Hewer => "get stone and timber out of the ground",
+                economy::Trade::Smith => "make tools",
+                economy::Trade::Cook => "feed people",
+                economy::Trade::Keeper => "keep things from falling apart",
+            }
+        ),
+
         Happening::PersonMentored { person, by } => format!(
             "{} is taken up by {}",
             who(world, person),

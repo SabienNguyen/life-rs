@@ -18,3 +18,4 @@ planet = { path = "../planet" }
 person = { path = "../person" }
 culture = { path = "../culture" }
 bonds = { path = "../bonds" }
+economy = { path = "../economy" }

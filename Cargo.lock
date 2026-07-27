@@ -152,6 +152,7 @@ dependencies = [
  "cosmos",
  "culture",
  "ecology",
+ "economy",
  "evolution",
  "geo",
  "life",

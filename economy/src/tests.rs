@@ -309,10 +309,19 @@ fn a_crowd_learns_and_a_handful_forgets() {
         "a stranded people kept everything it knew"
     );
 
+    // And a small isolated people holds a small people's worth and no more. Not nothing —
+    // two hundred people have a toolkit — but a fraction of what a nation carries, which is
+    // the Tasmanian claim stated at the strength the evidence actually supports.
     for _ in 0..400 {
         few = few.after_a_year(200.0, 0.2);
     }
-    assert_eq!(few, Technique::BARE, "a handful invented something");
+    assert!(few.level() > 1.0, "two hundred people know literally nothing");
+    assert!(
+        few.level() < 1.0 + 0.4 * (crowd.level() - 1.0),
+        "a handful held as much as a nation: {} against {}",
+        few.level(),
+        crowd.level()
+    );
 }
 
 #[test]
@@ -321,7 +330,8 @@ fn nobody_forgets_how_to_eat() {
     for _ in 0..5_000 {
         destitute = destitute.after_a_year(1.0, 0.0);
     }
-    assert_eq!(destitute.level(), 1.0, "technique fell below bare subsistence");
+    assert!(destitute.level() >= 1.0, "technique fell below bare subsistence");
+    assert!(destitute.level() < 1.01, "one person alone held a body of technique");
 }
 
 #[test]
@@ -363,13 +373,27 @@ fn learning_slows_as_there_is_more_to_know() {
 }
 
 #[test]
-fn technique_never_passes_the_pre_industrial_ceiling() {
+fn technique_never_passes_what_anybody_has_worked_out() {
+    // It used to be that technique never passed a constant three, which is what made every
+    // world permanently medieval. What holds now is the weaker and truer claim: it never
+    // passes what somebody has actually worked out to be possible.
     let mut level = Technique::BARE;
     for _ in 0..200_000 {
         level = level.after_a_year(100_000.0, 1.0);
     }
     assert!(level.level() <= 3.0 + 1e-6, "{}", level.level());
     assert!(level.level() > 2.5, "it should get most of the way there eventually");
+
+    // And with a frontier that has moved, the same people go further — but only as far as
+    // the frontier, never past it.
+    for _ in 0..300 {
+        level.worked_out(Trade::Farmer);
+    }
+    for _ in 0..200_000 {
+        level = level.after_a_year(100_000.0, 1.0);
+    }
+    assert!(level.at(Trade::Farmer) > 10.0, "{}", level.at(Trade::Farmer));
+    assert!(level.at(Trade::Farmer) <= level.frontier(Trade::Farmer) + 1e-3);
 }
 
 #[test]
@@ -384,7 +408,14 @@ fn the_malthusian_trap_closes() {
     // here it is arithmetic rather than a claim.
     let ground = land(0.6, 0.5, 0.0);
     let learned = Technique::BARE.after_a_year(1e9, 1.0);
-    let better = Technique(3.0);
+    // Everything a people can do, at the ceiling an ordinary tradition reaches.
+    let better = {
+        let mut at_the_top = Technique::BARE;
+        for _ in 0..4_000 {
+            at_the_top = at_the_top.after_a_year(1e9, 1.0);
+        }
+        at_the_top
+    };
 
     // The land now feeds more people at the same standard of living.
     let before_at = |w| produce_knowing(&ground, w, Technique::BARE).per_head();
@@ -471,3 +502,203 @@ fn trade_feeds_a_place_that_cannot_feed_itself() {
     );
 }
 
+
+// ---- what the ground is good at (§28) -----------------------------------------------
+
+fn somewhere(biome: &'static str, fertility: f32, elevation_m: f32) -> Terrain {
+    Terrain {
+        fertility,
+        elevation_m,
+        ..Terrain::middling(0)
+    }
+    .tap_biome(biome)
+}
+
+#[test]
+fn a_plain_grows_and_a_hillside_yields() {
+    // The whole of regional specialisation, in two places. Neither is better than the other
+    // and nothing anywhere says either is a farming or a cutting place: what differs is
+    // which of the two things the ground is good at.
+    let plain = ground_of(&somewhere("grassland", 0.9, 60.0), Technique::BARE);
+    let wood = ground_of(&somewhere("temperate forest", 0.35, 900.0), Technique::BARE);
+
+    assert!(plain.food > wood.food, "{plain:?} against {wood:?}");
+    assert!(wood.stock > plain.stock, "{plain:?} against {wood:?}");
+    // And each is better at its own thing than at the other's, which is what makes trading
+    // with the other one worth the walk.
+    assert!(plain.food > plain.stock);
+    assert!(wood.stock > wood.food);
+}
+
+#[test]
+fn bare_mountains_have_no_food_and_a_great_deal_of_stone() {
+    let crag = ground_of(&somewhere("cold desert", 0.08, 2200.0), Technique::BARE);
+    let marsh = ground_of(&somewhere("grassland", 0.75, 5.0), Technique::BARE);
+    assert!(crag.stock > marsh.stock * 1.5, "{crag:?} against {marsh:?}");
+    assert!(crag.food < marsh.food * 0.6);
+}
+
+#[test]
+fn a_place_that_is_good_at_nothing_is_good_at_nothing() {
+    let ice = ground_of(&somewhere("glacier", 0.0, 20.0), Technique::BARE);
+    assert!(ice.food < 0.01);
+    // Not zero: there is always something to pick up off the ground. But close.
+    assert!(ice.stock < 3.0, "{ice:?}");
+}
+
+#[test]
+fn knowing_more_lifts_both_of_them() {
+    let land = somewhere("temperate forest", 0.6, 300.0);
+    let bare = ground_of(&land, Technique::BARE);
+    let learned = ground_of(&land, Technique::BARE.after_a_year(50_000.0, 1.0));
+    assert!(learned.food > bare.food);
+    assert!(learned.stock > bare.stock);
+}
+
+#[test]
+fn a_place_with_timber_and_no_wheat_buys_wheat_with_timber() {
+    // What regional specialisation is *for*. Without this the wooded hillside starves next
+    // to the plain, and the two of them being different is a curiosity rather than a reason
+    // to be neighbours.
+    let mut ledgers = [
+        Ledger { surplus: 20.0, market: 20.0, workers: 30.0, ..Ledger::EMPTY },
+        Ledger { surplus: -8.0, market: -8.0, workers: 30.0, ..Ledger::EMPTY },
+    ];
+    let mut stock = [0.0, 40.0];
+    barter(&mut ledgers, &mut stock, &[1.0, 1.0]);
+
+    assert!(ledgers[1].market > -8.0, "the hillside bought nothing: {:?}", ledgers[1]);
+    assert!(stock[1] < 40.0, "and paid with nothing");
+    assert!(ledgers[0].market < 20.0, "the plain gave up no food");
+    assert!(stock[0] > 0.0, "and got no timber for it");
+    // Conserved, unlike the access pool: what one hands over the other receives.
+    let food = (20.0 - ledgers[0].market) - (ledgers[1].market + 8.0);
+    assert!(food.abs() < 1e-4, "food went missing: {food}");
+    let material = (40.0 - stock[1]) - stock[0];
+    assert!(material.abs() < 1e-4, "material went missing: {material}");
+}
+
+#[test]
+fn two_places_with_the_same_problem_trade_nothing() {
+    let mut ledgers = [
+        Ledger { surplus: -5.0, market: -5.0, workers: 30.0, ..Ledger::EMPTY },
+        Ledger { surplus: -8.0, market: -8.0, workers: 30.0, ..Ledger::EMPTY },
+    ];
+    let mut stock = [40.0, 40.0];
+    let before = (ledgers, stock);
+    barter(&mut ledgers, &mut stock, &[1.0, 1.0]);
+    assert_eq!((ledgers, stock), before, "two hungry places traded with each other");
+}
+
+#[test]
+fn nobody_buys_what_they_cannot_pay_for() {
+    let mut ledgers = [
+        Ledger { surplus: 20.0, market: 20.0, workers: 30.0, ..Ledger::EMPTY },
+        Ledger { surplus: -8.0, market: -8.0, workers: 30.0, ..Ledger::EMPTY },
+    ];
+    let mut stock = [0.0, 0.0];
+    let before = (ledgers, stock);
+    barter(&mut ledgers, &mut stock, &[1.0, 1.0]);
+    assert_eq!((ledgers, stock), before, "a place with nothing to offer still bought food");
+}
+
+#[test]
+fn a_road_is_what_makes_the_exchange_possible() {
+    let deal = |reach: [f32; 2]| {
+        let mut ledgers = [
+            Ledger { surplus: 20.0, market: 20.0, workers: 30.0, ..Ledger::EMPTY },
+            Ledger { surplus: -8.0, market: -8.0, workers: 30.0, ..Ledger::EMPTY },
+        ];
+        let mut stock = [0.0, 40.0];
+        barter(&mut ledgers, &mut stock, &reach);
+        ledgers[1].market + 8.0
+    };
+    assert!(deal([1.0, 1.0]) > deal([0.2, 0.2]), "the road counted for nothing");
+    assert_eq!(deal([1.0, 0.0]), 0.0, "a place nobody can reach still traded");
+}
+
+// ---- the frontier, and moving it (§29) ------------------------------------------------
+
+#[test]
+fn an_ordinary_tradition_stops_where_it_always_stopped() {
+    // The old ceiling, still there, still the thing that makes every world medieval until
+    // somebody has an idea. Copying each other well gets a people to three times bare
+    // subsistence and not one part further.
+    let mut know = Technique::BARE;
+    for _ in 0..20_000 {
+        know = know.after_a_year(1e9, 1.0);
+    }
+    assert!((know.at(Trade::Farmer) - 3.0).abs() < 1e-3, "{}", know.at(Trade::Farmer));
+    assert_eq!(know.reach_of_knowledge(), 1.0, "nobody had an idea and the limit moved");
+}
+
+#[test]
+fn working_something_out_moves_the_limit_rather_than_the_level() {
+    // The distinction the whole of §29 turns on. An advance does not make anybody better at
+    // anything today; it makes it possible to become better, and becoming better still takes
+    // a people large enough to carry it.
+    let mut know = Technique::BARE;
+    let before = know.at(Trade::Smith);
+    know.worked_out(Trade::Smith);
+    assert_eq!(know.at(Trade::Smith), before, "an idea taught somebody something");
+    assert!(know.frontier(Trade::Smith) > 3.0, "and the limit did not move");
+}
+
+#[test]
+fn an_advance_in_one_trade_is_not_an_advance_in_another() {
+    // A people with no smiths never improves smithing, which is why two worlds that
+    // specialised differently end up good at different things.
+    let mut know = Technique::BARE;
+    know.worked_out(Trade::Smith);
+    assert!(know.frontier(Trade::Smith) > know.frontier(Trade::Farmer));
+    assert_eq!(know.frontier(Trade::Farmer), 3.0);
+}
+
+#[test]
+fn knowledge_compounds_and_that_is_the_only_shape_that_escapes() {
+    // A step would be arithmetic, and arithmetic always loses to a population that grows
+    // geometrically. Each advance has to be worth more than the last in absolute terms.
+    let mut know = Technique::BARE;
+    let mut steps = Vec::new();
+    for _ in 0..200 {
+        let before = know.frontier(Trade::Farmer);
+        know.worked_out(Trade::Farmer);
+        steps.push(know.frontier(Trade::Farmer) - before);
+    }
+    assert!(
+        steps.last().unwrap() > &(steps[0] * 1.5),
+        "the two hundredth idea was worth no more than the first: {} against {}",
+        steps.last().unwrap(),
+        steps[0]
+    );
+    assert!(know.frontier(Trade::Farmer) > 3.0 * 6.0, "two hundred ideas and still medieval");
+}
+
+#[test]
+fn a_people_can_only_practise_what_it_can_hold_on_to() {
+    // The Tasmanian result, unchanged and now load-bearing in a second way: an advance
+    // raises what is *possible*, and a people too small to carry it never gets there. A lone
+    // genius in a hamlet is a lost idea.
+    let mut know = Technique::BARE;
+    for _ in 0..500 {
+        know.worked_out(Trade::Farmer);
+    }
+    let mut hamlet = know;
+    let mut nation = know;
+    for _ in 0..2_000 {
+        hamlet = hamlet.after_a_year(40.0, 0.5);
+        nation = nation.after_a_year(50_000.0, 0.9);
+    }
+    assert!(
+        hamlet.at(Trade::Farmer) < 1.2,
+        "forty people carried a frontier: {}",
+        hamlet.at(Trade::Farmer)
+    );
+    assert!(
+        nation.at(Trade::Farmer) > 20.0,
+        "a nation with five centuries of ideas practises {}",
+        nation.at(Trade::Farmer)
+    );
+    // And both of them *know of* the same possibilities. What differs is who can hold them.
+    assert_eq!(hamlet.reach_of_knowledge(), nation.reach_of_knowledge());
+}

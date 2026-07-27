@@ -2526,3 +2526,163 @@ them than where it is not.
   model of the *firm*, which is the item above.
 - **Tools are one thing.** A plough and a loom are the same object, so a place cannot be
   well-equipped for one trade and not another.
+
+## 28. Ground that is good at different things
+
+§27.9 named the largest thing missing from the supply chain: **stock was stock everywhere.**
+Every place in every world was good at exactly the same things in exactly the same proportion,
+so geography could produce a division of labour *within* a settlement and never one *between*
+settlements — and `TRADE_REACH`, the term that decides what a road is worth, had almost nothing
+to move along it.
+
+### 28.1 The biome finally does arithmetic
+
+`Terrain` has carried a biome label since it was written, and said in as many words that it was
+"for reading rather than for arithmetic". That was honest and it is no longer true. What grows
+on the ground decides what can be got off it that is not food:
+
+- **timber**, from the biome. A temperate or seasonal forest is best — not a rainforest, where
+  standing timber is thickest and getting it out is worst, and where pre-industrial Europe
+  emphatically did not cut its wood.
+- **stone and ore**, from elevation and harshness. Height is a good proxy: mountains are where
+  rock is at the surface, and the same uplift that put it there put the ore with it. A river
+  plain has a hundred metres of its own silt over anything worth digging.
+
+So `Ground` carries two numbers where it carried one, and a river plain and a wooded hillside
+stop being the same place with different dials. Measured across six worlds, a tundra settlement
+with poor soil and high ground came out with three smiths and two farmers, and a grassland with
+good soil came out with none — nobody wrote either of those.
+
+### 28.2 Trade that is an exchange rather than an access
+
+`trade` pools *access*: everybody reachable draws a share of everybody else's spare food,
+whatever they have to offer. That is right for what it models — a road means the harvest two
+valleys over is not irrelevant to you — but it is not an exchange, and without one a place whose
+ground gives timber and no wheat simply starves next to a place with the opposite problem.
+
+`barter` is the other half. One unit of material for one unit of food, which needs no currency
+and no price, because the two are **already in the same unit**: the unit is what one person's
+year of work produces. Unlike the access pool it is conserved — what one place hands over
+another receives — and both ends are weighted by reach, because a road needs two ends.
+
+It fires only between places that differ. Two identical valleys trade nothing, which is correct,
+and is why this does nothing whatever in a world whose ground is uniform.
+
+### 28.3 A road is worth having only if the timber is worth cutting
+
+Adding the exchange made hewing *less* attractive at first, which was the wrong sign and a good
+clue. The valuation only ever counted material at the tools it could become locally, so a place
+that could sell its timber saw no reason to cut any. `Ground::sells_for` is the repair: what a
+unit of material fetches from the neighbours, one for one with food, scaled by how much actually
+moves and by whether anybody can get there.
+
+A place off every road sells nothing, whatever it is sitting on. That is the first time in this
+model that a road has been worth having for a reason other than other people's charity.
+
+## 29. Somebody works something out
+
+Every world this simulation has ever run has been permanently medieval, and §23 said why in as
+many words: `Technique` is "deliberately *not* a tech tree — there are no discoveries, no
+prerequisites and no names". It had a **hard ceiling of three**. A people could get better at
+what it already did, up to three times bare subsistence, and could never come to do anything
+else. Ten thousand simulated years and the last year looks like the first.
+
+That boundary is now crossed, and crossing it needed exactly one idea: **the ceiling is not a
+constant, it is a frontier, and the only thing that moves it is a person.**
+
+### 29.1 Two numbers per trade, not one
+
+- **known** is what is actually practised. It rises by ordinary copying where there are enough
+  people to copy well and falls where there are not — the Tasmanian result, unchanged, and
+  still the reason technique is a *population* variable rather than a clock.
+- **frontier** is the most that could be practised. Nothing moves it except somebody working
+  something out.
+
+Per trade, because knowing how to farm better is not knowing how to smith better. A people
+with no smiths never improves smithing, so two worlds that specialised differently end up good
+at different things — which is a thing civilisations do and this model could not previously
+express at all.
+
+### 29.2 What decides whether anybody ever does
+
+Four things, and not one of them is a date.
+
+- **Slack.** Somebody has to have had a year they did not spend staying alive. A place with no
+  surplus produces no advances however clever anybody in it is — and *that is what makes the
+  Malthusian trap a trap*: the surplus that would buy thinking is the same surplus that buys
+  the children who eat it.
+- **Openness.** The trait for novelty, and the only place in the model where it decides
+  something that outlives the person who has it.
+- **Roads.** How easily a country's people reach each other. Ideas need somebody to have them
+  at; a hamlet at the end of a track and a town on a road get different numbers of good ideas
+  out of the same number of heads.
+- **What they do all day.** An advance is in the discoverer's **own trade**. Nobody works out a
+  better forge who has never stood at one.
+
+The advance belongs to the **country**, because a country is exactly the set of people who can
+reach each other to copy something — the same unit `learn_and_forget` uses, and for the same
+reason.
+
+### 29.3 A proportion, not a step
+
+`BREAKTHROUGH` moves the frontier by one per cent **of what it already is**. That is the whole
+of why this can ever escape anything.
+
+An absolute step makes knowledge arithmetic, and arithmetic knowledge always loses to a
+population that grows geometrically — the extra food feeds extra people and the standard of
+living returns to where it was, for ever. A proportion compounds, and `dA/dt ∝ P · A` with `P`
+bounded by `A` is the shape that Kremer's account of the very long run turns on. Whether a
+given world ever gets there is then an **outcome** of how much surplus it managed to hold on
+to, rather than a date somebody wrote into the model.
+
+### 29.4 The one number that had to be chosen
+
+`WORKING_IT_OUT` is the yearly chance that somebody with a whole year of slack, in a
+well-connected place, works something out. It is the only figure in §29 that is not derived,
+and it is worth being plain about what it is choosing.
+
+A real village of three hundred produced, over a century, essentially no attributable lasting
+improvement. What reached it came from populations a thousand times larger. Calibrated to
+*that*, the mechanism would be correct and permanently invisible in any world this machine can
+run. It is set instead to about **one lasting improvement per comfortable country per human
+lifetime** — generous by a wide margin — and the reason for the generosity is written down
+here rather than hidden inside the number.
+
+### 29.5 The whole of technique had been inert, and nobody had looked
+
+Building the frontier turned up something worse than the ceiling. `after_a_year` was a
+**cliff**: above `MINDS_TO_KEEP` carriers a people climbed towards three, and below it
+everything decayed to bare subsistence. Every country in every world this simulation runs is
+smaller than that threshold. So no world had ever practised anything above bare subsistence at
+all — the technique model had been switched off for its entire existence, and the only symptom
+was a number that read 1.000 in a diagnostic nobody was reading closely.
+
+It is also stronger than the evidence it comes from. Tasmania is a claim about four thousand
+people *losing* a complex toolkit over eight thousand years. It is not a claim that two hundred
+people know nothing.
+
+So what a people can hold is now a capacity that grows with its numbers:
+
+```
+holdable  = 1 + (FIRST_CEILING − 1) × carriers / MINDS_TO_KEEP
+practised → min(frontier, holdable)
+```
+
+`MINDS_TO_KEEP` carriers hold exactly the old ceiling of three, which is where that number came
+from and where it stays. Fewer hold proportionally less; more hold more, bounded by what anybody
+has worked out. The first attempt made it a *share of the frontier* instead, and that was wrong
+in the opposite direction — it let forty people carry a quarter of an industrial civilisation,
+which is precisely what Tasmania says cannot happen.
+
+What survives is the shape that matters: **a people loses what it can no longer carry**. Cut a
+large one off, shrink it, and it slides back down to what its remaining numbers can hold. That
+is the dark age, and it is the same arithmetic as the discovery that made the light one.
+
+### 29.6 An advance is a thing that happened to somebody
+
+`Happening::PersonWorksItOut` is the rarest thing in the chronicle and the only one that
+changes what is *possible* rather than what happened. It names a person, a year, a place and a
+trade, and it reads out like any other event in a life: *"Vasta Laen works out a better way to
+make tools."* There is no tree, no prerequisite and no name for the thing discovered — what is
+recorded is that the people who do this trade can now go further than they could, and how far
+they actually get is still a matter of there being enough of them to carry it.

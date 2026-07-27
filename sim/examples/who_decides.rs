@@ -77,6 +77,13 @@ fn main() {
                 *trades.entry(p.trade().label()).or_default() += 1;
             }
         }
+        let know = world.technique_of(id);
+        println!(
+            "   know how to: {:.2}x bare living, limit {:.2}x ({}% past the old ceiling)",
+            know.level(),
+            know.frontier(economy::Trade::Farmer) / 3.0,
+            ((know.reach_of_knowledge() - 1.0) * 100.0).round(),
+        );
         println!(
             "   trades: {}   tools in hand: {:.1}",
             trades
