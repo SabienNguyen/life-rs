@@ -2338,6 +2338,14 @@ impl World {
     }
 
     /// What the place at a given cultural index is called.
+    /// The place a country's roster index refers to.
+    ///
+    /// `Country` carries roster positions rather than arena handles, because `culture`
+    /// indexes places by position and never forgets one. This is the way back.
+    pub fn place_at(&self, at: usize) -> Option<PlaceId> {
+        self.roster.get(at).copied()
+    }
+
     pub fn place_named(&self, at: usize) -> Option<&str> {
         let id = *self.roster.get(at)?;
         self.places.get(id).map(|p| p.name.as_str())
