@@ -2534,14 +2534,13 @@ them than where it is not.
   model of the *firm*, which is the item above.
 - **Tools are one thing.** A plough and a loom are the same object, so a place cannot be
   well-equipped for one trade and not another.
-- **And at the sizes this project actually runs, it is mostly notional.** Counted at ninety
-  years over four seeds: farmers 165–249, and hewers and smiths in the low single figures or
-  *zero*. §27.4 says a trade exists when there is food enough to spare a hand for it, and at
-  120 founders on ground that is only just enough, there is not. The chain is real — the tests
-  in `work` build it from an empty world — and the worlds this project runs are too poor and
-  too small to climb it. Not a regression and not new: measured the same way before and after
-  §30's work, and worth writing down because a five-trade economy that is 90% farmers reads
-  from the outside like a bug and is not one.
+- **And at the sizes this project runs, it is thin — but it is no longer notional.** Counted at
+  ninety years over four seeds, it used to read farmers 165–249 with hewers and smiths in the
+  low single figures or *zero* in two of them. §27.4 says a trade exists when there is food
+  enough to spare a hand for it, and a world sorted into one starving quarter has none to
+  spare. With §30.5's fix every seed now carries hewers, smiths, cooks and keepers — still few,
+  because these worlds are genuinely poor, but the chain is being climbed rather than sitting
+  unused. The remaining thinness is the population and the ground, not the mechanism.
 
 ## 28. Ground that is good at different things
 
@@ -2958,7 +2957,7 @@ against 0.208 before.
 failure — group every move by household, walk each path, count the steps that land where the
 one before last did.
 
-### 30.5 One dead mechanism underneath, and no fix for it yet
+### 30.5 One dead mechanism underneath, and three tries at replacing it
 
 Following the households through year by year turned up something the churn had been hiding:
 four of five quarters emptying to nobody at all, permanently, while the fifth took everything.
@@ -2968,10 +2967,9 @@ quarter went from 0.65 of all households to 0.89, and on seed 0x221 it went to *
 household in the world, in one quarter, with the other four empty.
 
 It costs people. The same world read 326 alive at year 220 before any of this and 203 after —
-one quarter's ground feeding everybody is less ground than five quarters' was. That is the
-price of the churn fix as shipped, stated plainly, and it is paid because the alternative is
-worse: the world it replaces was not feeding 326 people honestly, it was shuffling them
-between towns often enough that no quarter ever finished emptying.
+one quarter's ground feeding everybody is less ground than five quarters' was. That was the
+price of the churn fix as first shipped; what follows is three attempts at not paying it, two
+of which failed.
 
 `CROWDING_AVERSION` exists to prevent precisely that, and its comment says so — it was added
 after a world where *"all 1,260 survivors lived in one place at twenty-five times its capacity
@@ -3015,6 +3013,7 @@ rate, which is the one fault this project treats as disqualifying. It is not wor
 better-looking map.
 
 So the term stays inert and is now *labelled* inert, with the measurement in its doc comment.
+It is still inert after everything below — what fixed the concentration was not crowding.
 
 #### The second try: hunger, which is at least honest
 
@@ -3035,23 +3034,92 @@ hunger a reason to leave, a crowded founding relieves its own hunger by scatteri
 population at which *anywhere* is short goes up again. That is the mechanism working, and it is
 not worth having a Malthusian check that migration can dodge in exchange for 0.02.
 
-#### Why neither works: nothing local is scarce
+#### The diagnosis that was wrong: "nothing local is scarce"
 
-The reason is upstream of both attempts, and it is stated in `Place::build_for`'s own comment
-without its consequence being drawn: the ground's carrying capacity *"does not bind at the
-populations this simulation currently runs — a grid cell is most of a country"*. Housing builds
-out to meet demand. Land does not run out. So a quarter that absorbs the entire world is not
-worse off for it in any term the model computes, `want` stays at zero because the ground feeds
-everybody comfortably, and there is simply no cost to everyone living in one place.
+At this point the conclusion written here was that sorting is a positive feedback and the world
+has nothing to balance it with — that housing builds out to meet demand, land does not run out,
+a grid cell is most of a country, and so a quarter absorbing the entire world is not worse off
+for it in any term the model computes. The fix, it said, had to be a scarcity that is really
+there, which meant a finer grid, which is §6's business and not anybody's afternoon.
 
-Sorting is a positive feedback and this world has nothing negative to balance it with. Adding
-one *as a preference* — which is what crowding aversion is — buys a better-looking map at the
-price of §21.1. The fix has to be a scarcity that is really there, which means the grid getting
-fine enough that a place is a place rather than most of a country. That is §6's business and
-not a constant anybody can tune.
+Every clause of that is wrong, and it was reasoned from `Place::build_for`'s comment rather
+than measured. Measuring takes one probe. Seed 0x221, the quarter that wins, year by year:
 
-Recorded rather than fixed, and the two attempts recorded with it so the next person does not
-spend the afternoon on them again.
+| year | households | output per head | affluence |
+|---|---|---|---|
+| 0 | 11 | 0.482 | 0.493 |
+| 24 | 27 | 0.438 | 0.517 |
+| 48 | 41 | 0.320 | 0.605 |
+| 84 | 55 | **0.013** | **0.630** |
+
+Crowding is not free. It is *ruinous* — thirty-seven times poorer per head — and the model
+computes it every single year, because `work::make` is Cobb–Douglas in land and labour and the
+land does not grow. Meanwhile a neighbour with one household in it sat at 0.862 and nobody
+went.
+
+The right-hand column is the bug. `appeal` reads `env.quality()`, three tenths of which is
+`affluence`, and affluence is built from what the residents have *accumulated*. It is a
+description of the social environment and not a measure of whether you can eat, and it rose the
+whole way down. People were moving towards the place that was starving them because it looked
+rich.
+
+#### Wiring it in raw makes everything worse
+
+`Place::prosperity` is the missing number, per head, tier-consistent — `year_working` runs the
+same for both. Added to `appeal` directly:
+
+| | biggest quarter | quarters empty | moves | straight back | starved thin / ample |
+|---|---|---|---|---|---|
+| before | 0.89 | 0.40 | 570 | 1% | 2 / 0 |
+| raw prosperity | 0.89 | 0.55 | **30,697** | **68%** | **171 / 0** |
+
+The trade cobweb of §30.5.1 exactly, in migration, and for the same reason: **a signal that
+answers the action taken on it**. One more household arrives, output per head drops, so they
+leave, so it rises, so they come back. Fifty times the moving, and §21.1 in ruins.
+
+#### What works: a place has a reputation, not a harvest
+
+A year's yield is not why anybody moves house. What draws somebody to a town is what it has
+been like for as long as they have been alive to notice — so `Place::fortune` is `prosperity`
+smoothed over `REMEMBERED` years, and that is what `appeal` reads.
+
+| remembered | biggest quarter | quarters empty | spread | moves | straight back | starved |
+|---|---|---|---|---|---|---|
+| none (before) | 0.89 | 0.40 | 0.140 | 570 | 1% | 2 / 0 |
+| raw | 0.89 | 0.55 | 0.056 | 30,697 | 68% | 171 / 0 |
+| 12 years | 0.58 | 0.40 | 0.135 | 2,727 | 14% | 7 / 0 |
+| **25 years** | **0.47** | **0.30** | 0.101 | 1,602 | 9% | **1 / 1** |
+| 40 years | 0.71 | 0.45 | 0.124 | 1,223 | 7% | 1 / 0 |
+
+A generation. The concentration halves, no more quarters stand empty than before any of this
+work, and tier neutrality comes out *better* than the baseline — one starved on a thin budget
+and one on an ample one, which is the first time that column has read the same on both sides.
+
+And it pays for the churn fix's population cost several times over. Seed 0x221 at year 220 read
+326 alive before any of §30, 203 after the churn fix alone, and **630** now, spread over four
+quarters instead of piled into one. Which is the whole argument in one number: people were
+being sorted into a place that could not feed them, and the model had been saying so, per head,
+every year, to nobody.
+
+It is not monotone in `REMEMBERED`, which is the tell that it is a trade rather than a knob: at
+forty the memory outlives the fact, a quarter that has genuinely gone downhill keeps drawing
+people for a century, and the concentration comes back.
+
+What it costs is sorting: the spread of affluence across inhabited quarters falls from 0.208
+before §30 to 0.101. Some of that is the runaway being gone, since a world with everybody in
+one quarter has a very large spread indeed and it does not mean the places diverged for good
+reasons. How much of it is the runaway and how much is real sorting lost is not measured, and
+is the honest open question left here.
+
+#### What this cost to find
+
+Three wrong turns in one afternoon, all of them recorded above rather than deleted: crowding
+aversion made continuous (breaks §21.1), hunger as a reason to leave (relieves the hunger it
+responds to), and the reasoned-not-measured claim that nothing local is scarce (the model had
+been computing the scarcity all along and not showing it to the one decision that needed it).
+The pattern in all three is the same and is worth naming: **the model already knew, and the
+decision was reading the wrong number.** That is what the churn was, what the crowding gate
+was, and what this was.
 
 ### 30.5.1 And the same shape again, in trades
 

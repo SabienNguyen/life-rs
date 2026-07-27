@@ -704,6 +704,11 @@ function drawPlace() {
     ["Soil", pct(p.fertility)],
     ["Roads", pct(p.reach)],
     ["Short of food", p.want > 0 ? pct(p.want) : "no"],
+    // What the ground gives a head this year, and what it has given for a generation. The
+    // second is what people go on when they choose where to live: a harvest is not a reason
+    // to move house, and a place's reputation is.
+    ["Gives a head", n2(p.prosperity)],
+    ["Has done, lately", n2(p.fortune)],
     // The only thing this world owns that outlives the year it was made in.
     ["Tools in hand", (Number(p.tools) || 0).toFixed(1)],
     // What they know how to do, against bare subsistence — and how far anybody has ever
@@ -727,9 +732,18 @@ function drawPlace() {
   // people arriving, and the town's character changing under them. Arrivals are worth showing
   // one by one rather than counted — a quarter that took nine households in four years and
   // then none for thirty is telling you something a total would hide.
+  // Capped, unlike a life: a person's record runs to a few dozen lines and a busy town's to
+  // four hundred, and four hundred lines of "somebody moves here" is a wall rather than a
+  // history. The most recent, with the total said plainly so the cap is not mistaken for the
+  // whole of it.
   const story = (WORLD.events || []).filter(e => (e.here || []).includes(view.place));
+  const shown = story.slice(-30);
   $("place-history").innerHTML = story.length
-    ? story.map(e => `<dt>${e.year}</dt><dd class="${e.kind}">${e.text}</dd>`).join("")
+    ? (story.length > shown.length
+        ? `<dt>&mdash;</dt><dd class="empty">${story.length} things are recorded here;
+           the last ${shown.length} follow.</dd>`
+        : "") +
+      shown.map(e => `<dt>${e.year}</dt><dd class="${e.kind}">${e.text}</dd>`).join("")
     : `<dt>&mdash;</dt><dd class="empty">Nothing has happened here that the record
        thought worth keeping.</dd>`;
 

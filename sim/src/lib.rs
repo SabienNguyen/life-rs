@@ -3158,7 +3158,31 @@ impl World {
                 } else {
                     place.env.quality()
                 };
-                offered - CROWDING_AVERSION * (occupancy_with_me(world, id) - 1.0).max(0.0)
+                // Plus what the ground actually gives a person there, which until now
+                // nothing in this decision consulted.
+                //
+                // §14's channels describe the *social* environment, and `affluence` is built
+                // from what the residents have accumulated. It is not a measure of whether
+                // you can eat, and using it as one had people moving towards the place that
+                // was starving them because it looked rich. Measured on seed 0x221: one
+                // quarter went from 11 households to 55, its output per head fell from 0.482
+                // to 0.013 — thirty-seven times poorer — and its affluence *rose* from 0.493
+                // to 0.630 the whole way down, while a neighbour with one household sat at
+                // 0.862 and nobody went.
+                //
+                // `prosperity` is that missing number, it is per head, and it falls as hands
+                // are added because `work::make` is Cobb–Douglas in land and labour. So it
+                // is the counterforce to sorting that §30.5 went looking for and concluded
+                // did not exist — it existed, and was computed every year, and was not
+                // wired to the one decision that needed it. It needs no coefficient and it
+                // comes out of `year_working`, which both detail tiers run alike.
+                //
+                // Smoothed, not raw. Raw prosperity answers the very move that reads it, so
+                // it oscillates: 30,697 moves with 68% going straight back. `Place::fortune`
+                // is what the place has been like for a working life, which is what anybody
+                // is actually going on.
+                offered + place.fortune
+                    - CROWDING_AVERSION * (occupancy_with_me(world, id) - 1.0).max(0.0)
             };
 
             // What a place would take this household on: their own standing, what their
@@ -4151,6 +4175,40 @@ mod tests {
             returns * 10 < moves,
             "{returns} of {moves} moves went straight back where they came from"
         );
+    }
+
+    #[test]
+    fn a_world_does_not_end_up_in_one_quarter() {
+        // Sorting is a positive feedback: the well-off move somewhere and it becomes the
+        // place the well-off live, so more of them move there. Something has to pull the
+        // other way or every world ends with one town and four ghost quarters — measured at
+        // 0.89 of all households in the biggest, and on one seed 1.00, every household in
+        // the world.
+        //
+        // What pulls the other way is that the ground feeds fewer people each, and it always
+        // did — `work::make` is Cobb–Douglas — but the decision was reading `affluence`,
+        // which is what the residents have *accumulated*, and which rose the whole way down.
+        // See §30.5. This asserts the outcome rather than the wiring, because the wiring has
+        // now been wrong in three different ways and the outcome is what was wanted from it.
+        for seed in [0x11u128, 0x21, 0x221] {
+            let mut world = World::genesis(WorldSeed::from_u128(seed), 120);
+            world.record_only(Salience::Pivotal);
+            world.set_detail_budget(100_000);
+            world.run_for(Duration::from_years(80));
+
+            let counts: Vec<usize> = world
+                .places
+                .ids()
+                .map(|id| world.society.households_in(id).count())
+                .collect();
+            let total: usize = counts.iter().sum();
+            assert!(total > 10, "seed {seed:x}: nobody is anywhere, {total} households");
+            let biggest = *counts.iter().max().unwrap_or(&0);
+            assert!(
+                biggest * 4 < total * 3,
+                "seed {seed:x}: {biggest} of {total} households are in one quarter"
+            );
+        }
     }
 
     #[test]

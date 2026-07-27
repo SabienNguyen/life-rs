@@ -269,6 +269,11 @@ fn places(world: &World) -> String {
                     // a place that manages, which is the usual case and the interesting
                     // exception.
                     field("want", &num(place.want)),
+                    // What a head gets out of the ground here this year, and what the place
+                    // has been like for a generation. The second is what decides where
+                    // anybody moves — see §30.5 — so it belongs in a view of the place.
+                    field("prosperity", &num(place.prosperity)),
+                    field("fortune", &num(place.fortune)),
                     // What the place owns that outlives the year — the only capital in this
                     // world, and the only thing in it that compounds.
                     field("tools", &num(world.holdings_of(id).tools)),
