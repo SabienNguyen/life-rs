@@ -2579,6 +2579,30 @@ moves and by whether anybody can get there.
 A place off every road sells nothing, whatever it is sitting on. That is the first time in this
 model that a road has been worth having for a reason other than other people's charity.
 
+### 28.4 Sixty per cent of a coarse world was one line
+
+Long-horizon worlds are coarse worlds — nobody deliberates, and what is left is demography,
+economy and society. Profiling one showed **`choose_company` at about sixty per cent of the
+whole run**, nearly all of it `BTreeMap` search.
+
+The cause was one line written the obvious way. For each candidate it asked "how many of my
+friends stand with this person", which walks my ties and does a tree lookup per ally —
+candidates × allies × a search each, sixteen times a year for everybody alive. Walking my
+friends' ties *once* and counting who turns up gives the identical answer and is quadratic in
+my own friendships, which Dunbar bounds.
+
+`hearsay_repeatedly` was second at eight per cent, iterating a season of talk one year at a
+time. Both of its updates are geometric approaches to a target, so a season of them is the same
+arithmetic done once; it is now two `powi` calls.
+
+**14.9 seconds to 4.5 on a sixty-year coarse world of two hundred — 3.3×.** That is the
+difference between being able to run a world for two thousand years and not, which is exactly
+what §29 needs to answer whether the trap ever opens.
+
+The general shape recurs: the expensive thing was not a wrong algorithm but a right one asked
+the same question repeatedly. It is worth profiling after every layer that touches everybody,
+because the layers compose and each one looks cheap on its own.
+
 ## 29. Somebody works something out
 
 Every world this simulation has ever run has been permanently medieval, and §23 said why in as

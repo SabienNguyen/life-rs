@@ -345,18 +345,21 @@ impl Bonds {
             .filter(|(about, tie)| *about != listener && tie.known > HEARD_OF)
             .map(|(about, tie)| (about, tie.regard))
             .collect();
+        // Both updates are geometric approaches to a target, so a season of them is the same
+        // arithmetic done once. Written as a loop first, which cost a hundred multiplies per
+        // third party per call and showed up plainly in a profile; this is the identical
+        // result and the honest reason it is not a loop.
+        let towards_known = (1.0 - weight * 0.5).clamp(0.0, 1.0).powi(times as i32);
+        let towards_said = (1.0 - weight).clamp(0.0, 1.0).powi(times as i32);
         for (about, said) in theirs {
             let mine = self.edit(listener, about);
-            let (mut known, mut regard) = (mine.known, mine.regard);
-            for _ in 0..times {
-                // You cannot have an opinion of somebody you have never heard of, so
-                // hearing about them is itself a little bit of knowing them — up to the
-                // point where knowing *of* somebody would become knowing them.
-                known += weight * 0.5 * (HEARD_OF - known).max(0.0);
-                regard = (regard + weight * (said - regard)).clamp(-1.0, 1.0);
+            // You cannot have an opinion of somebody you have never heard of, so hearing
+            // about them is itself a little bit of knowing them — up to the point where
+            // knowing *of* somebody would become knowing them.
+            if mine.known < HEARD_OF {
+                mine.known = HEARD_OF - (HEARD_OF - mine.known) * towards_known;
             }
-            mine.known = known;
-            mine.regard = regard;
+            mine.regard = (said + (mine.regard - said) * towards_said).clamp(-1.0, 1.0);
         }
     }
 
@@ -423,7 +426,32 @@ impl Bonds {
         to_hand: &[PersonId],
         rng: &mut Rng,
     ) -> Option<PersonId> {
-        let mut best: Option<(PersonId, f32)> = None;
+        // Friends of friends, counted **once** rather than once per candidate.
+        //
+        // The obvious way to write this is to ask, for each candidate, how many of my friends
+        // stand with them — and that was how it was written, and it was *sixty per cent of a
+        // coarsely simulated world*, nearly all of it walking a `BTreeMap`. Candidates times
+        // allies times a tree search each, sixteen times a year for everybody alive.
+        //
+        // Walking my friends' ties instead is quadratic in *my* friendships, which Dunbar
+        // bounds, and it happens once. The answer is identical.
+        let mut through: Vec<(PersonId, u32)> = Vec::new();
+        for (friend, mine) in self.of(who) {
+            if !mine.allied() {
+                continue;
+            }
+            for (other, theirs) in self.of(friend) {
+                if !theirs.allied() {
+                    continue;
+                }
+                match through.binary_search_by_key(&other, |(id, _)| *id) {
+                    Ok(at) => through[at].1 += 1,
+                    Err(at) => through.insert(at, (other, 1)),
+                }
+            }
+        }
+
+        let mut best: Option<PersonId> = None;
         let mut total = 0.0;
         for other in to_hand {
             if *other == who {
@@ -432,21 +460,18 @@ impl Bonds {
             let tie = self.tie(who, *other);
             // A stranger is worth meeting; a friend is worth more; a friend of a friend
             // sits between, which is triadic closure and is why groups close into circles.
-            let mutual = self
-                .of(who)
-                .filter(|(_, mine)| mine.allied())
-                .filter(|(friend, _)| self.tie(*friend, *other).allied())
-                .count() as f32;
-            let want = 0.12
-                + tie.known * (1.0 + tie.warmth).max(0.0)
-                + 0.25 * mutual.min(4.0);
+            let mutual = through
+                .binary_search_by_key(other, |(id, _)| *id)
+                .map(|at| through[at].1)
+                .unwrap_or(0) as f32;
+            let want = 0.12 + tie.known * (1.0 + tie.warmth).max(0.0) + 0.25 * mutual.min(4.0);
             total += want;
             let roll = rng.unit_f32() * total;
             if best.is_none() || roll >= total - want {
-                best = Some((*other, want));
+                best = Some(*other);
             }
         }
-        best.map(|(who, _)| who)
+        best
     }
 }
 
