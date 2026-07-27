@@ -2763,7 +2763,44 @@ The general lesson is worth keeping: **a test that has to be re-tuned whenever t
 better is measuring the tuning.** Where the condition under test can be *constructed*, construct
 it.
 
-### 29.7 An advance is a thing that happened to somebody
+### 29.7 What actually happened: one world, five hundred years
+
+Seed 0x221, a hundred and twenty founders, nobody watching closely.
+
+| year | living | in touch | practised | frontier | advances | short |
+|---|---|---|---|---|---|---|
+| 100 | 210 | — | 1.013 | 1.006 | 5 | — |
+| 200 | 696 | 357 | 1.060 | 1.010 | 7 | 0.235 |
+| 300 | 1691 | 887 | 1.261 | 1.023 | 13 | 0.365 |
+| 400 | 1888 | 988 | 1.553 | 1.045 | 25 | 0.321 |
+| 500 | 1870 | 1019 | 1.749 | 1.098 | 49 | 0.267 |
+
+Three things happen in that table and they happen in order.
+
+**The world fills.** Two centuries of fast growth — the population more than doubles twice —
+until at year 300 it is a third short of feeding itself and stops. From 400 onwards it is
+pinned: 1888, then 1870. That is the Malthusian ceiling, working exactly as §21 says it should.
+
+**The threshold is crossed.** Around year 300 the number of people in touch with each other
+passes `MINDS_TO_KEEP`, so the world can finally *hold* everything anybody has worked out.
+Before that the binding constraint was carriers; after it, the frontier. That is the moment
+the discovery model starts to matter at all.
+
+**And then knowledge compounds while the population does not.** Advances run 5, 7, 13, 25, 49 —
+**doubling every century** — against a flat population. Hunger falls through it: 0.365, 0.321,
+0.267. What is being produced is going into knowing things rather than into more mouths.
+
+That is the escape, in the only form it ever takes. Nothing in the model schedules it, and
+nothing in the model rules it out; what decides it is whether the compounding in
+`BREAKTHROUGH` outruns the population that eats the surplus paying for it, and here it does.
+
+It should be said plainly what has *not* been shown. Five centuries is not an industrial
+revolution, `practised` at 1.75 is a better plough and not a steam engine, and one seed is one
+seed. What the table establishes is that the mechanism has the right *shape*: a long
+Malthusian flat, a threshold, and then a curve that bends. Whether it keeps bending is a longer
+run and it is now affordable — see §28.4.
+
+### 29.8 An advance is a thing that happened to somebody
 
 `Happening::PersonWorksItOut` is the rarest thing in the chronicle and the only one that
 changes what is *possible* rather than what happened. It names a person, a year, a place and a
