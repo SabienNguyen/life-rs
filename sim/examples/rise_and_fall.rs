@@ -132,4 +132,87 @@ fn main() {
             p.fortune, p.prosperity, p.want
         );
     }
+
+    // Who is anybody there, and what do their people do differently. There is no doctrine in
+    // this model and no religion in it at all — a culture here is the seven numbers §14
+    // already kept as `norms`, which are literally how much of each day's doing a people
+    // spends on each thing. So "their ways" is a report of behaviour, not of belief.
+    let living: Vec<_> = world
+        .society
+        .households_in(place)
+        .flat_map(|(_, h)| h.members.iter().copied())
+        .filter(|m| world.people.get(*m).is_some_and(|q| q.is_alive()))
+        .collect();
+
+    let mut trades: std::collections::BTreeMap<&str, usize> = Default::default();
+    for who in &living {
+        if let Some(person) = world.people.get(*who) {
+            *trades.entry(person.trade().label()).or_default() += 1;
+        }
+    }
+    let mut mix: Vec<_> = trades.into_iter().collect();
+    mix.sort_by(|a, b| b.1.cmp(&a.1));
+    println!(
+        "\n  what they do: {}",
+        mix.iter()
+            .map(|(t, n)| format!("{n} {t}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+
+    let mut roles: std::collections::BTreeMap<String, usize> = Default::default();
+    let mut named: Vec<(String, String, bonds::Role, f64, usize)> = Vec::new();
+    for (who, _, role) in world.society_of(place) {
+        *roles.entry(format!("{role:?}")).or_default() += 1;
+        if matches!(role, bonds::Role::Elder | bonds::Role::Patron) {
+            if let Some(person) = world.people.get(who) {
+                let title = world
+                    .standing_of(who)
+                    .map(|(_, word)| word)
+                    .unwrap_or_default();
+                named.push((
+                    person.name.clone(),
+                    title,
+                    role,
+                    person.age(world.now()).years(),
+                    world.bonds.of(who).filter(|(_, t)| t.allied()).count(),
+                ));
+            }
+        }
+    }
+    let mut tally: Vec<_> = roles.into_iter().collect();
+    tally.sort_by(|a, b| b.1.cmp(&a.1));
+    println!(
+        "  what they are: {}",
+        tally
+            .iter()
+            .map(|(r, n)| format!("{n} {}", r.to_lowercase()))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    named.sort_by_key(|entry| std::cmp::Reverse(entry.4));
+    println!("  who is looked to:");
+    for (name, title, role, age, allies) in named.iter().take(6) {
+        println!("    {name:<22} {title:<14} {role:?}, {age:.0} yr, {allies} stand with them");
+    }
+
+    if let Some(people) = world.people_of(place) {
+        println!(
+            "\n  their people: the {}, {} souls{}",
+            people.name,
+            people.souls,
+            people
+                .parent
+                .map(|_| format!(", arose in year {}", people.arose))
+                .unwrap_or_else(|| " (here from the founding)".to_string())
+        );
+        let names = ["eating", "drinking", "sleeping", "washing", "socialising", "working", "wandering"];
+        let ways: Vec<String> = people
+            .ways
+            .iter()
+            .enumerate()
+            .map(|(at, w)| format!("{} {w:.2}", names[at]))
+            .collect();
+        println!("  their ways: {}", ways.join(", "));
+    }
 }
