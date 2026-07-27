@@ -41,6 +41,8 @@
 //! because its land and its position are good, not because it was rich last century. Real
 //! inequality is mostly the latter.
 
+pub use work::{Good, Hands, Holdings, Made, SUBSISTENCE, Trade};
+
 use society::Terrain;
 
 /// How much of output is owed to the land rather than to the hands working it.
@@ -51,11 +53,8 @@ use society::Terrain;
 /// the honest reading of the same evidence.
 const LAND_SHARE: f32 = 0.35;
 
-/// What one person must have in a year, in the same units output is measured in.
-///
-/// The unit is arbitrary and this fixes it: one is what one person eats. So an output of a
-/// hundred with a hundred mouths is a place with no surplus, which is most of history.
-pub const SUBSISTENCE: f32 = 1.0;
+// `SUBSISTENCE` lives in `work`, which is the crate that fixes the unit everything else is
+// counted in. Re-exported above so that nothing downstream has to know that.
 
 /// The scale of what land yields, in units where one is what a person eats in a year.
 ///
@@ -283,30 +282,87 @@ pub fn produce(terrain: &Terrain, workers: f32) -> Ledger {
 }
 
 /// What a place makes, given what its people know how to do.
+///
+/// Everybody farming, which is what this was before there was anything else to be.
 pub fn produce_knowing(terrain: &Terrain, workers: f32, technique: Technique) -> Ledger {
-    if workers <= 0.0 {
-        return Ledger::EMPTY;
+    produce_working(
+        terrain,
+        &Hands::all_farming(workers),
+        technique,
+        &Holdings::default(),
+    )
+    .0
+}
+
+/// What a hand at the bottom of the chain gets off this land in a year.
+///
+/// Cobb–Douglas, per worker. Only the hands actually *on the land* count towards the
+/// crowding, because that is where the diminishing return comes from: a smith does not make
+/// the fields smaller. Everybody still eats, which is counted separately and is what makes
+/// every trade above the land a claim on somebody else's surplus.
+fn per_hand(terrain: &Terrain, land_hands: f32, technique: Technique) -> f32 {
+    if land_hands <= 0.0 {
+        return 0.0;
     }
     // The land, as an effective quantity. Fertility is what grows on it and harshness is
     // how much of the year is worth working; a productive place with a brutal season is
     // less than its soil suggests, which is most of the boreal world.
     let land = terrain.fertility.max(0.0) * (1.0 - 0.6 * terrain.hardship());
+    // Neither factor is substitutable for the other, which is the point: hands with no land
+    // make nothing and land with no hands makes nothing.
+    YIELD * technique.level() * land.powf(LAND_SHARE) * land_hands.powf(-LAND_SHARE)
+}
 
-    // Cobb–Douglas. Neither factor is substitutable for the other, which is the point:
-    // hands with no land make nothing and land with no hands makes nothing.
-    let output =
-        YIELD * technique.level() * land.powf(LAND_SHARE) * workers.powf(1.0 - LAND_SHARE);
+/// What a place makes, given who is doing what and what it owns.
+///
+/// Returns what became of the year and what the place still holds at the end of it — the
+/// tools are the only thing in this world that survives a year, and they are what lets an
+/// economy compound.
+///
+/// With everybody farming and nothing owned this is exactly the one-good model, which is
+/// what protects every number §21 and §22 calibrated.
+pub fn produce_working(
+    terrain: &Terrain,
+    hands: &Hands,
+    technique: Technique,
+    holdings: &Holdings,
+) -> (Ledger, Made, Holdings) {
+    let workers = hands.total();
+    if workers <= 0.0 {
+        return (Ledger::EMPTY, Made::default(), Holdings::default());
+    }
+    let on_the_land = hands.at(Trade::Farmer) + hands.at(Trade::Hewer);
+    let primary = per_hand(terrain, on_the_land, technique);
+    let (made, after) = work::make(hands, primary, holdings);
+
+    let output = made.of(Good::Food);
     let subsistence = workers * SUBSISTENCE;
     let surplus = output - subsistence;
+    (
+        Ledger {
+            output,
+            subsistence,
+            surplus,
+            // Trade fills this in; alone, a place has only what it made.
+            market: surplus,
+            workers,
+        },
+        made,
+        after,
+    )
+}
 
-    Ledger {
-        output,
-        subsistence,
-        surplus,
-        // Trade fills this in; alone, a place has only what it made.
-        market: surplus,
-        workers,
-    }
+/// What one more hand in each trade would be worth here.
+pub fn worth_of_trades(
+    terrain: &Terrain,
+    hands: &Hands,
+    technique: Technique,
+    holdings: &Holdings,
+    made: &Made,
+) -> [f32; Trade::COUNT] {
+    let on_the_land = hands.at(Trade::Farmer) + hands.at(Trade::Hewer);
+    let primary = per_hand(terrain, on_the_land.max(1.0), technique);
+    work::worth_taking_up(made, holdings, hands, primary)
 }
 
 /// Let places trade with each other.
@@ -352,16 +408,40 @@ pub fn year(places: &[(Terrain, f32)]) -> Vec<Ledger> {
 
 /// A year for a region whose places each know something different.
 pub fn year_knowing(places: &[(Terrain, f32, Technique)]) -> Vec<Ledger> {
-    let mut ledgers: Vec<Ledger> = places
+    let working: Vec<(Terrain, Hands, Technique, Holdings)> = places
         .iter()
-        .map(|(terrain, workers, technique)| produce_knowing(terrain, *workers, *technique))
+        .map(|(t, w, k)| {
+            (
+                t.clone(),
+                Hands::all_farming(*w),
+                *k,
+                Holdings::default(),
+            )
+        })
+        .collect();
+    year_working(&working).into_iter().map(|(l, _, _)| l).collect()
+}
+
+/// A year for a region whose places each have their own trades and their own capital.
+pub fn year_working(
+    places: &[(Terrain, Hands, Technique, Holdings)],
+) -> Vec<(Ledger, Made, Holdings)> {
+    let mut worked: Vec<(Ledger, Made, Holdings)> = places
+        .iter()
+        .map(|(terrain, hands, technique, holdings)| {
+            produce_working(terrain, hands, *technique, holdings)
+        })
         .collect();
     let reach: Vec<f32> = places
         .iter()
-        .map(|(t, _, _)| t.reach.clamp(0.0, 1.0))
+        .map(|(t, _, _, _)| t.reach.clamp(0.0, 1.0))
         .collect();
+    let mut ledgers: Vec<Ledger> = worked.iter().map(|(l, _, _)| *l).collect();
     trade(&mut ledgers, &reach);
-    ledgers
+    for (at, ledger) in ledgers.into_iter().enumerate() {
+        worked[at].0 = ledger;
+    }
+    worked
 }
 
 #[cfg(test)]

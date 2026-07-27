@@ -19,6 +19,7 @@ members = [
     "settlement",
     "sim",
     "society",
+    "work",
     "sim-core",
 ]
 resolver = "3"

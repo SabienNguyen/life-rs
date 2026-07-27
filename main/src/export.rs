@@ -263,6 +263,9 @@ fn places(world: &World) -> String {
                     // a place that manages, which is the usual case and the interesting
                     // exception.
                     field("want", &num(place.want)),
+                    // What the place owns that outlives the year — the only capital in this
+                    // world, and the only thing in it that compounds.
+                    field("tools", &num(world.holdings_of(id).tools)),
                     // The ground, so the viewer can say why a quarter is what it is
                     // rather than only that it is.
                     field(
@@ -354,6 +357,7 @@ fn people(world: &World) -> String {
         .iter()
         .map(|(id, p)| {
             let now = world.now();
+            let working = p.is_alive() && !p.stage(now).is_dependent();
             let age = match p.death() {
                 Some((when, _)) => p.age(when).years(),
                 None => p.age(now).years(),
@@ -428,6 +432,23 @@ fn people(world: &World) -> String {
                         &num(world.bonds.of(id).map(|(_, t)| t.debt).sum::<f32>())
                     ),
                     field("repute", &num(world.repute_of(id))),
+                    // A child is not anything for a living. `Person` carries a trade from
+                    // birth because everybody starts a farmer, but nobody is one until they
+                    // are old enough to be counted as a hand.
+                    field(
+                        "trade",
+                        &match working.then(|| world.trade_of(id)).flatten() {
+                            Some((trade, _)) => quoted(trade.label()),
+                            None => "null".to_string(),
+                        }
+                    ),
+                    field(
+                        "craft",
+                        &match working.then(|| world.trade_of(id)).flatten() {
+                            Some((_, word)) => quoted(&word),
+                            None => "null".to_string(),
+                        }
+                    ),
                     field("mentored", if p.is_mentored() { "true" } else { "false" }),
                     field("upbringing", &num(p.absorbed_upbringing())),
                     field("place", &place_index(id)),

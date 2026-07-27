@@ -21,3 +21,4 @@ bonds = { path = "../bonds" }
 
 [dev-dependencies]
 bonds = { path = "../bonds" }
+economy = { path = "../economy" }

@@ -1970,6 +1970,7 @@ change:
 |---|---|---|
 | Norms rebuilt each census | 191.5 | 366.2 |
 | Norms carried by culture | 192.2 | 368.5 |
+| …and again once places could own tools (§27) | 244.5 | 429.0 |
 
 No effect. The spread narrowed (sd 76 → 46 on the living) but at six seeds that is an F of
 2.7 against a critical 7.2, so it is not a finding — only a reason not to worry. Note the
@@ -2369,3 +2370,159 @@ absent is longer than what was added:
 - **Roles that are chosen.** Nobody here decides to become anything. A position is read off a
   life, never aimed at, and a society in which people pursue standing deliberately would need
   `Deed` to include acts whose whole point is what others will make of them.
+
+## 27. A supply chain, and the trades that fill it
+
+Until now this world had **one good**. Everybody did the same undifferentiated work, produced
+the same undifferentiated output, and the only thing distinguishing two workers was how much
+of it they made. §26 could read a position off a life, but not a *living*: it could tell you
+who was owed and who was shunned, and not what anybody did all day.
+
+That is not an economy. An economy is people doing different things **because other people
+are doing the other things**, and the whole of it turns on one fact: you cannot make tools
+until somebody else is growing enough food to feed you while you make them.
+
+### 27.1 The chain
+
+```
+  land + hands              → stock     (timber, stone, clay, ore)
+  stock + hands             → tools     ── and tools multiply everything above
+  land + hands  (× tools)   → food      ── what everybody must have
+  food + hands              → meals     ── frees everybody else's time
+  hands                     → upkeep    ── what keeps tools from wearing out
+```
+
+Four links deep, with a loop in it: tools make it easier to get the stock that tools are made
+of, and easier to grow the food that feeds the people making them. One trade per good —
+**farmer, hewer, smith, cook, keeper** — because a trade is exactly "the people who make
+this", and everybody starts a farmer because that is what everybody was before there was
+anything else to be.
+
+The goods are authored and the jobs are not. What a thing is made of is a physical fact, like
+the seven `Deed`s or the five factors of a temperament — those are the primitives the model is
+built out of. What is **not** authored is who makes what, how many of each a place has,
+whether it has any at all, what its people call them, or whether the chain gets past its first
+link. A hungry village has no smiths because it cannot spare the hands, and nothing anywhere
+says so.
+
+### 27.2 Capital, at last
+
+§22 said plainly that without capital nothing here could compound: a rich place was rich
+because of its land and its road, never because it was rich last century. **Tools are the
+correction** and they are deliberately the smallest possible one — a stock that is made by
+people, wears out at a tenth a year, is held together by keepers, and multiplies what
+everybody else's hands get off the land.
+
+That is the first thing in this world that outlives the year it was made in, and it is what
+makes an economy able to *build*. It shows up immediately in the population: six worlds of
+eighty founders over a hundred and twenty years averaged **192 alive** before there was
+anything to own and **245 after**. The Malthusian ceiling did not stop working — it moved,
+which is what capital does to it.
+
+### 27.3 It reduces to what came before
+
+With everybody farming and nothing owned, food is exactly the Cobb–Douglas output of the
+one-good model, to the last decimal. That is deliberate and it is what protects every number
+§21 and §22 calibrated: a world that never specialises **is** the world that existed before
+this chapter. Only the hands actually on the land count towards crowding, because that is
+where the diminishing return comes from — a smith does not make the fields smaller — and
+everybody eats regardless, which is what makes every trade above the land a claim on somebody
+else's surplus.
+
+### 27.4 "What happens if I do this instead" — not a price
+
+There is no currency here and none was invented. What somebody choosing a trade looks at is
+the only question they could actually answer: one more hand is put into each trade in turn,
+the year is run again, and what the place ends up with is compared. The supply chain then
+enforces itself with nothing written down — a smith where there is no stock adds nothing, so
+smithing is worth nothing, so nobody smiths.
+
+This replaced a table of target quantities per good, and the table was wrong in a way worth
+recording: it priced meals by how far short of a target the place was, so cooking stayed worth
+doing however many cooks there were. Six worlds ran to **fifty-one cooks against forty-seven
+farmers**, and the population fell by a third. *A want that does not fall as it is met is not
+a want.*
+
+### 27.5 Three ways the chain refused to start
+
+Getting a four-link chain to bootstrap from a village of farmers took three corrections, and
+each was a different way of being wrong about **valuing a thing that is not finished yet**.
+
+1. **Unworked stock was worth nothing**, so a hewer with no smith added nothing, so hewing was
+   never worth taking up, so no smith ever had anything to work with. Stock had to persist and
+   be worth something before anybody had made anything of it.
+2. **Then it was worth exactly the finished tool less the labour still to go** — which is the
+   textbook answer and makes a smith add *precisely* what a farmer adds. Nobody ever finished
+   anything: the place cut timber for ever and owned nothing. A pile of material is worth
+   *less* than the thing it will become, because it is not the thing yet.
+3. **Then it was worth its size.** A hundred and eighty units of timber in a village of forty
+   were valued at twenty years of its own harvest, and finishing a tool *revalued the heap
+   downwards* by more than the tool was worth. The pile has to saturate the same way tools do:
+   a hundred and eighty units are worth about what one is.
+
+With all three fixed a village of forty settles at thirty-four farmers, four smiths, a hewer
+and a keeper, holding sixty-four tools — an occupational structure nobody wrote down.
+
+### 27.6 A cook serves a dozen
+
+Cooking is the only trade here whose whole product is **time**. It makes no food; it hands
+back the hours everybody else would have spent grinding, fetching water and tending a fire —
+about a sixth of a working year, done one household at a time.
+
+The first version had a cook serve 0.9 of a person, which meant they saved slightly less time
+than they spent and no place ever had one. A cook serves *twelve*, and doing for twelve
+households what each would otherwise do for itself is the oldest economy of scale there is.
+It is also why cooking is the first trade a place takes up once it is **dense** rather than
+merely rich: twelve mouths have to be within reach of one kitchen.
+
+Across six worlds it now runs at fifteen to twenty-four cooks against a hundred and fifty to
+two hundred farmers — cooking being the largest non-farming trade is not a surprise, it is
+what the record shows for every settled agrarian society that got past subsistence.
+
+### 27.7 What a trade is worth reaches the person
+
+The economy has to reach somebody's own outcome or the division of labour is decoration. A
+hand in a trade its place badly wants earns more than a hand in one it does not, clamped,
+because that multiplies a figure §15 and §21 already calibrated and an unbounded term there
+would be a second `WORK_GAIN` in disguise.
+
+Changing trade is slow on purpose: a fifth of the whole range of worth before anybody
+reconsiders, and an eight per cent chance a year of acting on it. Without inertia the whole
+town moves into whatever paid best last year, makes far too much of it, and moves out again —
+a four-year cycle that never settles. **People are slow, and the slowness is what lets an
+occupational structure exist at all.**
+
+### 27.8 Where the famine stays
+
+Making food a produced good exposed something §25.3 had wrong. Famine relief between allies
+was reaching across places, so a place a fifth short of feeding itself had every one of its
+people at full health — their friends two valleys away had quietly absorbed the whole famine.
+
+That double-counts. **Food moves between places by trade, which `economy` already models and
+which `want` is measured after; within a place it moves by obligation.** The two do not
+overlap, and relief is now neighbours only.
+
+The same change made an older test wrong rather than failing: it measured the *mean* health of
+a hungry place, and redistribution does not change how much hunger there is — it concentrates
+it. A place a sixth short now has most of its people untouched and a few carrying the lot,
+which averages out to a healthy town. What the model supports is the claim about the
+distribution: where the land is thin there are people in visibly worse condition, and more of
+them than where it is not.
+
+### 27.9 What is still not an economy
+
+- **No money, no prices, no credit, no ownership.** "Worth" here is a comparison somebody
+  makes, not a number anybody quotes, and the tools belong to the place rather than to a
+  person. Property is the obvious next argument.
+- **No firms, no employment, no contracts.** Nobody works for anybody. A trade is a thing you
+  do, not a thing you are hired into.
+- **Five goods.** No cloth, no shelter, no drink, no ornament, no weapons — and no way for a
+  place to specialise in what its *land* is good for, because stock is stock everywhere.
+  Regional specialisation and long-distance trade in particular goods is the largest missing
+  piece, and it is what would make `TRADE_REACH` mean something.
+- **No waiters, no janitors as such.** A restaurant here is what cooking looks like when a
+  place is dense enough to do it for strangers, and it reads out of density rather than out of
+  a new good; the distinction between a cook and the people who serve beside them needs a
+  model of the *firm*, which is the item above.
+- **Tools are one thing.** A plough and a loom are the same object, so a place cannot be
+  well-equipped for one trade and not another.

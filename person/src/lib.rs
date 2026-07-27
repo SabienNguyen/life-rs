@@ -183,6 +183,14 @@ pub struct Person {
     upbringing: (f32, f32),
     matured: bool,
 
+    /// What they do for a living.
+    ///
+    /// Nobody is born to one and nobody is assigned one. It is taken up because it was worth
+    /// taking up where they live — see §27 — and it is the only thing about a person here
+    /// that answers to the state of the economy rather than to their temperament or their
+    /// family. Everybody starts a farmer, which is what everybody was before there was
+    /// anything else to be.
+    trade: work::Trade,
     /// How many spells of each deed this life has held.
     ///
     /// What somebody *does* is the oldest thing a society reads a position off — the one
@@ -247,6 +255,7 @@ impl Person {
             opportunity: (0.0, 0.0),
             upbringing: (0.0, 0.0),
             matured: false,
+            trade: work::Trade::Farmer,
             doings: [0; Deed::COUNT],
             needs: Needs::rested(),
             health: Health::hale(),
@@ -268,6 +277,16 @@ impl Person {
 
     pub fn patronage(&self) -> f32 {
         self.patronage
+    }
+
+    /// What they do for a living.
+    pub fn trade(&self) -> work::Trade {
+        self.trade
+    }
+
+    /// Take up a trade. Whether it was worth taking up is the caller's business.
+    pub fn take_up(&mut self, trade: work::Trade) {
+        self.trade = trade;
     }
 
     /// What this life has been spent on, in spells of each deed.

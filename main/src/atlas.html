@@ -676,6 +676,8 @@ function drawPlace() {
     ["Soil", pct(p.fertility)],
     ["Roads", pct(p.reach)],
     ["Short of food", p.want > 0 ? pct(p.want) : "no"],
+    // The only thing this world owns that outlives the year it was made in.
+    ["Tools in hand", (Number(p.tools) || 0).toFixed(1)],
   ];
   const bars = [
     ["Affluence", p.affluence], ["Safety", p.safety],
@@ -693,9 +695,16 @@ function drawPlace() {
     if (w.place === view.place && w.alive && w.role) tally[w.role] = (tally[w.role] || 0) + 1;
   });
   const named = Object.entries(tally).sort((a, b) => b[1] - a[1]);
-  $("place-society").textContent = named.length
-    ? named.map(([role, n]) => `${n} ${role}${n > 1 && !role.endsWith("s") ? "s" : ""}`).join(" · ")
-    : "";
+  // What people here do for a living, which is a different question from what the town
+  // makes of them. A place that is all farmers has not been able to spare anybody yet.
+  const crafts = {};
+  WORLD.people.forEach(w => {
+    if (w.place === view.place && w.alive && w.trade) crafts[w.trade] = (crafts[w.trade] || 0) + 1;
+  });
+  const worked = Object.entries(crafts).sort((a, b) => b[1] - a[1]);
+  $("place-society").innerHTML =
+    (worked.length ? worked.map(([t, n]) => `${n} ${t}${n > 1 ? "s" : ""}`).join(" · ") + "<br />" : "") +
+    (named.length ? named.map(([role, n]) => `${n} ${role}${n > 1 && !role.endsWith("s") ? "s" : ""}`).join(" · ") : "");
 
   const folk = WORLD.people
     .map((who, i) => ({ who, i }))
@@ -713,7 +722,7 @@ function drawPlace() {
       <canvas width="12" height="16" style="width:36px;height:48px" data-sprite="${i}"></canvas>
       <span>
         <span class="tile-name">${who.name.split(" ")[0]}</span><br />
-        <span class="tile-sub">${who.alive ? who.age + " yr" : "died"}${who.role ? " · " + who.role : ""}</span>
+        <span class="tile-sub">${who.alive ? who.age + " yr" : "died"}${who.trade ? " · " + who.trade : ""}${who.role && who.role !== "householder" ? " · " + who.role : ""}</span>
       </span>
     </button>`).join("") : `<p class="empty">Nobody lives here now.</p>`;
 
@@ -806,6 +815,7 @@ function drawPerson() {
   // holds an office here — the position is read off the life, so it can be lost, and
   // when its holder dies somebody else is read into it.
   $("person-note").textContent =
+    (who.craft ? `${who.craft} — a ${who.trade} by trade. ` : "") +
     (who.title ? `${who.title} — this people's word for ${/^[aeiou]/.test(who.role) ? "an" : "a"} ${who.role}. ` : "") +
     `${who.alive ? `${who.age} years old` : `died at ${who.age}`}, ${who.outlook}` +
     (from ? `, of ${from.name}.` : ".") +
@@ -819,6 +829,7 @@ function drawPerson() {
     ["Sex", who.sex],
     ["Outlook", who.outlook],
     ["Standing", n2(who.standing)],
+    ["Trade", who.craft ? `${who.craft} (${who.trade})` : "—"],
     ["Called", who.title ? `${who.title} (${who.role})` : "nothing in particular"],
     ["Stand with them", `${who.allies ?? 0}`],
     // Days of help, which in this world only ever means a bad year somebody was

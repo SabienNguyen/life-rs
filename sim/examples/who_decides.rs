@@ -70,6 +70,33 @@ fn main() {
             .collect();
         weight.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.2.cmp(&b.2)));
 
+        // What the place makes and what it owns — the supply chain, read out.
+        let mut trades: std::collections::BTreeMap<&str, usize> = Default::default();
+        for who in &here {
+            if let Some(p) = world.people.get(*who) {
+                *trades.entry(p.trade().label()).or_default() += 1;
+            }
+        }
+        println!(
+            "   trades: {}   tools in hand: {:.1}",
+            trades
+                .iter()
+                .map(|(t, n)| format!("{n} {t}"))
+                .collect::<Vec<_>>()
+                .join(", "),
+            world.holdings_of(id).tools,
+        );
+        if let Some(worth) = world.worth_of(id) {
+            println!(
+                "   worth taking up: {}",
+                economy::Trade::ALL
+                    .into_iter()
+                    .map(|t| format!("{} {:.2}", t.label(), worth[t as usize]))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
+
         let read = world.society_of(id);
         let mut tally: std::collections::BTreeMap<&str, usize> = Default::default();
         for (_, _, role) in &read {
