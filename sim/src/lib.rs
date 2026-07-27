@@ -1022,6 +1022,17 @@ impl World {
             let architecture = world.architecture;
             let pool = world.pool.clone();
             let mut inhabitant = person::found(architecture, &pool, &mut rng, earth, born, 0.0);
+            // Named by the people they belong to, not by a word list. At the founding
+            // there is only one people and it has not diverged yet, so everybody sounds
+            // like everybody — which is right, and stops being true the moment a quarter
+            // goes its own way.
+            let (given, family) = culture::naming::name_a_person(
+                &[0.5; culture::WAYS],
+                inhabitant.sex == person::Sex::Female,
+                None,
+                &mut rng,
+            );
+            inhabitant.name = format!("{given} {family}");
             // Their life before the world started was never simulated; do not bill
             // them for it, and treat their upbringing as already behind them.
             inhabitant.assume_settled(FOUNDING);
@@ -2200,6 +2211,26 @@ impl World {
         );
 
         let mut child = child;
+        // A child takes its father's family name and a given name in the sound of the
+        // people it is born to. Both matter: the surname is what makes the kin links
+        // between people read as a family, and the sound is what makes two peoples who
+        // parted company stop naming their children alike.
+        let ways = self
+            .society
+            .place_of(mother_id)
+            .and_then(|place| self.people_of(place).map(|people| people.ways))
+            .unwrap_or([0.5; culture::WAYS]);
+        let inherited_name = self
+            .people
+            .get(father_id)
+            .and_then(|f| f.name.rsplit_once(' ').map(|(_, family)| family.to_string()));
+        let (given, family) = culture::naming::name_a_person(
+            &ways,
+            child.sex == person::Sex::Female,
+            inherited_name.as_deref(),
+            &mut rng,
+        );
+        child.name = format!("{given} {family}");
         child.set_standing(inherited);
         let child_id = self.add_person(child);
         self.society.record_birth(child_id, mother_id, father_id);

@@ -959,6 +959,14 @@ something that is not in the data — a figure standing in a settlement — it i
 token, built from the person's own numbers: their name picks the palette, their age picks
 the height, and how they have done picks the collar.
 
+It is operable without a mouse. The globe takes focus, arrows turn it, Enter descends at
+whatever faces you — the same promise the pointer makes, kept without one. That was missing
+from the first version, which put the whole point of the page behind a gesture some people
+cannot make. On touch, a tap that descends is followed half a second later by a synthesised
+click at the same coordinates, which lands on whatever the descent just put under the
+finger; anything arriving within that breath is a ghost and is ignored, or one tap carries
+you down two levels.
+
 The person scene shows the §15 decomposition rather than hiding it: every one of the five
 factors is three bars — what came down the genome, what the household put there, and what
 was nobody's doing — because "why is she like that" having an answer is the point of

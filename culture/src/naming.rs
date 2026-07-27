@@ -155,3 +155,186 @@ mod tests {
         assert!(names.len() > 6, "only {} distinct names", names.len());
     }
 }
+
+/// The sounds a people make, drawn from what marks them out.
+///
+/// Not a language — see the module note — but not arbitrary either. Two peoples who
+/// diverged in different directions get different sound sets, so the Unquietolu and the
+/// Norhaven do not name their children out of the same bag. It is derived from the ways
+/// vector, so it costs nothing to store and cannot fall out of step with the people it
+/// belongs to.
+fn voice_of(ways: &[f32; WAYS]) -> usize {
+    let mut tone = 0.0f32;
+    for (way, amount) in ways.iter().enumerate() {
+        tone += (amount - 0.5) * (way as f32 * 1.7 + 1.0);
+    }
+    // A whole number that changes when the people do, and stays put when they do not.
+    //
+    // Signed, deliberately. Taking the absolute value here made a people who work all
+    // hours and a people who barely work at all sound *identical*, because they sit the
+    // same distance either side of the middle — and which side you are on is precisely
+    // what distinguishes two peoples who diverged in opposite directions.
+    ((tone * 97.0) as i64 + 100_000) as usize
+}
+
+const OPENERS: [&str; 14] = [
+    "b", "br", "d", "g", "h", "k", "l", "m", "n", "r", "s", "t", "th", "v",
+];
+const VOWELS: [&str; 9] = ["a", "e", "i", "o", "u", "ae", "ei", "ou", "ia"];
+const CLOSERS: [&str; 10] = ["l", "n", "r", "s", "th", "sk", "rn", "ld", "st", "m"];
+
+/// A given name and a family name, in the sound of the people who gave them.
+///
+/// Names used to come from `faker_rand`'s English-US word lists, which produced "Ms. Rosa
+/// Wiza MD" on a planet orbiting a nine-tenths-solar star, and gave "Conor Heller Jr." to a
+/// woman. It was the same fault as the eight hardcoded countries in smaller print: a list
+/// somebody else wrote, attached to nothing, in a project whose first principle is that
+/// nothing is placed by fiat.
+///
+/// `family` is what a child inherits. Passing it through means kin share a surname, so the
+/// links between them read as a family rather than as a list of strangers — which is what
+/// they were, since a random draw per person shares nothing with anybody.
+pub fn name_a_person(
+    ways: &[f32; WAYS],
+    female: bool,
+    family: Option<&str>,
+    rng: &mut Rng,
+) -> (String, String) {
+    let voice = voice_of(ways);
+    let opener = |rng: &mut Rng, salt: usize| {
+        OPENERS[(voice / (salt + 1) + (rng.next_u64() as usize % OPENERS.len())) % OPENERS.len()]
+    };
+    let vowel = |rng: &mut Rng| VOWELS[(voice / 7 + (rng.next_u64() as usize % VOWELS.len())) % VOWELS.len()];
+    let closer = |rng: &mut Rng| CLOSERS[(voice / 3 + (rng.next_u64() as usize % CLOSERS.len())) % CLOSERS.len()];
+
+    // Simple vowels for endings. Letting the full set finish a name stacked diphthong
+    // on diphthong and produced "Neirneiei", which is not a name in any mouth.
+    const ENDINGS: [&str; 5] = ["a", "e", "i", "o", "ia"];
+
+    let mut given = String::new();
+    given.push_str(opener(rng, 0));
+    given.push_str(vowel(rng));
+    let mut last = "";
+    if rng.chance(0.55) {
+        last = closer(rng);
+        given.push_str(last);
+        given.push_str(vowel(rng));
+    }
+    // Ending on a vowel or on a consonant is the commonest way real name systems mark
+    // sex, and it is one rule rather than two lists.
+    if female {
+        // A consonant first if the name already ends in a vowel, or the ending lands
+        // straight onto a diphthong and gives "Thouthiaa" — a spelling, not a name.
+        if given.ends_with(|c| "aeiou".contains(c)) {
+            given.push_str(closer(rng));
+        }
+        given.push_str(ENDINGS[(voice + rng.next_u64() as usize) % ENDINGS.len()]);
+    } else {
+        // Not the consonant we just used — "Theskaesk" is a stutter, not a name.
+        let mut tail = closer(rng);
+        if tail == last {
+            tail = CLOSERS[(CLOSERS.iter().position(|c| *c == tail).unwrap_or(0) + 3) % CLOSERS.len()];
+        }
+        given.push_str(tail);
+    }
+
+    let surname = match family {
+        Some(inherited) => inherited.to_string(),
+        None => {
+            let mut name = String::new();
+            name.push_str(opener(rng, 2));
+            name.push_str(vowel(rng));
+            let first = closer(rng);
+            name.push_str(first);
+            if rng.chance(0.4) {
+                name.push_str(vowel(rng));
+                let mut tail = closer(rng);
+                if tail == first {
+                    tail = CLOSERS[(CLOSERS.iter().position(|c| *c == tail).unwrap_or(0) + 4) % CLOSERS.len()];
+                }
+                name.push_str(tail);
+            }
+            capitalised(&name)
+        }
+    };
+    (capitalised(&given), surname)
+}
+
+fn capitalised(word: &str) -> String {
+    let mut letters = word.chars();
+    match letters.next() {
+        Some(first) => first.to_uppercase().collect::<String>() + letters.as_str(),
+        None => String::new(),
+    }
+}
+
+#[cfg(test)]
+mod people_names {
+    use super::*;
+    use sim_core::{Domain, WorldSeed};
+
+    fn rng(seed: u128) -> Rng {
+        WorldSeed::from_u128(seed).stream(Domain::Naming, 1, 0)
+    }
+
+    fn ways(work: f32) -> [f32; WAYS] {
+        let mut w = [0.5; WAYS];
+        w[Deed::Work as usize] = work;
+        w
+    }
+
+    #[test]
+    fn a_child_carries_its_parents_name() {
+        let mut r = rng(1);
+        let (_, family) = name_a_person(&ways(0.9), false, None, &mut r);
+        let (given, inherited) = name_a_person(&ways(0.9), true, Some(&family), &mut r);
+        assert_eq!(inherited, family, "a child was given a stranger's surname");
+        assert_ne!(given, family);
+    }
+
+    #[test]
+    fn different_peoples_sound_different() {
+        // The whole reason names come from the culture rather than a list: two peoples
+        // who went different ways should not name their children out of one bag.
+        let draw = |w: f32| {
+            let mut r = rng(2);
+            (0..40)
+                .map(|_| name_a_person(&ways(w), true, None, &mut r).0)
+                .collect::<std::collections::BTreeSet<_>>()
+        };
+        let one = draw(0.95);
+        let other = draw(0.05);
+        let shared = one.intersection(&other).count();
+        assert!(
+            shared * 3 < one.len(),
+            "two unlike peoples shared {shared} of {} names",
+            one.len()
+        );
+    }
+
+    #[test]
+    fn names_are_names_and_not_titles() {
+        // What this replaced produced "Ms. Rosa Wiza MD" and gave "Jr." to women.
+        let mut r = rng(3);
+        for _ in 0..60 {
+            let (given, family) = name_a_person(&ways(0.7), true, None, &mut r);
+            for part in [&given, &family] {
+                assert!(!part.is_empty());
+                assert!(
+                    part.chars().all(|c| c.is_ascii_alphabetic()),
+                    "{part} is not a plain name"
+                );
+                assert!(part.chars().next().unwrap().is_uppercase(), "{part}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_same_people_and_seed_name_the_same_child() {
+        let go = || {
+            let mut r = rng(4);
+            name_a_person(&ways(0.8), false, None, &mut r)
+        };
+        assert_eq!(go(), go());
+    }
+}

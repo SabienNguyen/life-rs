@@ -104,6 +104,12 @@
   #globe { cursor: grab; }
   #globe.dragging { cursor: grabbing; }
   #region { cursor: crosshair; }
+  /* Whatever has the keyboard must show it. The globe is the whole point of the
+     page and it was reachable only with a mouse. */
+  .plot canvas:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+  .crumb:focus-visible, .tile:focus-visible, .kin button:focus-visible {
+    outline: 3px solid var(--gold); outline-offset: 2px;
+  }
 
   .hint {
     position: absolute; left: 12px; bottom: 12px;
@@ -168,7 +174,8 @@
     <div class="stage">
       <div class="viewport">
         <div class="plot" style="max-width:520px">
-          <canvas id="globe" width="130" height="130"></canvas>
+          <canvas id="globe" width="130" height="130" tabindex="0" role="application"
+                  aria-label="The world. Arrow keys turn it, Enter descends to the nearest settlement."></canvas>
           <svg id="globe-pins" viewBox="0 0 520 520" preserveAspectRatio="none" aria-hidden="true"></svg>
         </div>
         <div class="hint">drag to spin &middot; click to descend</div>
@@ -198,7 +205,8 @@
     <div class="stage">
       <div class="viewport">
         <div class="plot" style="max-width:700px">
-          <canvas id="region" width="140" height="105"></canvas>
+          <canvas id="region" width="140" height="105" tabindex="0" role="application"
+                  aria-label="A region. Enter descends to the nearest settlement."></canvas>
           <svg id="region-pins" viewBox="0 0 700 525" preserveAspectRatio="none" aria-hidden="true"></svg>
         </div>
         <div class="hint" id="region-hint">click a settlement</div>
@@ -282,12 +290,19 @@ const G = WORLD.planet;
 
 /* ---- where we are ------------------------------------------------------- */
 let view = { scene: "world", region: null, place: null, person: null };
+// When the scene last changed. A touch tap fires pointerup and then, a moment later, a
+// synthesised click at the same coordinates — which lands on whatever the descent just
+// put under the finger, and carries you down two levels for one tap. Anything arriving
+// within a breath of a scene change is that ghost, not a choice.
+let arrived = 0;
+const GHOST_TAP = 500;
 
 function go(scene, what) {
   if (scene === "region") view.region = what;
   if (scene === "place") { view.place = what; }
   if (scene === "person") view.person = what;
   view.scene = scene;
+  arrived = performance.now();
   draw();
 }
 
@@ -468,6 +483,27 @@ function wireGlobe() {
   // settlement a moving target, and the gesture the whole page is built around is
   // pointing at one — so reaching for it is taken as asking it to hold still.
   canvas.addEventListener("pointerenter", () => { idle = false; });
+
+  // The keyboard turns it too. Arrows step the spin and tilt, Enter goes down at
+  // whatever is nearest the centre of what you are looking at — which is the same
+  // promise the mouse makes, kept without one.
+  canvas.addEventListener("focus", () => { idle = false; });
+  canvas.addEventListener("blur", () => { idle = true; });
+  canvas.addEventListener("keydown", e => {
+    const step = e.shiftKey ? 15 : 5;
+    if (e.key === "ArrowLeft") spin -= step;
+    else if (e.key === "ArrowRight") spin += step;
+    else if (e.key === "ArrowUp") tilt = clamp(tilt + 0.09, -1.2, 1.2);
+    else if (e.key === "ArrowDown") tilt = clamp(tilt - 0.09, -1.2, 1.2);
+    else if (e.key === "Enter" || e.key === " ") {
+      // Straight ahead: the point facing the viewer.
+      descend(spin, tilt * 180 / Math.PI);
+      e.preventDefault();
+      return;
+    } else return;
+    e.preventDefault();
+    drawGlobe();
+  });
   canvas.addEventListener("pointerleave", () => {
     if (dragging) release();
     idle = true;
@@ -592,9 +628,20 @@ function drawRegion() {
   $("region-places").querySelectorAll("[data-place]").forEach(b =>
     b.addEventListener("click", () => go("place", Number(b.dataset.place))));
 
+  // Enter on the map goes to the biggest settlement in view, which is what the eye
+  // would have gone to anyway.
+  canvas.onkeydown = e => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    e.preventDefault();
+    if (!here.length) return;
+    const biggest = here.reduce((a, b) => (b.p.residents > a.p.residents ? b : a));
+    go("place", biggest.i);
+  };
+
   // Clicking the map itself picks the nearest settlement in view.
   canvas.onclick = e => {
     if (!here.length) return;
+    if (performance.now() - arrived < GHOST_TAP) return;   // the ghost of the tap above
     const rect = canvas.getBoundingClientRect();
     const lon = region.lon + spanLon * ((e.clientX - rect.left) / rect.width - 0.5);
     const lat = region.lat + spanLat * (0.5 - (e.clientY - rect.top) / rect.height);
