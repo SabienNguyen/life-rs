@@ -5827,13 +5827,22 @@ mod the_land_holds {
     fn hunger_is_what_stops_it_and_it_is_felt_where_the_land_is_thin() {
         // The mechanism, not just the outcome. Somewhere in a settled world people are
         // going short, and going short is what closes the fertility gate.
-        // Two hundred years rather than one hundred and twenty. §27 gave the world capital,
-        // and capital moves the Malthusian ceiling: a place that owns tools feeds more people
-        // before it runs out of room, so it takes longer to get there. The claim is unchanged
-        // and so is the mechanism — only the date it bites.
-        let mut world = World::genesis(WorldSeed::from_u128(0x221), 60);
+        // **Founded crowded, rather than waiting for a world to fill.**
+        //
+        // This used to found sixty people and run until somebody went short, and the horizon
+        // had to be pushed out every single time anything raised what the land could produce:
+        // a hundred and twenty years, then two hundred for the tools of §27, and §28's better
+        // use of the ground would have wanted more again. That is a treadmill, and a test on a
+        // treadmill is measuring the horizon rather than the mechanism.
+        //
+        // What the claim is actually about is that a place which cannot feed its people leaves
+        // them short — so the honest thing is to put more people on the ground than it will
+        // carry and look, rather than to breed them slowly and hope. `founding_a_world_crowded_does_not_kill_it`
+        // already establishes that a crowded founding is survivable, so this asks what such a
+        // world *feels* like rather than whether it exists.
+        let mut world = World::genesis(WorldSeed::from_u128(0x221), 400);
         world.record_only(Salience::Pivotal);
-        world.run_for(Duration::from_years(200));
+        world.run_for(Duration::from_years(40));
 
         let inhabited: Vec<&society::Place> = world
             .places

@@ -2678,7 +2678,24 @@ What survives is the shape that matters: **a people loses what it can no longer 
 large one off, shrink it, and it slides back down to what its remaining numbers can hold. That
 is the dark age, and it is the same arithmetic as the discovery that made the light one.
 
-### 29.6 An advance is a thing that happened to somebody
+### 29.6 A test on a treadmill measures the horizon, not the mechanism
+
+`hunger_is_what_stops_it_and_it_is_felt_where_the_land_is_thin` founded sixty people and ran
+until somebody went short. Its horizon had to be pushed out **every single time anything raised
+what the land could produce** — a hundred and twenty years, then two hundred once places could
+own tools, and §28's better use of the ground would have wanted more again. Each extension
+looked like a small maintenance edit and each one was hiding the same thing: the test was
+measuring how long a world takes to fill, not whether hunger works.
+
+It now founds four hundred people on ground that will not carry them and looks after forty
+years. The claim it makes is unchanged and the mechanism it exercises is the same; what has gone
+is the dependence on a horizon that every future improvement would move again.
+
+The general lesson is worth keeping: **a test that has to be re-tuned whenever the model gets
+better is measuring the tuning.** Where the condition under test can be *constructed*, construct
+it.
+
+### 29.7 An advance is a thing that happened to somebody
 
 `Happening::PersonWorksItOut` is the rarest thing in the chronicle and the only one that
 changes what is *possible* rather than what happened. It names a person, a year, a place and a
