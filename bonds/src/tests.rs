@@ -16,11 +16,24 @@ use sim_core::{Arena, Domain, WorldSeed};
 /// needs temperaments to compare. The arena outlives the test by being leaked, which is
 /// what a test may do and a simulation may not.
 fn ids(how_many: usize) -> Vec<PersonId> {
+    folk(how_many).0
+}
+
+/// The same, keeping the arena, for the tests that need whole people rather than handles.
+fn folk(how_many: usize) -> (Vec<PersonId>, &'static Arena<person::Person>) {
+    folk_with(how_many, &|_| 0.0)
+}
+
+/// The same, with means, for the tests where what somebody has is part of the question.
+fn folk_with(
+    how_many: usize,
+    standing: &dyn Fn(usize) -> f32,
+) -> (Vec<PersonId>, &'static Arena<person::Person>) {
     let arena: &'static mut Arena<person::Person> = Box::leak(Box::new(Arena::new()));
     let pool = genetics::FounderPool::uniform();
     let mut home: Arena<planet::Planet> = Arena::new();
     let world = home.insert(planet::Planet::earth());
-    (0..how_many)
+    let who: Vec<PersonId> = (0..how_many)
         .map(|i| {
             let mut r = WorldSeed::from_u128(0x9000 + i as u128)
                 .stream(Domain::Genetics, i as u64, 0);
@@ -33,7 +46,13 @@ fn ids(how_many: usize) -> Vec<PersonId> {
                 0.0,
             ))
         })
-        .collect()
+        .collect();
+    for (at, id) in who.iter().enumerate() {
+        if let Some(person) = arena.get_mut(*id) {
+            person.set_standing(standing(at));
+        }
+    }
+    (who, arena)
 }
 
 fn rng(seed: u128) -> Rng {
@@ -414,4 +433,204 @@ fn the_same_seed_makes_the_same_evening() {
             .collect::<Vec<_>>()
     };
     assert_eq!(run(), run());
+}
+
+// ---- positions in a society (§26) ---------------------------------------------------
+
+use roles::{Facts, Role, among};
+
+/// A person with a life behind them, so a position can be read off it.
+fn a_life(who: PersonId, arena: &'static Arena<person::Person>) -> &'static person::Person {
+    arena.get(who).expect("just inserted")
+}
+
+#[test]
+fn everybody_alike_is_everybody_ordinary() {
+    // The floor under the whole reading. A society with no differences in it has no
+    // positions in it, and must not invent any.
+    let (who, arena) = folk(6);
+    let bonds = Bonds::new();
+    let facts: Vec<Facts> = who
+        .iter()
+        .map(|w| Facts { who: *w, person: a_life(*w, arena), age: 30.0 })
+        .collect();
+    for (_, _, role) in among(&bonds, &facts) {
+        assert_eq!(role, Role::Householder, "a position appeared where nobody differs");
+    }
+}
+
+#[test]
+fn nobody_is_a_patron_if_nobody_owes_them_anything() {
+    // Proximity in a space of measurements is not a relation. Somebody can have more of
+    // everything than anybody and still not be a patron, because a patron is defined by
+    // somebody else owing them and that either happened or it did not.
+    let (who, arena) = folk(5);
+    let mut bonds = Bonds::new();
+    for other in &who[1..] {
+        for _ in 0..25 {
+            bonds.meet(who[0], *other, 0.95);
+        }
+    }
+    let facts: Vec<Facts> = who
+        .iter()
+        .enumerate()
+        .map(|(at, w)| Facts {
+            who: *w,
+            person: a_life(*w, arena),
+            age: if at == 0 { 70.0 } else { 30.0 },
+        })
+        .collect();
+    let read = among(&bonds, &facts);
+    let (_, _, role) = read.iter().find(|(id, _, _)| *id == who[0]).expect("read");
+    assert_ne!(*role, Role::Patron, "a patron with no clients");
+    assert_ne!(*role, Role::Elder, "an elder nobody owes anything to");
+}
+
+#[test]
+fn the_one_everybody_owes_is_read_as_a_patron_and_the_one_carried_most_as_a_client() {
+    let (who, arena) = folk(8);
+    let mut bonds = Bonds::new();
+    for other in &who[1..] {
+        for _ in 0..25 {
+            bonds.meet(who[0], *other, 0.95);
+        }
+        // A little for most of them, and a great deal for one.
+        bonds.helped(who[0], *other, if *other == who[1] { 400.0 } else { 20.0 });
+    }
+    let facts: Vec<Facts> = who
+        .iter()
+        .map(|w| Facts { who: *w, person: a_life(*w, arena), age: 40.0 })
+        .collect();
+    let read = among(&bonds, &facts);
+    let of = |w| read.iter().find(|(id, _, _)| *id == w).map(|(_, _, r)| *r);
+    assert_eq!(of(who[0]), Some(Role::Patron), "the one who carried everybody: {read:?}");
+    assert_eq!(of(who[1]), Some(Role::Client), "the one carried most: {read:?}");
+}
+
+#[test]
+fn age_is_what_separates_an_elder_from_a_patron() {
+    // The same relation, one lifetime apart. Nothing else about the two differs.
+    let (who, arena) = folk_with(8, &|at| if at < 2 { 0.8 } else { 0.3 });
+    let mut bonds = Bonds::new();
+    for other in &who[2..] {
+        for holder in [who[0], who[1]] {
+            for _ in 0..25 {
+                bonds.meet(holder, *other, 0.95);
+            }
+            bonds.helped(holder, *other, 40.0);
+        }
+    }
+    let facts: Vec<Facts> = who
+        .iter()
+        .enumerate()
+        .map(|(at, w)| Facts {
+            who: *w,
+            person: a_life(*w, arena),
+            // Spread, so that being thirty-four is unremarkable rather than seventh of
+            // eight. A rank is only as meaningful as the spread it is taken over.
+            age: match at {
+                0 => 78.0,
+                1 => 34.0,
+                _ => 24.0 + at as f64 * 6.0,
+            },
+        })
+        .collect();
+    let read = among(&bonds, &facts);
+    let of = |w| read.iter().find(|(id, _, _)| *id == w).map(|(_, _, r)| *r);
+    assert_eq!(of(who[0]), Some(Role::Elder));
+    assert_eq!(of(who[1]), Some(Role::Patron));
+}
+
+#[test]
+fn a_position_is_held_against_the_neighbours_and_not_against_a_number() {
+    // A rich man in a poor village is the patron; the same man among richer neighbours is
+    // nobody in particular. No threshold written anywhere could say that, which is why
+    // every quantity here is a rank.
+    let (who, arena) = folk(6);
+    let mut bonds = Bonds::new();
+    for other in &who[1..] {
+        for _ in 0..25 {
+            bonds.meet(who[0], *other, 0.95);
+        }
+        bonds.helped(who[0], *other, 40.0);
+    }
+    let facts = |ages: &[f64]| -> Vec<Facts> {
+        who.iter()
+            .enumerate()
+            .map(|(at, w)| Facts { who: *w, person: a_life(*w, arena), age: ages[at] })
+            .collect()
+    };
+    let among_equals = among(&bonds, &facts(&[40.0; 6]));
+    // Now put the same person among people who all carry each other just as much.
+    let mut even = Bonds::new();
+    for a in &who {
+        for b in &who {
+            if a != b {
+                for _ in 0..25 {
+                    even.meet(*a, *b, 0.95);
+                }
+                even.helped(*a, *b, 40.0);
+            }
+        }
+    }
+    let among_peers = among(&even, &facts(&[40.0; 6]));
+    let role_of = |read: &[(PersonId, roles::Position, Role)]| {
+        read.iter().find(|(id, _, _)| *id == who[0]).map(|(_, _, r)| *r)
+    };
+    assert_eq!(role_of(&among_equals), Some(Role::Patron));
+    assert_ne!(
+        role_of(&among_peers),
+        Some(Role::Patron),
+        "everybody carrying everybody equally should make nobody a patron"
+    );
+}
+
+#[test]
+fn somebody_widely_thought_poorly_of_is_shunned() {
+    // The only sanction in this world. Nobody decides it and nowhere is it written down:
+    // it is what being carried and not making it good comes to, once opinion has travelled.
+    let (who, arena) = folk(7);
+    let mut bonds = Bonds::new();
+    for other in &who[1..] {
+        for _ in 0..25 {
+            bonds.meet(*other, who[0], 0.5);
+        }
+        // Everybody carried them, and they never made it good.
+        bonds.helped(*other, who[0], 60.0);
+    }
+    for _ in 0..12 {
+        bonds.year(&always_alive);
+    }
+    assert!(
+        bonds.repute_of(who[0]) < 0.0,
+        "carried by everybody and repaid nobody, and nobody thinks the worse of them"
+    );
+    let facts: Vec<Facts> = who
+        .iter()
+        .map(|w| Facts { who: *w, person: a_life(*w, arena), age: 35.0 })
+        .collect();
+    let read = among(&bonds, &facts);
+    let (_, _, role) = read.iter().find(|(id, _, _)| *id == who[0]).expect("read");
+    assert!(
+        matches!(role, Role::Outcast | Role::Client),
+        "the one everybody carried and nobody rates is {role:?}"
+    );
+}
+
+#[test]
+fn a_reputation_is_what_others_hold_and_cannot_be_read_off_your_own_ties() {
+    let who = ids(3);
+    let mut bonds = Bonds::new();
+    for _ in 0..20 {
+        bonds.meet(who[0], who[1], 0.9);
+        bonds.meet(who[0], who[2], 0.9);
+    }
+    bonds.helped(who[1], who[0], 30.0);
+    bonds.repaid(who[0], who[1], 30.0);
+    assert!(bonds.repute_of(who[0]) > 0.0, "paying up counted for nothing");
+    // And the walk of the whole graph agrees with the walk of one person's.
+    let all = bonds.everybodys_repute();
+    let (total, holders) = all.get(&who[0]).copied().unwrap_or((0.0, 0));
+    assert!(holders > 0);
+    assert!((total / holders as f32 - bonds.repute_of(who[0])).abs() < 1e-5);
 }

@@ -183,6 +183,15 @@ pub struct Person {
     upbringing: (f32, f32),
     matured: bool,
 
+    /// How many spells of each deed this life has held.
+    ///
+    /// What somebody *does* is the oldest thing a society reads a position off — the one
+    /// who works, the one who wanders, the one who is always talking to somebody. None of
+    /// that is assigned here and none of it is an occupation: it is the tally of what four
+    /// thousand decisions a year actually came to, and temperament is what makes two people
+    /// with the same options spend their lives differently.
+    doings: [u32; Deed::COUNT],
+
     needs: Needs,
     health: Health,
     intent: Option<Intent>,
@@ -238,6 +247,7 @@ impl Person {
             opportunity: (0.0, 0.0),
             upbringing: (0.0, 0.0),
             matured: false,
+            doings: [0; Deed::COUNT],
             needs: Needs::rested(),
             health: Health::hale(),
             intent: None,
@@ -258,6 +268,31 @@ impl Person {
 
     pub fn patronage(&self) -> f32 {
         self.patronage
+    }
+
+    /// What this life has been spent on, in spells of each deed.
+    pub fn doings(&self) -> &[u32; Deed::COUNT] {
+        &self.doings
+    }
+
+    /// Note time spent. `times` so that a tier which does not deliberate can book a year of
+    /// something in one call, and so the two tiers keep the same tally of the same life.
+    pub fn spent(&mut self, deed: Deed, times: u32) {
+        self.doings[deed as usize] = self.doings[deed as usize].saturating_add(times);
+    }
+
+    /// The share of this life given to one deed, out of the deeds anybody has a choice
+    /// about.
+    ///
+    /// Eating, drinking and sleeping are not choices — everybody does them and doing more
+    /// of them says nothing about a person. What is left is the four that vary, and a share
+    /// of those is what distinguishes a life spent working from one spent visiting.
+    pub fn share_of_life(&self, deed: Deed) -> f32 {
+        let chosen: u32 = Deed::CHOSEN.iter().map(|d| self.doings[*d as usize]).sum();
+        if chosen == 0 || !Deed::CHOSEN.contains(&deed) {
+            return 0.0;
+        }
+        self.doings[deed as usize] as f32 / chosen as f32
     }
 
     pub fn is_mentored(&self) -> bool {

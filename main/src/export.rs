@@ -335,6 +335,20 @@ fn people(world: &World) -> String {
             .unwrap_or_else(|| "null".to_string())
     };
 
+    // Everybody's position, read once per place rather than once per person: a position is
+    // a rank against the neighbours, so asking for one person's costs the whole town's.
+    let mut positions: std::collections::BTreeMap<PersonId, (bonds::Role, String)> =
+        Default::default();
+    for place in world.places.ids() {
+        let ways = world
+            .people_of(place)
+            .map(|people| people.ways)
+            .unwrap_or([0.5; culture::WAYS]);
+        for (who, _, role) in world.society_of(place) {
+            positions.insert(who, (role, culture::naming::name_a_role(&ways, role.stem())));
+        }
+    }
+
     let entries: Vec<String> = world
         .people
         .iter()
@@ -388,6 +402,32 @@ fn people(world: &World) -> String {
                         ),
                     ),
                     field("standing", &num(p.peak_standing())),
+                    field(
+                        "title",
+                        &match positions.get(&id) {
+                            Some((_, word)) => quoted(word),
+                            None => "null".to_string(),
+                        }
+                    ),
+                    field(
+                        "role",
+                        &match positions.get(&id) {
+                            Some((role, _)) => quoted(role.label()),
+                            None => "null".to_string(),
+                        }
+                    ),
+                    field(
+                        "allies",
+                        &format!(
+                            "{}",
+                            world.bonds.of(id).filter(|(_, t)| t.allied()).count()
+                        )
+                    ),
+                    field(
+                        "owed",
+                        &num(world.bonds.of(id).map(|(_, t)| t.debt).sum::<f32>())
+                    ),
+                    field("repute", &num(world.repute_of(id))),
                     field("mentored", if p.is_mentored() { "true" } else { "false" }),
                     field("upbringing", &num(p.absorbed_upbringing())),
                     field("place", &place_index(id)),

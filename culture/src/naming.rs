@@ -338,3 +338,37 @@ mod people_names {
         assert_eq!(go(), go());
     }
 }
+
+/// A people's word for a position in their own society.
+///
+/// The meaning comes from `bonds::roles` — which social position this is — and the *sound*
+/// comes from here, from the same voice that names their children. So the elders of two
+/// peoples who diverged in opposite directions are called two different things, and the
+/// elders of a people and its daughter are called nearly the same thing, without anybody
+/// writing a word list.
+///
+/// Built by dressing the plain stem in the people's own consonants rather than by inventing
+/// a word outright. That keeps it legible — a reader can see that *Bruldsk-elder* is an
+/// elder — while still being theirs, and it is honest about what this is: not a language,
+/// but a naming habit that differs between peoples and descends with them.
+///
+/// Deterministic in the people and the position, with no rng and nothing stored. Two calls
+/// give the same word, and a people that drifts far enough to sound different has, by then,
+/// actually become a different people.
+pub fn name_a_role(ways: &[f32; WAYS], stem: &str) -> String {
+    let voice = voice_of(ways);
+    let opener = OPENERS[voice % OPENERS.len()];
+    let vowel = VOWELS[(voice / 11) % VOWELS.len()];
+    let closer = CLOSERS[(voice / 5 + stem.len()) % CLOSERS.len()];
+
+    let mut prefix = String::with_capacity(8);
+    prefix.push_str(opener);
+    prefix.push_str(vowel);
+    prefix.push_str(closer);
+    let mut word = prefix.chars();
+    let head: String = match word.next() {
+        Some(first) => first.to_uppercase().collect::<String>() + word.as_str(),
+        None => String::new(),
+    };
+    format!("{head}{}", stem.to_lowercase())
+}

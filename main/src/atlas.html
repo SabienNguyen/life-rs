@@ -118,6 +118,12 @@
     border: 1px solid var(--line);
   }
 
+  /* A summary line that sits in the flow, unlike .hint, which is pinned over a canvas. */
+  .census {
+    margin: 0 0 10px; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--dim); line-height: 1.7;
+  }
+
   /* ---- readouts ---------------------------------------------------------- */
   dl.readout { margin: 0; display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; font-size: 12px; }
   dl.readout dt { color: var(--dim); }
@@ -233,6 +239,7 @@
       <div>
         <div class="plate">
           <div class="plate-head">Who lives here</div>
+          <p class="census" id="place-society"></p>
           <div class="folk" id="place-folk"></div>
         </div>
       </div>
@@ -678,17 +685,35 @@ function drawPlace() {
     rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("") +
     bars.map(([k, v]) => `<dt>${k}</dt><dd>${n2(v)}<div class="bar"><span style="width:${Math.round(clamp(v || 0,0,1)*100)}%"></span></div></dd>`).join("");
 
+  // What kind of society this is, counted rather than described. A place with elders and
+  // patrons in it is a different place from one with none, and nothing anywhere decides
+  // which it will be.
+  const tally = {};
+  WORLD.people.forEach(w => {
+    if (w.place === view.place && w.alive && w.role) tally[w.role] = (tally[w.role] || 0) + 1;
+  });
+  const named = Object.entries(tally).sort((a, b) => b[1] - a[1]);
+  $("place-society").textContent = named.length
+    ? named.map(([role, n]) => `${n} ${role}${n > 1 && !role.endsWith("s") ? "s" : ""}`).join(" · ")
+    : "";
+
   const folk = WORLD.people
     .map((who, i) => ({ who, i }))
     .filter(({ who }) => who.place === view.place)
-    .sort((a, b) => (b.who.alive - a.who.alive) || (b.who.age - a.who.age));
+    // Living first, then the ones the town would name before the ones it would not, then
+    // by age. Nobody is ranked here — "ordinary" is simply the commonest reading and it
+    // belongs after the readings that say something.
+    .sort((a, b) =>
+      (b.who.alive - a.who.alive) ||
+      (ranks(b.who) - ranks(a.who)) ||
+      (b.who.age - a.who.age));
 
   $("place-folk").innerHTML = folk.length ? folk.map(({ who, i }) => `
     <button type="button" class="tile ${who.alive ? "" : "dead"}" data-person="${i}">
       <canvas width="12" height="16" style="width:36px;height:48px" data-sprite="${i}"></canvas>
       <span>
         <span class="tile-name">${who.name.split(" ")[0]}</span><br />
-        <span class="tile-sub">${who.alive ? who.age + " yr" : "died"}</span>
+        <span class="tile-sub">${who.alive ? who.age + " yr" : "died"}${who.role ? " · " + who.role : ""}</span>
       </span>
     </button>`).join("") : `<p class="empty">Nobody lives here now.</p>`;
 
@@ -753,11 +778,35 @@ function paintPerson(canvas, who, scale) {
   return scale;
 }
 
+// Where somebody stands in everybody else's regard, in words. A rank rather than a figure,
+// because in a world where nearly everybody owes somebody something they cannot repay,
+// nearly everybody's regard is a little below zero — so the sign says nothing and the
+// comparison says everything.
+function reputeReads(repute) {
+  const r = Number(repute ?? 0.5);
+  if (r <= 0.08) return "worse than almost anyone";
+  if (r < 0.3) return "poorly, by local standards";
+  if (r <= 0.7) return "about as well as anyone";
+  if (r < 0.92) return "well";
+  return "better than almost anyone";
+}
+
+// How much a position marks somebody out, for ordering a roll call only. Not a hierarchy:
+// a rover is not above a labourer, and neither is above a householder in anything but how
+// much there is to say about them.
+function ranks(who) {
+  return { elder: 4, patron: 3, "go-between": 2, outcast: 2, client: 1, labourer: 1, rover: 1 }[who.role] || 0;
+}
+
 function drawPerson() {
   const who = WORLD.people[view.person];
   $("person-title").textContent = who.name;
   const from = WORLD.places[who.place];
+  // The title first: what the town would call them, in the town's own word. Nobody
+  // holds an office here — the position is read off the life, so it can be lost, and
+  // when its holder dies somebody else is read into it.
   $("person-note").textContent =
+    (who.title ? `${who.title} — this people's word for ${/^[aeiou]/.test(who.role) ? "an" : "a"} ${who.role}. ` : "") +
     `${who.alive ? `${who.age} years old` : `died at ${who.age}`}, ${who.outlook}` +
     (from ? `, of ${from.name}.` : ".") +
     (who.mentored ? " Somebody took them up, which is the largest single fact about a life here." : "");
@@ -770,6 +819,12 @@ function drawPerson() {
     ["Sex", who.sex],
     ["Outlook", who.outlook],
     ["Standing", n2(who.standing)],
+    ["Called", who.title ? `${who.title} (${who.role})` : "nothing in particular"],
+    ["Stand with them", `${who.allies ?? 0}`],
+    // Days of help, which in this world only ever means a bad year somebody was
+    // carried through. Positive is owed to them; negative is owed by them.
+    ["Owed", `${Math.round(who.owed ?? 0)} days`],
+    ["Thought of", reputeReads(who.repute)],
     ["Mentored", who.mentored ? "yes" : "no"],
     ["Upbringing", n2(who.upbringing)],
   ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");

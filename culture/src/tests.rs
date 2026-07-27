@@ -462,3 +462,23 @@ fn a_world_does_not_shatter_into_a_people_per_village() {
         distinct.len()
     );
 }
+
+#[test]
+fn two_peoples_have_two_words_for_the_same_position() {
+    // Not a language, but not one word list handed to everybody either. The elders of two
+    // peoples who diverged in opposite directions are not called the same thing.
+    let mut toilers = [0.5; WAYS];
+    toilers[Deed::Work as usize] = 0.95;
+    let mut idlers = [0.5; WAYS];
+    idlers[Deed::Work as usize] = 0.05;
+
+    let theirs = naming::name_a_role(&toilers, "Elder");
+    let others = naming::name_a_role(&idlers, "Elder");
+    assert_ne!(theirs, others, "two peoples, one word for elder");
+    assert!(theirs.ends_with("elder") && others.ends_with("elder"));
+    // And a people's own words are stable: nothing here is drawn.
+    assert_eq!(theirs, naming::name_a_role(&toilers, "Elder"));
+    // Two positions in one people share the people's sound and differ in meaning.
+    let their_outcast = naming::name_a_role(&toilers, "Shunned");
+    assert_ne!(theirs, their_outcast);
+}

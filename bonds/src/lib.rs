@@ -35,7 +35,9 @@ use person::{Personality, PersonId};
 use sim_core::Rng;
 
 pub mod circles;
+pub mod roles;
 pub use circles::{Circle, standing_with_allies};
+pub use roles::{Position, Role};
 
 /// How many ties one person keeps.
 ///
@@ -61,12 +63,42 @@ const WARMING: f32 = 0.14;
 /// people who have drifted apart are the ones that turn sour.
 const FORGIVING: f32 = 0.12;
 
-/// How much unpaid debt costs the debtor's standing in the creditor's eyes, per day owed.
+/// How much an unpaid debt costs the debtor in the creditor's eyes, at its worst.
 ///
 /// This is the whole of reciprocity: help given and not returned turns warmth negative, and
 /// that single rule is what makes cooperation with strangers rare and cooperation with
 /// neighbours ordinary, without either being written down.
+///
+/// A **rate**, applied to a saturating grievance rather than to the number of days. Per-day
+/// it was unbounded, and once famine relief started booking debts of hundreds of days that
+/// meant any real debt drove warmth and regard straight to the floor and pinned them there.
+/// Every debtor in every world was despised, nobody could ever be thought well of, and the
+/// whole of reputation collapsed to a single value. Being owed a great deal is not a
+/// thousand times worse than being owed a little; it is worse, and then it stops getting
+/// worse.
 const RESENTMENT: f32 = 0.30;
+/// The same for what a creditor comes to *think* of a debtor, as against how they feel.
+const DISREPUTE: f32 = 0.15;
+/// And what making good is worth.
+///
+/// Several times `DISREPUTE`, and it has to be: ill regard accrues every year a debt stands
+/// while credit for settling arrives once, so a rate merely equal to it would leave somebody
+/// who borrowed and repaid in full worse thought of than somebody who never needed help. A
+/// debt typically stands two or three years, and this is about what those years cost.
+const CREDIT_FOR_PAYING: f32 = 0.50;
+
+/// How many days of debt it takes for a grievance to be half of what it can be.
+///
+/// About a season of somebody else's hunger. Below it a debt is a favour outstanding; well
+/// above it, it is simply a thing that stands between two people and does not get worse for
+/// being larger.
+const PATIENCE: f32 = 60.0;
+
+/// How much a debt of this size sours the person who is out of pocket, from 0 to 1.
+fn grievance(days: f32) -> f32 {
+    let days = days.max(0.0);
+    days / (days + PATIENCE)
+}
 
 /// How much of somebody's opinion rubs off when you spend time with them.
 ///
@@ -158,6 +190,50 @@ impl Bonds {
             .flat_map(|held| held.iter().map(|(subject, tie)| (*subject, *tie)))
     }
 
+    /// What everybody who knows of somebody holds about them, averaged.
+    ///
+    /// The one quantity here that is *about* a person rather than held by them, and the only
+    /// one that reaches people they have never met — `hearsay` carries it. It has to be
+    /// walked rather than looked up, because the tie graph is stored by holder: your
+    /// reputation is precisely the thing you cannot read off your own ties.
+    ///
+    /// A mean rather than a sum, so that being widely known is not the same as being well
+    /// thought of, and so that a hamlet and a city are on the same scale.
+    pub fn repute_of(&self, who: PersonId) -> f32 {
+        let (mut total, mut holders) = (0.0, 0);
+        for (holder, held) in &self.ties {
+            if *holder == who {
+                continue;
+            }
+            if let Some(tie) = held.get(&who)
+                && tie.holds()
+            {
+                total += tie.regard;
+                holders += 1;
+            }
+        }
+        if holders == 0 { 0.0 } else { total / holders as f32 }
+    }
+
+    /// What everybody is thought of, in one walk of the graph.
+    ///
+    /// `repute_of` costs a full walk each time it is asked, and it is asked about everybody
+    /// once a year. This answers the same question for the whole world at once.
+    pub fn everybodys_repute(&self) -> std::collections::BTreeMap<PersonId, (f32, u32)> {
+        let mut said: std::collections::BTreeMap<PersonId, (f32, u32)> = Default::default();
+        for (holder, held) in &self.ties {
+            for (about, tie) in held {
+                if about == holder || !tie.holds() {
+                    continue;
+                }
+                let entry = said.entry(*about).or_insert((0.0, 0));
+                entry.0 += tie.regard;
+                entry.1 += 1;
+            }
+        }
+        said
+    }
+
     /// How many ties somebody is carrying.
     pub fn count(&self, holder: PersonId) -> usize {
         self.ties.get(&holder).map_or(0, |held| held.len())
@@ -231,7 +307,12 @@ impl Bonds {
         let theirs = self.edit(creditor, debtor);
         theirs.debt = (theirs.debt - days).max(0.0);
         // Paying up raises what the creditor thinks of you, which is the point of paying.
-        theirs.regard = (theirs.regard + 0.08 * days).clamp(-1.0, 1.0);
+        //
+        // Set against how fast an unpaid debt costs regard — `RESENTMENT * unpaid * 0.005`
+        // a year — so that a reputation takes about as long to build as to lose. It was
+        // fifty times faster than that, which meant one settled debt outweighed a decade of
+        // ill will and made regard a quantity nobody could stay low on.
+        theirs.regard = (theirs.regard + CREDIT_FOR_PAYING * grievance(days)).clamp(-1.0, 1.0);
         let mine = self.edit(debtor, creditor);
         mine.debt = (mine.debt + days).min(0.0);
     }
@@ -300,10 +381,10 @@ impl Bonds {
                 // is the one who resents: a debt is only a grievance from the side that is
                 // out of pocket.
                 if tie.debt > 0.0 {
-                    let unpaid = tie.debt;
+                    let sore = grievance(tie.debt);
                     tie.debt = (tie.debt - FORGIVING * tie.debt).max(0.0);
-                    tie.warmth = (tie.warmth - RESENTMENT * unpaid * 0.01).clamp(-1.0, 1.0);
-                    tie.regard = (tie.regard - RESENTMENT * unpaid * 0.005).clamp(-1.0, 1.0);
+                    tie.warmth = (tie.warmth - RESENTMENT * sore).clamp(-1.0, 1.0);
+                    tie.regard = (tie.regard - DISREPUTE * sore).clamp(-1.0, 1.0);
                 } else if tie.debt < 0.0 {
                     tie.debt = (tie.debt + FORGIVING * -tie.debt).min(0.0);
                 }

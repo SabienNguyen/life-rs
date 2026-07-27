@@ -41,6 +41,13 @@ impl Deed {
 
     pub const COUNT: usize = Deed::ALL.len();
 
+    /// The deeds somebody has a real choice about.
+    ///
+    /// Eating, drinking and sleeping are not choices — everybody does them, and doing more
+    /// of them distinguishes nobody from anybody. These four are where a temperament shows
+    /// up as a life, and so they are what a social position can be read off.
+    pub const CHOSEN: [Deed; 4] = [Deed::Wash, Deed::Socialize, Deed::Work, Deed::Wander];
+
     pub const fn label(self) -> &'static str {
         match self {
             Deed::Eat => "eating",

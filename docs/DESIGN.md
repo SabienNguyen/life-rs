@@ -2212,3 +2212,160 @@ to grow with it, since at present `COMPANY_A_YEAR` fixes that at sixteen and mor
 depth rather than breadth. The measurement that says so is kept as
 `measure_whether_ties_could_replace_bonding_capital`, so the answer can be rechecked rather
 than remembered.
+
+## 26. Roles and titles: what somebody *is*
+
+§25 gave the world ties, debts, reputation and factions, and it was still not a society. It
+had inequality in it, and inequality is not structure. What was missing is that a society has
+**positions** — the one everybody consults, the one everybody owes, the one nobody will stand
+with — and those positions **outlive whoever is holding them**.
+
+### 26.1 A role is a reading, and that is what makes it an institution
+
+Nothing here is stored, assigned, conferred or inherited. A role is walked out of what can
+already be measured about a life, exactly as `Archetype` is walked out of a place's vector, a
+`Country` out of who can reach whom, and a `Circle` out of who stands with whom.
+
+Nobody is *made* an elder. Somebody is *read as* an elder because they are old, well off,
+widely stood with, and owed by half the town — and on the day that stops being true of them
+it is true of somebody else. That is the whole succession mechanism: there isn't one. The
+reading is taken again and it lands where it lands.
+
+This is the cheapest honest institution. No office, no title deed, no rule for who inherits
+what, and nothing that can fall out of step with reality, because it *is* reality, re-read.
+It is also the only kind this project's first principle permits: an office written down would
+be an office placed by fiat.
+
+### 26.2 Measured against the neighbours, never against a number
+
+Every quantity is a **rank within the people to hand**. A rich man in a poor village is the
+patron; the same man among richer neighbours is nobody in particular, and no threshold
+written anywhere could say so. Rank also makes the reading scale-free — a hamlet of nine and
+a town of two hundred are both readable — and immune to the drift in absolute standing that a
+long run produces.
+
+Eight quantities: seniority, means, credit (net days of help owed), how many stand with them,
+what others hold about them, and the share of their life given to work, to company, and to
+wandering. That last group is `Person::doings`, a running tally of what four thousand
+decisions a year actually came to — so *what somebody does* is read off what they did, and
+temperament is what makes two people with the same options spend their lives differently.
+
+### 26.3 A position is a relation, not a location
+
+Nearest-prototype alone gave a **patron with nobody owing her anything**. She had more of
+everything than anybody, and that put her in the corner of the measured space where patrons
+live even though the relation that makes somebody a patron did not exist.
+
+So the sign of the thing is checked first — you cannot be a patron unless somebody owes you,
+a client unless you owe somebody, an outcast unless people think worse of you than of the
+rest — and only then is proximity used to choose among the positions somebody could actually
+occupy. `Householder` qualifies always, which is what makes it a fallback rather than a
+prototype that has to win on distance. It is also, correctly, the commonest reading by a
+wide margin.
+
+A world with no famine has no creditors and reads nobody as a patron. That is the model
+working, not a gap in it.
+
+### 26.4 Every people has its own word for it
+
+The *meaning* comes from `bonds::roles` and the *sound* from `culture::naming`, which is the
+same voice that names their children. So the elders of two peoples who diverged in opposite
+directions are called two different things, and the elders of a people and its daughter are
+called nearly the same thing, with nobody writing a word list. Derived, not stored, and
+deterministic: `Nistelder`, `Vaeskkeeper`, `Nildhand`, `Nilshunned`.
+
+It is not a language and it is not trying to be — §24.4 puts those out of scope. It is a
+naming habit that differs between peoples and descends with them, which is the cheapest thing
+that carries real information.
+
+### 26.5 What a position is *for*: the door
+
+A role that only described would be decoration. The architecture is that **roles describe and
+the quantities underneath them act** — so `Outcast` is not a state anybody is put into, it is
+what being widely thought poorly of comes to, and the thing that acts is the regard itself.
+
+Being thought worse of than the rest costs you at the door. `World::backing` is now signed:
+allies inside a place vouch for a household, and a bad reputation objects, within the same
+`VOUCHING` budget. That is the only sanction in this world — no violence, no law, no court,
+just a door that does not open — and it is what finally makes `regard`, the one quantity that
+travels between people who have never met, decide something.
+
+### 26.6 Half a mechanism reads exactly like a whole one
+
+`Bonds::repaid` existed, was tested, and was **called by nothing**. Reciprocity was a one-way
+ratchet: you could be carried through a famine and you could never settle up, so every
+debtor's regard fell for the rest of their life and every person in every world was
+eventually thought poorly of. The tests passed. The unit was correct. Nothing used it.
+
+Fixing it took three goes, and each failure was a different way of being wrong about *scale*:
+
+1. **Resentment was linear in days owed.** Famine relief books debts of hundreds of days, so
+   any real debt drove warmth and regard to the floor and pinned them there. Being owed a
+   great deal is worse than being owed a little, and then it stops getting worse — so
+   grievance now saturates: `days / (days + PATIENCE)`.
+2. **Repayment was capped at a quarter of each debt a year.** That bound long before
+   affordability did, so people with ample means paid nine days against a debt of thirty-five
+   and were resented for the twenty-six they had not touched, every year, for life. Somebody
+   who can settle up settles up; the only cap left is what a year can spare.
+3. **Credit for paying was of the same order as the yearly cost of not paying.** Ill regard
+   accrues every year a debt stands and credit arrives once, so a rate merely equal to it left
+   somebody who borrowed and repaid in full worse thought of than somebody who never needed
+   help.
+
+What survives is the trap, and it is the right one: repaying costs standing, so somebody with
+little never clears what they owe, stays resented, and is who a town shuts its door on.
+
+### 26.7 Everybody is slightly ill thought of
+
+Measuring reputation against zero turned out to say nothing. At the Malthusian edge nearly
+everybody owes somebody something they cannot repay, so nearly everybody's raw regard sits a
+little below zero — which makes "thought poorly of" true of the whole population and
+therefore a statement about nobody.
+
+So reputation, like everything else in §26, is a **rank**: `World::repute_of` is where
+somebody stands in the world's regard from 0 to 1, and the sanction is scaled by how far
+below the middle they are. What a town can act on is not whether you are liked in the
+abstract; it is whether you are worse thought of than the rest.
+
+### 26.8 Positions survive their holders — measured
+
+`a_position_outlives_the_person_holding_it` runs a world sixty years, records which positions
+exist and who holds them, then runs it forty-five years more — long enough that two thirds of
+the holders are dead. The positions are still there, held by other people, with nothing
+anywhere that says they should be.
+
+### 26.8.1 One seed measures the divergence, not the tiers
+
+`who_your_friends_are_does_not_depend_on_who_is_watching` compares a watched world with an
+unwatched one, and it failed on the seed it had always used. Three seeds settled it: ties come
+out −33%, −8% and +18% coarse against fine, and allies −32%, −14% and −1%. Not
+one-directional, so what is left is divergence rather than bias — two worlds from one seed
+differ in their families, their famines and their migrations within a decade, and a tie count
+is a sensitive enough aggregate to show it.
+
+The test now averages three seeds, which is the same standard `WORK_SPELLS_PER_YEAR` is held
+to and the reason that calibration is trustworthy. Chasing the single-seed gap first led to
+recalibrating the coarse tier's evenings by a third — which brought the evening counts into
+exact agreement and moved the tie counts by 1%, proving the gap had never been about evenings.
+
+### 26.9 What is still missing
+
+This fills the gap between "people with different numbers" and "a society with positions in
+it". It does not fill the gap to a *real* society, and the honest list of what is still
+absent is longer than what was added:
+
+- **Occupation.** Roles here are read off how people spend their days, but the economy has
+  one good and one kind of work. Nobody is a smith, because there is nothing to smith and no
+  one to trade with if there were. Real division of labour needs `economy` to carry more than
+  one product, and that is the largest single thing this world does not have.
+- **Law.** The only sanction is a door that does not open. There is no rule anybody states,
+  no judgement, no penalty anybody imposes on behalf of anybody else.
+- **Language, religion, ritual, kinship rules.** §24.4 puts these out of scope and they stay
+  there. What exists is a naming habit, which is not a language.
+- **Conquest and the state.** Countries merge by converging, never by one taking another.
+  There is no taxation, no army, no border anybody could be stopped at.
+- **Households as political units.** A household moves together and is vouched for together,
+  but it has no head, no succession, and no property that outlives its members.
+- **Roles that are chosen.** Nobody here decides to become anything. A position is read off a
+  life, never aimed at, and a society in which people pursue standing deliberately would need
+  `Deed` to include acts whose whole point is what others will make of them.

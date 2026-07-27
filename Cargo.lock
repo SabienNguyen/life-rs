@@ -146,6 +146,7 @@ name = "main"
 version = "0.1.0"
 dependencies = [
  "biome",
+ "bonds",
  "climate",
  "cosmos",
  "culture",

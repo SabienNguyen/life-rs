@@ -70,8 +70,26 @@ fn main() {
             .collect();
         weight.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.2.cmp(&b.2)));
 
+        let read = world.society_of(id);
+        let mut tally: std::collections::BTreeMap<&str, usize> = Default::default();
+        for (_, _, role) in &read {
+            *tally.entry(role.label()).or_default() += 1;
+        }
+        println!(
+            "   {}",
+            tally
+                .iter()
+                .map(|(role, n)| format!("{n} {role}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+
         for (total, own, who) in weight.iter().take(6) {
             let Some(p) = world.people.get(*who) else { continue };
+            let title = world
+                .standing_of(*who)
+                .map(|(role, word)| format!("{word} ({})", role.label()))
+                .unwrap_or_default();
             let allies = world.bonds.of(*who).filter(|(_, t)| t.allied()).count();
             let owed: f32 = world.bonds.of(*who).map(|(_, t)| t.debt.max(0.0)).sum();
             let owes: f32 = world.bonds.of(*who).map(|(_, t)| (-t.debt).max(0.0)).sum();
@@ -82,9 +100,10 @@ fn main() {
                 .map(|f| f.name.clone())
                 .unwrap_or_else(|| "—".into());
             println!(
-                "   {:<20} {:>3.0}  has {own:.2}  with friends {total:.2}  {allies:>2} allies  \
-owed {owed:>4.0}d  owes {owes:>3.0}d  child of {parent}{}",
+                "   {:<20} {:<26} {:>3.0}  has {own:.2}  with friends {total:.2}  \
+{allies:>2} allies  owed {owed:>4.0}d  owes {owes:>3.0}d  child of {parent}{}",
                 p.name,
+                title,
                 p.age(now).years(),
                 if p.is_mentored() { format!("  patron {:.1}x", p.patronage()) } else { String::new() },
             );
