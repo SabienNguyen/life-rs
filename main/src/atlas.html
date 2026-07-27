@@ -270,6 +270,8 @@
       <div class="plate">
         <div class="plate-head">The ground and the reading</div>
         <dl class="readout" id="place-readout"></dl>
+        <div class="plate-head" style="margin-top:18px">What happened here</div>
+        <dl class="life" id="place-history"></dl>
       </div>
     </div>
   </section>
@@ -720,6 +722,17 @@ function drawPlace() {
     rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("") +
     bars.map(([k, v]) => `<dt>${k}</dt><dd>${n2(v)}<div class="bar"><span style="width:${Math.round(clamp(v || 0,0,1)*100)}%"></span></div></dd>`).join("");
 
+  // A settlement has a history for the same reason a person has a life, and it is the same
+  // chronicle asked a different question. Only what the record actually names a place in:
+  // people arriving, and the town's character changing under them. Arrivals are worth showing
+  // one by one rather than counted — a quarter that took nine households in four years and
+  // then none for thirty is telling you something a total would hide.
+  const story = (WORLD.events || []).filter(e => (e.here || []).includes(view.place));
+  $("place-history").innerHTML = story.length
+    ? story.map(e => `<dt>${e.year}</dt><dd class="${e.kind}">${e.text}</dd>`).join("")
+    : `<dt>&mdash;</dt><dd class="empty">Nothing has happened here that the record
+       thought worth keeping.</dd>`;
+
   // What kind of society this is, counted rather than described. A place with elders and
   // patrons in it is a different place from one with none, and nothing anywhere decides
   // which it will be.
@@ -903,7 +916,8 @@ function drawPerson() {
   // holds an office here — the position is read off the life, so it can be lost, and
   // when its holder dies somebody else is read into it.
   $("person-note").textContent =
-    (who.craft ? `${who.craft} — a ${who.trade} by trade. ` : "") +
+    (who.craft ? `${who.craft} — a ${who.trade} by trade. `
+      : who.trade ? `A ${who.trade} by trade. ` : "") +
     (who.title ? `${who.title} — this people's word for ${/^[aeiou]/.test(who.role) ? "an" : "a"} ${who.role}. ` : "") +
     `${who.alive ? `${who.age} years old` : `died at ${who.age}`}, ${who.outlook}` +
     (from ? `, of ${from.name}.` : ".") +
@@ -917,7 +931,9 @@ function drawPerson() {
     ["Sex", who.sex],
     ["Outlook", who.outlook],
     ["Standing", n2(who.standing)],
-    ["Trade", who.craft ? `${who.craft} (${who.trade})` : "—"],
+    // A dead person keeps what they did and loses their people's word for it — naming a
+    // trade in the local speech needs a place, and they no longer have one.
+    ["Trade", who.craft ? `${who.craft} (${who.trade})` : who.trade || "—"],
     ["Called", who.title ? `${who.title} (${who.role})` : "nothing in particular"],
     ["Stand with them", `${who.allies ?? 0}`],
     // Days of help, which in this world only ever means a bad year somebody was

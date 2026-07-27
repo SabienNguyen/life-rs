@@ -6,6 +6,7 @@
 
 use observer::Balance;
 use person::PersonId;
+use society::PlaceId;
 use sim::{Happening, World};
 use sim_core::Salience;
 
@@ -367,7 +368,14 @@ fn people(world: &World) -> String {
         .iter()
         .map(|(id, p)| {
             let now = world.now();
-            let working = p.is_alive() && !p.stage(now).is_dependent();
+            // Whether they are anything for a living. A child is not, and the dead still are:
+            // reading "trade: —" under a life whose record says she gave up cooking for
+            // farming twice is the view contradicting itself.
+            let working = if p.is_alive() {
+                !p.stage(now).is_dependent()
+            } else {
+                p.has_matured()
+            };
             let age = match p.death() {
                 Some((when, _)) => p.age(when).years(),
                 None => p.age(now).years(),
@@ -445,11 +453,15 @@ fn people(world: &World) -> String {
                     // A child is not anything for a living. `Person` carries a trade from
                     // birth because everybody starts a farmer, but nobody is one until they
                     // are old enough to be counted as a hand.
+                    // The dead keep the trade and lose the word for it: `trade_of` names it in
+                    // the local people's own speech, and that needs a place, which somebody
+                    // who has died no longer has. What they did is still known.
                     field(
                         "trade",
-                        &match working.then(|| world.trade_of(id)).flatten() {
-                            Some((trade, _)) => quoted(trade.label()),
-                            None => "null".to_string(),
+                        &if working {
+                            quoted(p.trade().label())
+                        } else {
+                            "null".to_string()
                         }
                     ),
                     field(
@@ -488,6 +500,8 @@ fn events(world: &World) -> String {
     // — that is what the chronicle is *for* — and until now nothing displayed it.
     let slot: std::collections::HashMap<PersonId, usize> =
         world.people.ids().enumerate().map(|(at, id)| (id, at)).collect();
+    let acre: std::collections::HashMap<PlaceId, usize> =
+        world.places.ids().enumerate().map(|(at, id)| (id, at)).collect();
     let entries: Vec<String> = world
         .chronicle
         .at_least(Salience::Pivotal)
@@ -501,30 +515,41 @@ fn events(world: &World) -> String {
             // handles are erased to bare bits, where a place and a person of the same age
             // and slot are the same number. Filing by it would post somebody's move into
             // a stranger's life. Matching here keeps the handles typed.
-            let (kind, folk): (&str, Vec<PersonId>) = match record.kind {
-                Happening::WorldBegins { .. } => ("world", vec![]),
+            //
+            // The same for the places an event names, so a settlement has a history for the
+            // same reason a person has a life. Only what the happening actually says: a move
+            // names where it went, a change of character names the place it happened to.
+            // Where somebody was standing when they were born is not in the record and is
+            // not guessed at here.
+            let (kind, folk, ground): (&str, Vec<PersonId>, Vec<PlaceId>) = match record.kind {
+                Happening::WorldBegins { .. } => ("world", vec![], vec![]),
                 Happening::PersonBorn {
                     child,
                     mother,
                     father,
-                } => ("birth", vec![child, mother, father]),
-                Happening::PersonDies { person, .. } => ("death", vec![person]),
-                Happening::PersonPairs { person, with } => ("pairing", vec![person, with]),
-                Happening::PersonMoves { person, .. } => ("move", vec![person]),
-                Happening::PersonMentored { person, by } => ("patron", vec![person, by]),
-                Happening::PlaceChanges { .. } => ("place", vec![]),
+                } => ("birth", vec![child, mother, father], vec![]),
+                Happening::PersonDies { person, .. } => ("death", vec![person], vec![]),
+                Happening::PersonPairs { person, with } => ("pairing", vec![person, with], vec![]),
+                Happening::PersonMoves { person, to } => ("move", vec![person], vec![to]),
+                Happening::PersonMentored { person, by } => ("patron", vec![person, by], vec![]),
+                Happening::PlaceChanges { place, .. } => ("place", vec![], vec![place]),
                 // The rarest thing in the chronicle and the only one that changes what is
                 // *possible* rather than what happened.
-                Happening::PersonWorksItOut { person, .. } => ("advance", vec![person]),
-                Happening::PersonRetrains { person, .. } => ("trade", vec![person]),
-                Happening::PersonArrives { person } => ("other", vec![person]),
-                Happening::PersonDoes { person, .. } => ("other", vec![person]),
-                _ => ("other", vec![]),
+                Happening::PersonWorksItOut { person, .. } => ("advance", vec![person], vec![]),
+                Happening::PersonRetrains { person, .. } => ("trade", vec![person], vec![]),
+                Happening::PersonArrives { person } => ("other", vec![person], vec![]),
+                Happening::PersonDoes { person, .. } => ("other", vec![person], vec![]),
+                _ => ("other", vec![], vec![]),
             };
             let who: Vec<String> = folk
                 .iter()
                 .filter_map(|id| slot.get(id))
                 .map(|at| at.to_string())
+                .collect();
+            let here: Vec<String> = ground
+                .iter()
+                .filter_map(|id| acre.get(id))
+                .map(|at: &usize| at.to_string())
                 .collect();
             format!(
                 "{{{}}}",
@@ -532,6 +557,7 @@ fn events(world: &World) -> String {
                     field("year", &format!("{year}")),
                     field("kind", &quoted(kind)),
                     field("who", &format!("[{}]", who.join(","))),
+                    field("here", &format!("[{}]", here.join(","))),
                     field("text", &quoted(&plain(&render::line(world, record)))),
                 ]
                 .join(",")

@@ -2534,6 +2534,14 @@ them than where it is not.
   model of the *firm*, which is the item above.
 - **Tools are one thing.** A plough and a loom are the same object, so a place cannot be
   well-equipped for one trade and not another.
+- **And at the sizes this project actually runs, it is mostly notional.** Counted at ninety
+  years over four seeds: farmers 165–249, and hewers and smiths in the low single figures or
+  *zero*. §27.4 says a trade exists when there is food enough to spare a hand for it, and at
+  120 founders on ground that is only just enough, there is not. The chain is real — the tests
+  in `work` build it from an empty world — and the worlds this project runs are too poor and
+  too small to climb it. Not a regression and not new: measured the same way before and after
+  §30's work, and worth writing down because a five-trade economy that is 90% farmers reads
+  from the outside like a bug and is not one.
 
 ## 28. Ground that is good at different things
 
@@ -2836,6 +2844,16 @@ for centuries four and five and stops holding in century six. Whether hunger com
 the extra people is the next thing to measure: it read 0.267 at 500 and 0.243 at 600, so not
 yet.
 
+**Both tables predate §30 and neither has been re-measured.** Every number above comes from a
+world whose households spent half their moves going straight back where they came from, and
+which therefore never finished sorting itself into one quarter. §30.4 changed that, and §30.5
+records that the world it leaves behind is more concentrated and poorer for it, so these levels
+describe a world that no longer exists. What was being claimed is the *shape* — a long flat, a
+threshold, then a curve that bends — and nothing in §30 touches the mechanism that produces it.
+The levels are left standing and labelled rather than quietly restated, because re-running six
+centuries is an afternoon and pretending the old numbers still apply is worse than saying they
+do not.
+
 ### 29.8 An advance is a thing that happened to somebody
 
 `Happening::PersonWorksItOut` is the rarest thing in the chronicle and the only one that
@@ -2996,14 +3014,46 @@ watched one is not, and some of them starve for it. That is the observer setting
 rate, which is the one fault this project treats as disqualifying. It is not worth a
 better-looking map.
 
-So the term stays inert and is now *labelled* inert, with the measurement in its doc comment,
-and the concentration is an open problem rather than a fixed one. What is wanted is a
-counterforce to sorting that does not read the population's distribution — something like a
-place's ground being worth less per head the more heads work it, which is already in
-`work::make` through the Cobb–Douglas exponent and simply does not reach `appeal`. That is the
-next thing to try and it has not been tried.
+So the term stays inert and is now *labelled* inert, with the measurement in its doc comment.
 
-### 30.5.1 And the same shape again, in trades — not yet fixed
+#### The second try: hunger, which is at least honest
+
+What is wanted is a counterforce that does not read the population's distribution. There is one
+already computed and not consulted: `Place::want`, how far short of feeding its people a place
+fell, per head. It needs no coefficient — `want` and `quality` are both a fraction of what a
+person needs — and it comes from the economy rather than from a household count, so both detail
+tiers run the same code to get it. It is also the honest reason to leave somewhere: crowding
+pushes people out of a packed quarter for a preference, hunger pushes them out of one that
+cannot feed them.
+
+It is nearly free — tier neutrality is untouched (3 starved against 2), the quarters diverge
+*more* rather than less (spread 0.140 → 0.175), and one fewer stands empty (0.40 → 0.35). And
+it barely touches the thing it was added for: concentration goes 0.89 → 0.87.
+
+Reverted, for two hundredths. It also breaks §21's ceiling in a way worth noticing — with
+hunger a reason to leave, a crowded founding relieves its own hunger by scattering, so the
+population at which *anywhere* is short goes up again. That is the mechanism working, and it is
+not worth having a Malthusian check that migration can dodge in exchange for 0.02.
+
+#### Why neither works: nothing local is scarce
+
+The reason is upstream of both attempts, and it is stated in `Place::build_for`'s own comment
+without its consequence being drawn: the ground's carrying capacity *"does not bind at the
+populations this simulation currently runs — a grid cell is most of a country"*. Housing builds
+out to meet demand. Land does not run out. So a quarter that absorbs the entire world is not
+worse off for it in any term the model computes, `want` stays at zero because the ground feeds
+everybody comfortably, and there is simply no cost to everyone living in one place.
+
+Sorting is a positive feedback and this world has nothing negative to balance it with. Adding
+one *as a preference* — which is what crowding aversion is — buys a better-looking map at the
+price of §21.1. The fix has to be a scarcity that is really there, which means the grid getting
+fine enough that a place is a place rather than most of a country. That is §6's business and
+not a constant anybody can tune.
+
+Recorded rather than fixed, and the two attempts recorded with it so the next person does not
+spend the afternoon on them again.
+
+### 30.5.1 And the same shape again, in trades
 
 The very next life the panel was pointed at, with the moving fixed, read:
 
@@ -3018,15 +3068,60 @@ one more hand in it, everybody in a place reads the same array in the same year,
 picks the same argmax — so the trade that was short is oversupplied by the people who noticed,
 and next year the signal points back. A cobweb, textbook.
 
-Two things are wrong and they are separable. The comparison is asked the wrong way — for
-somebody already at the forge, the question is what a year is worth with their hands moved
-from A to B, not the marginal value of an extra hand in each, which is the housing bug in
-another costume. And the response is simultaneous: `RETRAINING`'s 8% damps the settled, and the
-young are ungated, so they move as one.
+Two things looked wrong, and one of them was not. The comparison *seemed* to be asked the wrong
+way — for somebody already at the forge, the question is what a year is worth with their hands
+moved from A to B, not the marginal value of an extra hand in each, which reads like the housing
+bug in another costume. It isn't. Both differences come out as the marginal value of B less the
+marginal value of A, and on 80 switches across four allocations the two never once disagree
+about whether a switch is worth making — `the_marginal_comparison_is_the_switching_question`
+measures it rather than arguing it. The resemblance to the housing bug was the whole of the
+evidence, and it was wrong.
 
-Left as it is, deliberately. The first is a bug and the second is a modelling choice about what
-people can know about each other's plans, and running them together would make it impossible to
-say which did what.
+So the cobweb has one cause: **the decision is simultaneous**. `RETRAINING`'s 8% damps the
+settled; the young were ungated, reconsidering their trade every year with certainty, and
+everybody in a place reads the same `worth` array in the same instant, so they moved as one and
+overshot together.
+
+Nobody reconsiders their livelihood on a schedule shared with their neighbours. `TRYING_THINGS`
+gives the unsettled a yearly chance of a quarter — about once every four years, so two or three
+times before they settle — instead of every year:
+
+| chance | changes of trade | straight back |
+|---|---|---|
+| 1.00 (was) | 3,692 | 24% |
+| 0.40 | 1,951 | 14% |
+| 0.25 | 1,530 | 11% |
+| 0.10 | 1,176 | 9% |
+
+Monotone, so the choice is where the young stop finding a trade at all rather than where the
+number bottoms out. A quarter is where reconsidering is an occasional event in a life rather
+than an annual review.
+
+What did *not* move is the share of a year's changes going to one and the same trade: 90%,
+before and after. That number turns out not to be the diagnosis it looked like — when one trade
+is genuinely short, everybody who reconsiders *should* move into it, and a herd is the correct
+response to a shortage. The going-back rate is the one that means something, and it halved.
+
+### 30.5.2 A settlement has a history for the same reason
+
+The person scene reads the chronicle filtered by participant. The settlement scene now reads it
+filtered by *place*, which is the same instrument turned ninety degrees and costs one more field
+on an event — the places the happening actually names. A move names where it went; a change of
+character names the place it happened to. Where somebody was standing when they were born is not
+in the record and is not guessed at.
+
+Arrivals are listed one at a time rather than totalled, on the same reasoning as §30.2: a
+quarter that took nine households in four years and then none for thirty is telling you
+something a count would hide.
+
+It says the concentration out loud, which no number had. Stanhythe, seed 0x221, year 220:
+
+> 117 · Stanhythe has become rural
+> 124 · Lilosk Thaenith moves to Stanhythe · Suldia Tas moves to Stanhythe · …
+
+Two people living there, in one household, with room for seventy-three, affluence 0.09, and a
+roll-call of a farmer and an outcast. §30.5 measures that as `empty 0.40`. This is what it looks
+like from inside the town.
 
 ### 30.6 What this says about the instruments
 

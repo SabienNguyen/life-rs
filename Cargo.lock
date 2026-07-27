@@ -161,6 +161,7 @@ dependencies = [
  "planet",
  "sim",
  "sim-core",
+ "society",
 ]
 
 [[package]]

@@ -207,3 +207,70 @@ fn every_link_of_the_chain_can_be_reached_from_the_bottom() {
         holdings.tools
     );
 }
+
+#[test]
+fn the_marginal_comparison_is_the_switching_question() {
+    // `worth_taking_up` values each trade by running the year with one more hand in it, and
+    // somebody deciding whether to leave A for B compares those two numbers. What they
+    // actually face is different on its face — a year with *their* hands moved from A to B,
+    // one fewer at the old bench rather than one more everywhere.
+    //
+    // Those are the same question to first order, since both differences come out as the
+    // marginal value of B less the marginal value of A, but "to first order" is an argument
+    // and this is a measurement. It matters because §30.5.1 claimed the difference was a
+    // bug, on exactly that argument, without checking. It is not one, and the cobweb has a
+    // single cause rather than two.
+    let ground = Ground::even(1.0);
+    let holdings = Holdings {
+        tools: 30.0,
+        stock: 40.0,
+    };
+    let shapes = [
+        hands(40.0, 8.0, 8.0, 6.0, 4.0),
+        hands(20.0, 20.0, 20.0, 20.0, 20.0),
+        hands(70.0, 2.0, 2.0, 2.0, 2.0),
+        hands(10.0, 30.0, 30.0, 10.0, 10.0),
+    ];
+
+    let (mut compared, mut disagreed) = (0, 0);
+    let mut worst: f32 = 0.0;
+    for shape in shapes {
+        let workers = shape.total();
+        let (made, held) = make(&shape, ground, &holdings);
+        let base = value_of(&made, &held, workers, ground, 0.5);
+        let marginal: Vec<f32> = Trade::ALL
+            .into_iter()
+            .map(|t| {
+                let mut more = shape;
+                more.set(t, more.at(t) + 1.0);
+                let (m, h) = make(&more, ground, &holdings);
+                value_of(&m, &h, workers + 1.0, ground, 0.5) - base
+            })
+            .collect();
+
+        for from in Trade::ALL {
+            if shape.at(from) < 1.0 {
+                continue;
+            }
+            for to in Trade::ALL.into_iter().filter(|t| *t != from) {
+                let mut moved = shape;
+                moved.set(from, moved.at(from) - 1.0);
+                moved.set(to, moved.at(to) + 1.0);
+                let (m, h) = make(&moved, ground, &holdings);
+                let truth = value_of(&m, &h, workers, ground, 0.5) - base;
+                let proxy = marginal[to as usize] - marginal[from as usize];
+                worst = worst.max((truth - proxy).abs());
+                compared += 1;
+                if (truth > 0.0) != (proxy > 0.0) {
+                    disagreed += 1;
+                }
+            }
+        }
+    }
+    assert!(compared > 50, "not enough cases to say anything: {compared}");
+    assert!(
+        disagreed == 0,
+        "{disagreed} of {compared} switches disagree on whether they are worth making, \
+worst gap {worst:.4}"
+    );
+}

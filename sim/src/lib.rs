@@ -219,6 +219,17 @@ const SWITCHING: f32 = 0.20;
 /// exist at all rather than sloshing between trades every few years.
 const RETRAINING: f64 = 0.08;
 
+/// The yearly chance that somebody not yet settled into a trade reconsiders theirs.
+///
+/// Higher than `RETRAINING` — the young have less to put down — but not one, which is what it
+/// was. Everybody in a place reads the same valuation in the same instant, so if they all act
+/// on it in the same year they all move into whatever was short and it is short no longer:
+/// **88% of a year's changes of trade went to the same trade**, and the signal pointed the
+/// other way the year after. A cobweb, and the standard cause of one is that the decision is
+/// simultaneous. Nobody reconsiders their livelihood on a schedule shared with their
+/// neighbours, and staggering it is what turns an oscillation into a convergence.
+const TRYING_THINGS: f64 = 0.25;
+
 /// The yearly chance that somebody with a whole year of slack, in a well-connected place,
 /// works something out.
 ///
@@ -2213,8 +2224,11 @@ impl World {
             if settled && better < SWITCHING * worth[mine as usize].abs().max(1.0) {
                 continue;
             }
+            // Whether they get round to it this year. Everybody rolls, not only the settled:
+            // an unsettled person used to reconsider every year with certainty, which is what
+            // made the whole cohort move as one body.
             let mut rng = self.moment_stream(Domain::Chance, id.to_bits() ^ 0x_7ade, at);
-            if settled && !rng.chance(RETRAINING) {
+            if !rng.chance(if settled { RETRAINING } else { TRYING_THINGS }) {
                 continue;
             }
             if let Some(person) = self.people.get_mut(id) {
@@ -4136,6 +4150,54 @@ mod tests {
         assert!(
             returns * 10 < moves,
             "{returns} of {moves} moves went straight back where they came from"
+        );
+    }
+
+    #[test]
+    fn a_trade_is_something_people_settle_into() {
+        // The same question as `moving_is_not_a_thing_people_do_back_and_forth`, asked of
+        // livelihoods. Everybody in a place values the trades from the same numbers in the
+        // same instant, so if they all act on them in the same year they all pile into
+        // whatever was short and it is short no longer — and the signal points the other way
+        // the year after. A cobweb, and it showed up as lives reading "gives up cook for
+        // farmer, gives up farmer for cook" five times over.
+        //
+        // Stepped a year at a time because the chronicle cannot answer this: it records a
+        // *settled* person changing trade, and the young do most of the moving. Measured at
+        // 24% of all changes going back to the trade before last, and 11% after staggering
+        // when people get round to reconsidering.
+        let mut world = World::genesis(WorldSeed::from_u128(0x21), 80);
+        world.record_only(Salience::Pivotal);
+        world.set_detail_budget(100_000);
+
+        let mut path: std::collections::BTreeMap<PersonId, Vec<economy::Trade>> = Default::default();
+        for _ in 0..50 {
+            let before: std::collections::BTreeMap<PersonId, economy::Trade> = world
+                .people
+                .iter()
+                .filter(|(_, p)| p.is_alive())
+                .map(|(id, p)| (id, p.trade()))
+                .collect();
+            world.run_for(Duration::from_years(1));
+            for (id, person) in world.people.iter() {
+                if !person.is_alive() {
+                    continue;
+                }
+                if before.get(&id).is_some_and(|was| *was != person.trade()) {
+                    path.entry(id).or_default().push(person.trade());
+                }
+            }
+        }
+
+        let (mut changes, mut back) = (0usize, 0usize);
+        for steps in path.values() {
+            changes += steps.len();
+            back += (2..steps.len()).filter(|i| steps[*i] == steps[i - 2]).count();
+        }
+        assert!(changes > 30, "too few changes of trade to say anything: {changes}");
+        assert!(
+            back * 5 < changes,
+            "{back} of {changes} changes of trade went straight back to the trade before last"
         );
     }
 
