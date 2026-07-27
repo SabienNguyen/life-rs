@@ -2973,23 +2973,18 @@ impl World {
             .map(|c| c.name)
     }
 
-    /// Children take on the character of wherever they are living.
+    /// Children take on the character of wherever they are living, and everybody takes on
+    /// its habits.
     fn absorb_upbringings(&mut self, at: Time) {
         let ids: Vec<PersonId> = self.people.ids().collect();
         for id in ids {
-            let quality = self
+            let here = self
                 .society
                 .place_of(id)
                 .and_then(|p| self.places.get(p))
-                .map(|p| p.env.upbringing())
-                .unwrap_or(0.0);
-
-            let opportunity = self
-                .society
-                .place_of(id)
-                .and_then(|p| self.places.get(p))
-                .map(|p| p.env.job_opportunity)
-                .unwrap_or(0.0);
+                .map(|p| (p.env.upbringing(), p.env.job_opportunity, p.env.norms));
+            let (quality, opportunity, norms) =
+                here.unwrap_or((0.0, 0.0, [0.5; person::Deed::COUNT]));
 
             let Some(person) = self.people.get_mut(id) else {
                 continue;
@@ -2998,6 +2993,12 @@ impl World {
                 continue;
             }
             let age = person.age(at).years();
+
+            // Everybody, at every age, and never finished: what somebody takes to be normal
+            // is learned by watching, so it lags where they are and remembers where they
+            // were. §17.2 — the ambient version had a newcomer as steeped in local practice
+            // as somebody born there, which is the one thing a norm is not.
+            person.learn_norms(&norms, age, 1.0);
 
             if !person.stage(at).is_dependent() {
                 person.work_amid(opportunity, 1.0);

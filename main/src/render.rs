@@ -431,6 +431,7 @@ pub fn reasoning(world: &World, id: person::PersonId) -> Vec<String> {
             values: &p.values,
             needs: p.needs(),
             age_years: p.age(world.now()).years(),
+            norms: p.norms(),
         },
         &situation,
     );

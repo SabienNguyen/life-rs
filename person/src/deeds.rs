@@ -209,6 +209,9 @@ pub struct Mind<'a> {
     pub values: &'a Values,
     pub needs: &'a Needs,
     pub age_years: f64,
+    /// What *this person* takes to be usual here, which is not the same as what is usual
+    /// here — see `Person::learn_norms`.
+    pub norms: &'a [f32; Deed::COUNT],
 }
 
 /// Where a decision is being made.
@@ -307,8 +310,10 @@ pub fn score_all(mind: &Mind<'_>, situation: &Situation) -> [f32; Deed::COUNT] {
         };
         let payoff_term = situation.env.payoff[i] * discount;
 
-        // Channel 4: local practice pulls, in proportion to how much this person yields.
-        let norm_term = (1.0 + conformity * (situation.env.norms[i] - 0.5)).max(0.05);
+        // Channel 4: practice pulls, in proportion to how much this person yields — and it
+        // is *their* picture of local practice, not the place's own record of it. Somebody
+        // who moved last year is pulled by where they came from.
+        let norm_term = (1.0 + conformity * (mind.norms[i] - 0.5)).max(0.05);
 
         scores[i] = need_term
             * deed.appeal(mind.personality, mind.values)
@@ -408,6 +413,10 @@ mod tests {
                 values: &self.values,
                 needs: &self.needs,
                 age_years: 30.0,
+                // Somebody with no opinion about what is usual, so these tests keep
+                // measuring what they were written to measure. The ones about the norm
+                // channel set it explicitly.
+                norms: &[0.5; Deed::COUNT],
             }
         }
     }
@@ -502,18 +511,29 @@ mod tests {
     }
 
     #[test]
-    fn local_practice_pulls_on_the_conforming() {
+    fn what_somebody_takes_to_be_usual_pulls_on_the_conforming() {
+        // The pull comes from the *person's* picture of local practice, not the place's own
+        // record of it. Two people standing in the same room, one who has watched these
+        // neighbours all their life and one who arrived from somewhere that did the
+        // opposite, do not face the same decision — which is the whole of §17.2's second
+        // gap, and is why the two norm vectors here belong to the minds rather than to the
+        // situation they share.
         let mut f = Fixture::average();
         f.needs.set(Need::Purpose, 0.5);
+        let here = Situation::plain(DayPhase::Morning);
 
-        let mut common = Situation::plain(DayPhase::Morning);
-        common.env.norms[Deed::Work as usize] = 1.0;
-        let mut unheard_of = Situation::plain(DayPhase::Morning);
-        unheard_of.env.norms[Deed::Work as usize] = 0.0;
+        let mut steeped = f.mind();
+        let common = [1.0; Deed::COUNT];
+        steeped.norms = &common;
+
+        let mut newcomer = f.mind();
+        let unheard_of = [0.0; Deed::COUNT];
+        newcomer.norms = &unheard_of;
 
         assert!(
-            score_all(&f.mind(), &common)[Deed::Work as usize]
-                > score_all(&f.mind(), &unheard_of)[Deed::Work as usize]
+            score_all(&steeped, &here)[Deed::Work as usize]
+                > score_all(&newcomer, &here)[Deed::Work as usize],
+            "somebody who has seen everyone here work should be readier to"
         );
     }
 

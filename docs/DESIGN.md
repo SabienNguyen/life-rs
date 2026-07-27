@@ -889,8 +889,8 @@ with the memory model already specified — memory is lossy and salience-weighte
 so beliefs *should* drift from reality, and stale beliefs about people rarely seen are a
 consequence rather than a special case. Cost is one small struct per tie.
 
-**Norms as learned, not ambient.** §14.2's fourth channel reads `norms` off the place, as
-though everyone were equally steeped in them. Humalike's framing — agents pick up hidden
+**Norms as learned, not ambient.** *(Built — see §17.2.1.)* §14.2's fourth channel read
+`norms` off the place, as though everyone were equally steeped in them. Humalike's framing — agents pick up hidden
 rules and tone *from a group* — is the better model: each person carries their own
 estimate of local norms, learned by observation, weighted by the developmental windows of
 §14.3. That single change earns three things the ambient version cannot: migrants who
@@ -900,6 +900,36 @@ imposed by editing a field.
 
 Both belong in Phase 3 (environment) and Phase 4 (chronicle and memory) respectively, not
 in Phase 1 — they need relationships and places to exist first.
+
+### 17.2.1 What is normal, learned by watching
+
+Built. `Person` carries its own `norms` — its estimate of §14.2's fourth channel rather than
+the channel itself — and `score_all` reads that instead of the place's. Everybody learns, at
+every age, by moving towards what they see: fast in the first years and in adolescence, and
+at a quarter of that rate for the rest of a life.
+
+The last clause is the one that matters and it is deliberately *not* `developmental_weight`,
+which falls to nothing at twenty. That function exists so where you were raised cannot be
+rewritten by where you live, which is right for temperament and wrong for manners. A rate
+that stopped at twenty would make every migrant a permanent foreigner; a flat one would make
+nobody a migrant at all. A quarter is what makes partial assimilation the ordinary case.
+
+Three things fall out that the ambient version could not have, and
+`what_is_normal_is_learned_and_not_breathed_in` asserts all three, because any one of them
+alone could be had by accident:
+
+- **A childhood among these people leaves their habits.** Eighteen years of watching puts
+  somebody above 0.8 against a local 0.9.
+- **Adolescence is when it happens fastest** — the same three years at fifteen move somebody
+  more than 0.15 further than at forty-five.
+- **A migrant brings the old country and only partly assimilates.** Twenty years somewhere
+  new moves them, and does not finish the job.
+
+The third is the point. Two people standing in the same room, one raised among these
+neighbours and one who arrived from somewhere that did the opposite, no longer face the same
+decision — and cultural change is now something *transmitted between people* rather than
+imposed by editing a field. §24's peoples and countries were already built on `norms`
+drifting; this is what makes the drift travel through anybody.
 
 ### 17.3 Where an LLM belongs, and where it does not
 
@@ -2399,10 +2429,12 @@ This fills the gap between "people with different numbers" and "a society with p
 it". It does not fill the gap to a *real* society, and the honest list of what is still
 absent is longer than what was added:
 
-- **Occupation.** Roles here are read off how people spend their days, but the economy has
-  one good and one kind of work. Nobody is a smith, because there is nothing to smith and no
-  one to trade with if there were. Real division of labour needs `economy` to carry more than
-  one product, and that is the largest single thing this world does not have.
+- ~~**Occupation.**~~ *Closed by §27.* This said the largest single thing missing was an
+  `economy` carrying more than one product, so that nobody could be a smith because there was
+  nothing to smith. There are now five goods and five trades, people take them up and give
+  them up, and §27.9 records what is thin about it. Left here struck through rather than
+  deleted, because a list of gaps that quietly loses its entries stops being evidence of
+  anything.
 - **Law.** The only sanction is a door that does not open. There is no rule anybody states,
   no judgement, no penalty anybody imposes on behalf of anybody else.
 - **Language, religion, ritual, kinship rules.** §24.4 puts these out of scope and they stay

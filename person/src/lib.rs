@@ -181,6 +181,16 @@ pub struct Person {
     opportunity: (f32, f32),
     /// Childhood exposure, accumulating until maturity: weighted sum and total weight.
     upbringing: (f32, f32),
+    /// What this person takes to be normal, learned by watching — their own estimate of
+    /// §14.2's fourth channel rather than the channel itself.
+    ///
+    /// The ambient version read `norms` straight off the place, as though everyone in it
+    /// were equally steeped in local practice and a newcomer were as steeped as somebody
+    /// born there. Carrying it per person earns three things that cannot be had otherwise:
+    /// migrants who bring the old country's habits and only partly assimilate, adolescence
+    /// as the age when they are picked up fastest, and cultural change that is *transmitted*
+    /// between people rather than imposed by editing a field.
+    norms: [f32; Deed::COUNT],
     matured: bool,
 
     /// What they do for a living.
@@ -254,6 +264,8 @@ impl Person {
             patronage: 1.0,
             opportunity: (0.0, 0.0),
             upbringing: (0.0, 0.0),
+            // No opinion about what is normal until they have seen some of it.
+            norms: [0.5; Deed::COUNT],
             matured: false,
             trade: work::Trade::Farmer,
             doings: [0; Deed::COUNT],
@@ -375,6 +387,27 @@ impl Person {
         if weight > 0.0 {
             self.upbringing.0 += quality * weight;
             self.upbringing.1 += weight;
+        }
+    }
+
+    /// What this person takes to be usual around here.
+    pub fn norms(&self) -> &[f32; Deed::COUNT] {
+        &self.norms
+    }
+
+    /// Watch what people here do for `years`, and move towards it.
+    ///
+    /// Unlike `absorb` this never stops: an adult who moves does eventually pick up local
+    /// habits, just slowly enough that where they came from stays legible. That asymmetry
+    /// is the whole point — a rate that fell to nothing at twenty would make every migrant
+    /// a permanent foreigner, and one flat across a life would make nobody a migrant at all.
+    pub fn learn_norms(&mut self, around: &[f32; Deed::COUNT], age_years: f64, years: f32) {
+        if years <= 0.0 {
+            return;
+        }
+        let rate = (NORM_LEARNING * norm_weight(age_years) * years).clamp(0.0, 1.0);
+        for (mine, theirs) in self.norms.iter_mut().zip(around) {
+            *mine += (theirs - *mine) * rate;
         }
     }
 
@@ -554,6 +587,7 @@ impl Person {
                 values: &self.values,
                 needs: &self.needs,
                 age_years: self.age(now).years(),
+                norms: &self.norms,
             },
             situation,
         )
@@ -566,6 +600,7 @@ impl Person {
                 values: &self.values,
                 needs: &self.needs,
                 age_years: self.age(now).years(),
+                norms: &self.norms,
             },
             situation,
             rng,
@@ -856,6 +891,30 @@ const COPING: f32 = 0.25;
 /// against no hunger at all. §21.2 has the sweep.
 const HUNGER_COSTS: f32 = 0.9;
 
+/// How fast somebody's picture of local practice moves towards what they see, per year at
+/// the age it is learned fastest.
+///
+/// A half-life of about three adolescent years, and about fourteen adult ones. Fast enough
+/// that a child raised somewhere holds that place's habits by the time they are grown; slow
+/// enough that somebody who arrives at forty still does not.
+const NORM_LEARNING: f32 = 0.20;
+
+/// How readily somebody takes on local practice at this age, against the fastest.
+///
+/// The same windows as `developmental_weight` and deliberately not the same function: that
+/// one falls to *nothing* at maturity, because where you were raised must stop being
+/// rewritten by where you live. Learning what the neighbours do is not that — it goes on all
+/// your life, just far more slowly, which is what makes partial assimilation a thing that
+/// happens rather than an all-or-nothing switch.
+fn norm_weight(age_years: f64) -> f32 {
+    match age_years {
+        a if a < 5.0 => 1.2,
+        a if a < 13.0 => 1.0,
+        a if a < 20.0 => 1.2,
+        _ => 0.25,
+    }
+}
+
 /// How much a year at this age shapes someone.
 ///
 /// The developmental windows: in utero and the first years count most, adolescence
@@ -950,6 +1009,62 @@ mod tests {
         p.born = Time::ORIGIN;
         p.updated = Time::ORIGIN + Duration::from_years(30);
         p
+    }
+
+    #[test]
+    fn what_is_normal_is_learned_and_not_breathed_in() {
+        // §17.2's second gap. The ambient version read local practice straight off the
+        // place, so a newcomer was as steeped in it as somebody born there and a migrant
+        // assimilated completely the day they arrived. Three things follow from carrying it
+        // per person, and this asserts all three because any one alone could be had by
+        // accident.
+        let here = [0.9; Deed::COUNT];
+        let work = Deed::Work as usize;
+
+        // One: it is learned at all, and a childhood among these people leaves their habits.
+        let mut child = somebody();
+        for year in 0..18 {
+            child.learn_norms(&here, year as f64, 1.0);
+        }
+        assert!(
+            child.norms()[work] > 0.8,
+            "a childhood here should leave its habits: {:.2}",
+            child.norms()[work]
+        );
+
+        // Two: adolescence is when it happens fastest. The same three years, once inside the
+        // window and once in middle age.
+        let (mut young, mut old) = (somebody(), somebody());
+        for _ in 0..3 {
+            young.learn_norms(&here, 15.0, 1.0);
+            old.learn_norms(&here, 45.0, 1.0);
+        }
+        assert!(
+            young.norms()[work] > old.norms()[work] + 0.15,
+            "the young should pick it up faster: {:.2} against {:.2}",
+            young.norms()[work],
+            old.norms()[work]
+        );
+
+        // Three: a migrant brings the old country and only partly assimilates. Twenty years
+        // is most of a working life and it is still not enough to finish the job.
+        let mut migrant = somebody();
+        for year in 0..18 {
+            migrant.learn_norms(&[0.1; Deed::COUNT], year as f64, 1.0);
+        }
+        let brought = migrant.norms()[work];
+        for _ in 0..20 {
+            migrant.learn_norms(&here, 40.0, 1.0);
+        }
+        let now = migrant.norms()[work];
+        assert!(
+            now > brought + 0.1,
+            "twenty years somewhere should move somebody: {brought:.2} to {now:.2}"
+        );
+        assert!(
+            now < 0.8,
+            "and should not finish the job: {now:.2} against the local 0.90"
+        );
     }
 
     #[test]
