@@ -780,6 +780,42 @@ neighbourhood, a fifth of the variance is explained by either and separable by n
 That **entangled** share is shown as its own quantity instead of being assigned to
 whichever cause a regression happened to enter first.
 
+### 15.1 The sheet was validated on one world, and it is a statistic
+
+`observer::balance::targets` states seven bands the design commits to, with a comment saying a
+measurement outside one *"is a finding, not necessarily a fault — but it should be looked at
+rather than shrugged off"*. Two of the seven were looked at by a test. Elasticity, sibling
+correlation, mobility and the upbringing gap were computed, printed by `--balance`, and
+asserted nowhere, so five bands the design meets could have quietly stopped being met between
+one change and the next. §30 came close: the shared-environment share ran 0.33 before that work
+and 0.21 after — still inside `ENVIRONMENT`, a third of the way to the floor, and nothing would
+have said so.
+
+Measured properly, over three seeds at 160 founders and 120 years:
+
+| seed | genes | upbringing | luck | elasticity | siblings | mobility | gap |
+|---|---|---|---|---|---|---|---|
+| 0x11 | 0.50 | 0.42 | 0.40 | 0.69 | 0.47 | 0.69 | 1.13 |
+| 0x21 | 0.45 | 0.23 | 0.51 | 0.56 | 0.36 | 0.70 | 0.72 |
+| 0x221 | 0.33 | 0.20 | 0.59 | 0.41 | 0.19 | 0.61 | 0.61 |
+
+**Four of the seven leave their band on some seed, and each of those four is comfortably inside
+it on another.** A few hundred lives is a small sample and its statistics wander, so a single
+seed reading "within target" — which is what the `--balance` sheet has always shown, and what
+this document has quoted from — is close to no evidence. Averaged over the three, exactly two
+are out: luck and intergenerational elasticity, which is the pair the existing test already
+names from its own four-seed measurement. Those two are quarantined with bounds rather than
+having their bands widened.
+
+It depends on the size of the world as well. The same seeds at 110 founders and 110 years put
+the upbringing share at 0.17, *below* its floor, and bring elasticity back inside its band —
+because a world that small and that young has barely had time for its neighbourhoods to become
+different places, so there is less shared environment to find and less of it to hand down.
+Which means §15's validation is contingent on the fixture, and was not said to be.
+
+Both sheets are in `balance_tests.rs` so the dependence is on the record rather than waiting to
+be rediscovered.
+
 ## 16. Families, society, and the chronicle
 
 ```rust

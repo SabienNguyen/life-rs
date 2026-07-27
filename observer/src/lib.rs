@@ -7,6 +7,8 @@
 pub mod balance;
 pub mod dossier;
 #[cfg(test)]
+mod balance_tests;
+#[cfg(test)]
 mod dossier_tests;
 
 pub use balance::{Balance, Shares, measure};
