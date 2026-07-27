@@ -422,16 +422,15 @@ impl Bonds {
     /// deciding who to spend an evening with. The caller samples; this picks.
     /// How many of somebody's friends stand with each other person they could meet.
     ///
-    /// Triadic closure, tabulated. Pulled out of `choose_company` and computed **once a year
-    /// rather than once an evening**, because it is very nearly the same table all year and
-    /// rebuilding it sixteen times was, after one round of fixing, still a third of a coarsely
-    /// simulated world.
+    /// Triadic closure, tabulated. Walking a person's friends' ties is quadratic in their own
+    /// friendships, which Dunbar bounds; asking the question the obvious way round — for each
+    /// candidate, how many of my friends know them — is quadratic in the size of the *town*,
+    /// which nothing bounds, and was sixty per cent of a coarsely simulated run before this.
     ///
-    /// Walking a person's friends' ties is quadratic in their own friendships, which Dunbar
-    /// bounds. Asking the question the obvious way round — for each candidate, how many of my
-    /// friends know them — is quadratic in the size of the *town*, which nothing bounds, and
-    /// was sixty per cent of a run before that.
-    pub fn friends_of_friends(&self, who: PersonId) -> Vec<(PersonId, u32)> {
+    /// Built fresh on every call. It was hoisted out to once a year on the theory that it is
+    /// nearly the same table all year, and that **measured no faster at all** while making the
+    /// table a year stale — so it came back. The remaining cost is not here.
+    fn friends_of_friends(&self, who: PersonId) -> Vec<(PersonId, u32)> {
         let mut through: Vec<(PersonId, u32)> = Vec::new();
         for (friend, mine) in self.of(who) {
             if !mine.allied() {
@@ -454,9 +453,9 @@ impl Bonds {
         &self,
         who: PersonId,
         to_hand: &[PersonId],
-        through: &[(PersonId, u32)],
         rng: &mut Rng,
     ) -> Option<PersonId> {
+        let through = self.friends_of_friends(who);
         // What this person holds, fetched once. `tie` does two tree lookups — the holder and
         // then the subject — and the holder is the same for every candidate, so asking it per
         // candidate does half the work twice.

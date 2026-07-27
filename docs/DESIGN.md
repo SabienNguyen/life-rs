@@ -2603,6 +2603,23 @@ The general shape recurs: the expensive thing was not a wrong algorithm but a ri
 the same question repeatedly. It is worth profiling after every layer that touches everybody,
 because the layers compose and each one looks cheap on its own.
 
+**And then a second round that gained nothing, which is worth recording because it looked at
+least as convincing as the first.** The obvious next step was to hoist the friend-of-friend
+table out to once a year — it is nearly the same table all year, and rebuilding it sixteen
+times *had* to be costing something. It measured 29.2 billion instructions before and 29.7
+after: no faster, and now a year stale. Reverting it and keeping only the change that fetches
+what a chooser holds once instead of once per candidate took the same world from 4.57 seconds
+to **4.15**, which is faster than either.
+
+So the honest ledger is 14.9 seconds to 4.15 — **3.6×** — of which the first change is all of
+it. The second profile is flat: `choose_company` at fourteen per cent, `Bonds::edit` at eleven,
+the reckoning's own map work at ten, and nothing above that. A flat profile is the signal that
+the micro-optimisations are done and anything further needs a structural change.
+
+The lesson is the one this project keeps relearning in different clothes: **a plausible
+optimisation is a hypothesis, and a hypothesis that is not measured is a change of behaviour
+bought for nothing.**
+
 ## 29. Somebody works something out
 
 Every world this simulation has ever run has been permanently medieval, and §23 said why in as
