@@ -2214,19 +2214,19 @@ impl World {
     ///   farming and at nothing else, and two worlds that specialised differently end up good
     ///   at different things.
     ///
-    /// The advance belongs to the **country**, because a country is exactly the set of people
-    /// who can reach each other to copy something — the same unit `learn_and_forget` uses, and
-    /// for the same reason.
+    /// The advance belongs to **everybody in touch**, which is the same unit
+    /// `learn_and_forget` uses and not the same unit as a country: an idea passes between two
+    /// villages that walk to each other whether or not they call themselves the same people.
     fn work_things_out(&mut self, at: Time) {
-        let countries = self.countries();
-        for country in &countries {
+        // Everybody in touch, not everybody of one people — the same unit `learn_and_forget`
+        // uses, and for the same reason. An idea passes between two villages that walk to each
+        // other whether or not they call themselves the same thing.
+        for country in self.neighbourhoods() {
             let places: Vec<PlaceId> = country
-                .places
                 .iter()
                 .filter_map(|slot| self.roster.get(*slot).copied())
                 .collect();
             if country
-                .places
                 .iter()
                 .filter_map(|slot| self.souls_at(*slot))
                 .sum::<u32>()
@@ -2646,13 +2646,12 @@ impl World {
     /// A country that falls below the threshold loses what it knew, at the rate of its
     /// shortfall, and nothing had to be written down to say so.
     fn learn_and_forget(&mut self) {
-        for country in self.countries() {
+        for country in self.neighbourhoods() {
             let minds: u32 = country
-                .places
                 .iter()
                 .filter_map(|at| self.souls_at(*at))
                 .sum();
-            for at in &country.places {
+            for at in &country {
                 let Some(id) = self.roster.get(*at).copied() else {
                     continue;
                 };
@@ -2668,6 +2667,43 @@ impl World {
                 *known = known.after_a_year(minds as f32, reach);
             }
         }
+    }
+
+    /// Places that can reach each other, whatever they think of each other.
+    ///
+    /// The unit technique travels in, and **not** the same unit as a country. A country is
+    /// places that can reach each other *and share a people*; technique does not care whether
+    /// two villages call themselves the same thing, only whether anybody walks between them.
+    ///
+    /// Using countries for this was quietly fatal. Culture fragments a world faster than
+    /// anything else in it — nine hundred people spread over five quarters came out as
+    /// countries of eighty — so the population that had to carry a body of technique was
+    /// always a tenth of the population that could actually have carried it, and no world
+    /// ever held anything. Tasmania is an argument about **contact**, not about identity.
+    pub fn neighbourhoods(&self) -> Vec<Vec<usize>> {
+        let n = self.roster.len();
+        let mut seen = vec![false; n];
+        let mut found = Vec::new();
+        for start in 0..n {
+            if seen[start] {
+                continue;
+            }
+            seen[start] = true;
+            let mut group = vec![start];
+            let mut frontier = vec![start];
+            while let Some(here) = frontier.pop() {
+                for other in 0..n {
+                    if seen[other] || !self.within_reach(here, other) {
+                        continue;
+                    }
+                    seen[other] = true;
+                    group.push(other);
+                    frontier.push(other);
+                }
+            }
+            found.push(group);
+        }
+        found
     }
 
     /// What a place knows how to do.
@@ -4101,14 +4137,14 @@ mod tests {
     }
 
     #[test]
-    fn what_one_person_works_out_the_whole_country_could_do() {
-        // A country is exactly the set of people who can reach each other to copy something,
-        // which is the same unit `learn_and_forget` uses and for the same reason. An idea had
-        // in one of its quarters is an idea the rest of it could act on.
+    fn what_one_person_works_out_everybody_in_touch_could_do() {
+        // Everybody within reach of each other, which is *not* the same as everybody of one
+        // people: an idea passes between two villages that walk to each other whether or not
+        // they call themselves the same thing.
         let world = lineages();
-        for country in world.countries() {
+        for country in world.neighbourhoods() {
             let mut seen: Option<[f32; economy::Trade::COUNT]> = None;
-            for slot in &country.places {
+            for slot in &country {
                 let Some(id) = world.place_at(*slot) else {
                     continue;
                 };
@@ -4120,8 +4156,8 @@ mod tests {
                         for at in 0..economy::Trade::COUNT {
                             assert!(
                                 (here[at] - theirs[at]).abs() < 1e-3,
-                                "{} knows of things its own country does not: {here:?} against {theirs:?}",
-                                country.name
+                                "a place knows of things its neighbours do not: \
+{here:?} against {theirs:?}"
                             );
                         }
                     }
@@ -5577,7 +5613,15 @@ mod the_land_holds {
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(5);
-        let mut world = World::genesis(WorldSeed::from_u128(0x221), 120);
+        let founders: usize = std::env::var("FOUNDERS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(120);
+        let seed: u128 = std::env::var("SEED")
+            .ok()
+            .and_then(|v| u128::from_str_radix(&v, 16).ok())
+            .unwrap_or(0x221);
+        let mut world = World::genesis(WorldSeed::from_u128(seed), founders);
         world.record_only(Salience::Historic);
         world.set_detail_budget(0);
         for century in 1..=centuries {
@@ -5602,8 +5646,22 @@ mod the_land_holds {
                 .iter()
                 .filter(|r| matches!(r.kind, Happening::PersonWorksItOut { .. }))
                 .count();
+            let reachable = world
+                .neighbourhoods()
+                .iter()
+                .map(|g| g.iter().filter_map(|at| world.souls_at(*at)).sum::<u32>())
+                .max()
+                .unwrap_or(0);
+            // How short the world is, which is the number that says whether the trap is
+            // still shut. A world at its ceiling has somebody going without.
+            let short = world
+                .places
+                .iter()
+                .filter(|(id, _)| world.society.households_in(*id).next().is_some())
+                .map(|(_, p)| p.want)
+                .fold(0.0f32, f32::max);
             println!(
-                "year {:>5}: living {:>5} biggest country {:>5} practised {:.3} frontier {:.3} advances {advances}",
+                "year {:>5}: living {:>5} country {:>5} in touch {reachable:>5} practised {:.3} frontier {:.3} advances {advances} short {short:.3}",
                 century * 100,
                 world.living(),
                 biggest,

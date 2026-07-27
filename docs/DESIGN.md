@@ -2702,6 +2702,25 @@ What survives is the shape that matters: **a people loses what it can no longer 
 large one off, shrink it, and it slides back down to what its remaining numbers can hold. That
 is the dark age, and it is the same arithmetic as the discovery that made the light one.
 
+### 29.5.1 Technique travels by contact, not by identity
+
+`learn_and_forget` counted a technique's carriers as the people of one **country** — places
+that can reach each other *and share a people*. That unit was chosen because a country is "the
+set of people who can reach each other to copy something", and the second half of that
+description was quietly doing work the first half did not support.
+
+Culture fragments a world faster than anything else in it. Nine hundred people spread over five
+quarters came out as countries of **eighty**, because drift splits a people long before
+distance does. So the population that had to carry a body of technique was always about a tenth
+of the population that could actually have carried it, and no world ever held anything at all.
+
+Tasmania is an argument about **contact**. Two villages that walk to each other copy each
+other's tools whether or not they call themselves the same thing — and they emphatically do not
+stop when one of them starts calling itself something else. So technique now travels in
+`neighbourhoods`: places connected by reach, whatever they think of each other. Countries keep
+doing what countries are for, which is naming and practice, and stop deciding what anybody is
+able to know.
+
 ### 29.6 A test on a treadmill measures the horizon, not the mechanism
 
 `hunger_is_what_stops_it_and_it_is_felt_where_the_land_is_thin` founded sixty people and ran
