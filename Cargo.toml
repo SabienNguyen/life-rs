@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "biome",
+    "bonds",
     "climate",
     "cosmos",
     "culture",

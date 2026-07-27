@@ -102,7 +102,12 @@ impl Deed {
     }
 
     /// How much this appeals to a given temperament, independent of need.
-    fn appeal(self, personality: &Personality, values: &Values) -> f32 {
+    ///
+    /// Public so that a tier which does not deliberate can still ask how much somebody
+    /// wants a thing — see `sim::World::live_coarsely`, which needs to know how sociable an
+    /// unwatched person is without scoring four thousand decisions to find out. Writing a
+    /// second expression for the same question is how the two tiers drift apart.
+    pub fn appeal(self, personality: &Personality, values: &Values) -> f32 {
         let raw = match self {
             Deed::Socialize => 1.0 + 0.30 * personality.extraversion + 0.20 * values.benevolence,
             Deed::Work => {

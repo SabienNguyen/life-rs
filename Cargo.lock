@@ -13,6 +13,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "bonds"
+version = "0.1.0"
+dependencies = [
+ "genetics",
+ "person",
+ "planet",
+ "sim-core",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -262,6 +272,7 @@ name = "sim"
 version = "0.1.0"
 dependencies = [
  "biome",
+ "bonds",
  "climate",
  "cosmos",
  "culture",

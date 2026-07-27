@@ -142,11 +142,52 @@ const SETBACK: f32 = 0.12;
 /// have widened the gap. Dense mutual-dependence community is what poor neighbourhoods
 /// actually have, and turning it into a way out is what makes them produce escapees
 /// rather than only outcomes.
-const MENTOR_CHANCE: f64 = 0.055;
-const PATRONAGE: f32 = 2.1;
+/// Now scaled by what a *particular* person is worth to you rather than by the average
+/// connectedness of the street. The old flip fired against bonding capital of about a half,
+/// so about 0.028 a year for everybody alike; this fires against one patron's standing and
+/// what they think of you, and at zero for somebody who has cultivated nobody.
+const MENTOR_CHANCE: f64 = 0.09;
+
+/// What a patron is worth, per unit of their own standing.
+///
+/// This used to be a flat multiplier, and making it depend on *who took you up* is the
+/// whole point of there being a patron at all. A well-placed patron opens doors a poor one
+/// cannot, so where you grew up reaches your outcome through the quality of the people you
+/// could get to know there — which is what `bonding_capital` was a stand-in for and is now
+/// the thing itself.
+///
+/// Measured rather than picked: with a flat multiplier and a real patron, patronage became
+/// the dominant term in attainment *and* uncorrelated with anywhere, and §15's shared
+/// environment share collapsed from a fifth to one part in a hundred thousand. Upbringing
+/// had stopped predicting an outcome at all. Scaling by the patron restores it, because a
+/// patron is a person and people are not distributed evenly across places.
+///
+/// A typical patron of middling standing is worth about what the flat 2.1 was.
+const PATRONAGE: f32 = 2.2;
+
+/// How much older, and how much better off, somebody has to be to be a patron rather than
+/// a friend. Patronage is a relation between unequals; between equals it is just company.
+const MENTOR_SENIORITY: f64 = 12.0;
+const MENTOR_MEANS: f32 = 0.10;
+
+/// What being taken up puts you in your patron's debt, in days.
+///
+/// Large, because it is: this is the largest favour anybody in this world does anybody
+/// else, and an obligation that size is not discharged in a season. Whether it is ever
+/// discharged at all is what decides how the two of them end up regarding each other, and
+/// nothing here decides that in advance.
+const MENTOR_FAVOUR: f32 = 40.0;
 
 /// Ages at which someone will still uproot themselves for work.
 const RESTLESS_UNTIL: f64 = 32.0;
+
+/// The most that being spoken for can be worth when somewhere decides whether to take you.
+///
+/// Of the same size as `DISPLACEMENT_MARGIN` and `YOUNG_MOVER_SLACK`, the other two thumbs
+/// on this scale, and for the same reason: these adjust who is admitted at the margin. A
+/// term that could exceed what a household has would not be an adjustment, it would be a
+/// replacement — see `World::backing` for what happened when it was one.
+const VOUCHING: f32 = 0.15;
 
 /// How much more readily somewhere takes in the young.
 ///
@@ -192,6 +233,46 @@ pub const FULL_DETAIL_BUDGET: usize = 400;
 /// is noise rather than bias.
 const WORK_SPELLS_PER_YEAR: f32 = 380.0;
 
+/// Evenings of company an unwatched person keeps in a year, at ordinary appetite.
+///
+/// The same calibration as `WORK_SPELLS_PER_YEAR` and for the same reason: an unwatched
+/// person still has neighbours, and if their ties stood still while a watched person's
+/// grew, then who your friends are would depend on who the observer happened to be looking
+/// at. That is the exact bug class that once had the observer setting the death rate.
+///
+/// A finely simulated person does not use this — their count is what they actually chose.
+/// Measured against that: see `measure_the_society_a_year_makes`.
+const EVENINGS_PER_YEAR: f32 = 640.0;
+
+/// How many separate people a year of company is spread over.
+///
+/// Company is settled once a year, in this many draws, each carrying its share of whatever
+/// evenings the year held. Not once per evening: an evening cost some hundred map edits —
+/// choosing company, meeting, and both parties' gossip — and at six hundred evenings a year
+/// each for four hundred people that was the most expensive thing in the simulation by an
+/// order of magnitude, to model the difference between seeing a friend on Tuesday and on
+/// Wednesday.
+///
+/// Sixteen because `choose_company` concentrates evenings on the people you already know,
+/// so a year of company is not spread over the town; a handful is what that concentration
+/// actually produces.
+const COMPANY_A_YEAR: u32 = 16;
+
+/// How many neighbours somebody weighs up before deciding who to spend an evening with.
+///
+/// Nobody surveys a town. This is what keeps the cost of a social life bounded by Dunbar
+/// rather than by the size of the settlement — without it, an evening in a city of two
+/// thousand costs two thousand times an evening in a hamlet, for no more society.
+const NEIGHBOURS_CONSIDERED: usize = 12;
+
+/// How much of what an ally has over you they will take off your shoulders in a bad year.
+///
+/// Per unit of standing they have above yours, scaled by how warmly they hold you. Not a
+/// transfer of standing — nothing anybody owns changes hands. What moves is the *shortfall*:
+/// see `share_the_shortfall`, where every day of hunger lifted off one person is a day put
+/// onto another, so that a famine kills the same number and no longer picks at random.
+const RELIEF: f32 = 0.6;
+
 /// Something that happened, as the simulation records it — structured, not prose.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Happening {
@@ -228,6 +309,7 @@ pub enum Happening {
     },
     PersonMentored {
         person: PersonId,
+        by: PersonId,
     },
     PlaceChanges {
         place: PlaceId,
@@ -249,8 +331,11 @@ impl Happening {
             Happening::PhaseBegins { planet, .. } => one(planet.to_bits()),
             Happening::PersonArrives { person }
             | Happening::PersonDoes { person, .. }
-            | Happening::PersonDies { person, .. }
-            | Happening::PersonMentored { person } => one(person.to_bits()),
+            | Happening::PersonDies { person, .. } => one(person.to_bits()),
+            // Taking somebody up is an event in the patron's life as much as in theirs.
+            Happening::PersonMentored { person, by } => {
+                Subjects::of(&[person.to_bits(), by.to_bits()])
+            }
             Happening::PersonPairs { person, with } => {
                 Subjects::of(&[person.to_bits(), with.to_bits()])
             }
@@ -308,7 +393,7 @@ impl Happening {
             | Happening::PersonDies { person, .. }
             | Happening::PersonPairs { person, .. }
             | Happening::PersonMoves { person, .. }
-            | Happening::PersonMentored { person } => Some(*person),
+            | Happening::PersonMentored { person, .. } => Some(*person),
             Happening::PersonBorn { child, .. } => Some(*child),
             _ => None,
         }
@@ -379,6 +464,36 @@ pub struct World {
     /// to live there. Arena ids are not dense and places are founded as the world spreads,
     /// so the mapping has to be kept rather than derived.
     roster: Vec<PlaceId>,
+    /// Who holds what about whom.
+    ///
+    /// The one part of this world that is neither a person nor a place: the edges. Kept
+    /// here rather than on the people because a tie is not a possession — it runs between
+    /// two of them, and half of one stored on each is two facts that can disagree.
+    pub bonds: bonds::Bonds,
+    /// Who is to hand, per place, as of the last reckoning.
+    ///
+    /// Rebuilt yearly rather than maintained, because the only thing that moves anybody
+    /// between places is `sort_households`, which runs yearly. A newborn is not company
+    /// and the recently dead are dropped by `Bonds::year`, so a list a few months stale is
+    /// a list of the neighbours.
+    neighbours: std::collections::BTreeMap<PlaceId, Vec<PersonId>>,
+    /// How many evenings of company each person has kept since the last reckoning.
+    ///
+    /// Counted rather than acted on, because who somebody spends an evening with is settled
+    /// once a year for everybody at once — see `COMPANY_A_YEAR`. What this preserves is the
+    /// part that has to come from the person: an extravert chooses `Deed::Socialize` more
+    /// often, so an extravert has more friends, and that is an outcome of their temperament
+    /// rather than a rule about temperaments.
+    evenings: std::collections::BTreeMap<PersonId, u32>,
+    /// Shortfall somebody has taken on for somebody else's sake, not yet gone through.
+    ///
+    /// Hunger given away is not hunger destroyed — see `share_the_shortfall`. It waits here
+    /// until the giver's own birthday comes round and they go without instead.
+    shouldered: std::collections::BTreeMap<PersonId, f32>,
+    /// Scratch: who somebody is weighing up this evening. Kept on the world purely so that
+    /// an evening in company costs no allocation, of which there are some hundreds of
+    /// millions in a run.
+    company: Vec<PersonId>,
     /// The ground the world stands on, if it stands on any.
     surface: Option<Surface>,
     /// How many people it was founded with. Kept because a world cannot be made again
@@ -700,6 +815,11 @@ impl World {
             cultures: None,
             roster: Vec::new(),
             technique: std::collections::BTreeMap::new(),
+            bonds: bonds::Bonds::new(),
+            neighbours: std::collections::BTreeMap::new(),
+            evenings: std::collections::BTreeMap::new(),
+            shouldered: std::collections::BTreeMap::new(),
+            company: Vec::new(),
             surface: None,
             founded_with: 0,
         }
@@ -1192,6 +1312,13 @@ impl World {
             subject.earn(WORK_GAIN * job_opportunity * diligence * taught * subject.patronage());
         }
 
+        // An evening in company is spent *with somebody*, and which somebody is the whole
+        // of §25. Counted here and settled at the reckoning, all at once — see
+        // `COMPANY_A_YEAR` for why it is not settled here.
+        if finished == Some(Deed::Socialize) {
+            *self.evenings.entry(id).or_insert(0) += 1;
+        }
+
         if first {
             self.remember(
                 at,
@@ -1253,6 +1380,10 @@ impl World {
             .and_then(|place| self.places.get(place))
             .map(|place| place.want)
             .unwrap_or(0.0);
+        // Plus whatever they took off somebody else's shoulders since their last birthday.
+        let want = want + self.shouldered.remove(&id).unwrap_or(0.0);
+        // Less whatever their own friends will take off theirs.
+        let want = self.share_the_shortfall(id, want);
 
         let mut rng = self.moment_stream(Domain::Demography, id.to_bits(), at);
         let Some(subject) = self.people.get_mut(id) else {
@@ -1391,6 +1522,139 @@ impl World {
         let taught = 0.5 + env.education_access;
         let gain = WORK_GAIN * env.job_opportunity * diligence * taught * person.patronage();
         person.earn_repeatedly(gain, spells);
+
+        // And a year of company. Unwatched people still have neighbours: if their ties
+        // stood still while a watched person's grew, then who your friends are would depend
+        // on who the observer happened to be looking at — the same fault that once had the
+        // observer setting the death rate.
+        //
+        // How much company is the one thing the coarse tier has to guess at, since nobody
+        // deliberated. Guessed with the fine tier's own expression for how much somebody
+        // wants company, rather than a new one — an extravert is more sociable unwatched for
+        // exactly the reason they are more sociable watched.
+        let appetite = Deed::Socialize.appeal(&person.personality, &person.values)
+            * surroundings.payoff[Deed::Socialize as usize];
+        let evenings = (EVENINGS_PER_YEAR * appetite).round().max(0.0) as u32;
+        *self.evenings.entry(id).or_insert(0) += evenings;
+    }
+
+    /// An evening in company, and everything that follows from whose company it was.
+    ///
+    /// `Deed::Socialize` used to relieve a need and name nobody, so people in this world
+    /// socialised alone. This is the repair, and it is the join between the two halves of
+    /// the simulation: a deed chosen by one person's utilities becomes an edge in a graph
+    /// that the rest of the world is then read off — who backs whom, who is owed what, who
+    /// stands with whom when there is not enough good land.
+    ///
+    /// `evenings` is how many the one call stands for: one in the fine tier, a season's
+    /// worth in the coarse. Everything below is per-evening and scales with it, so the two
+    /// tiers make the same friendships out of the same year.
+    fn spend_an_evening(&mut self, id: PersonId, rng: &mut Rng, evenings: u32) {
+        let Some(place) = self.society.place_of(id) else {
+            return;
+        };
+
+        let mut to_hand = std::mem::take(&mut self.company);
+        to_hand.clear();
+        // The people you already know, who are still here. Kept whole rather than sampled:
+        // your friends are not a thing you have to be reminded of.
+        for (other, tie) in self.bonds.of(id) {
+            if tie.holds() && self.society.place_of(other) == Some(place) {
+                to_hand.push(other);
+            }
+        }
+        // And a few faces out of the crowd, because a society in which nobody ever met
+        // anybody new would have had no way to start.
+        if let Some(here) = self.neighbours.get(&place)
+            && !here.is_empty()
+        {
+            for _ in 0..NEIGHBOURS_CONSIDERED {
+                let which = rng.range_u64(0, here.len() as u64 - 1) as usize;
+                to_hand.push(here[which]);
+            }
+        }
+        to_hand.sort_unstable();
+        to_hand.dedup();
+        let chosen = self.bonds.choose_company(id, &to_hand, rng);
+        self.company = to_hand;
+
+        let Some(other) = chosen else {
+            return;
+        };
+        let (Some(one), Some(two)) = (self.people.get(id), self.people.get(other)) else {
+            return;
+        };
+        if !two.is_alive() {
+            return;
+        }
+        let suits = bonds::suits(&one.personality, &two.personality);
+
+        self.bonds.meet_repeatedly(id, other, suits, evenings);
+        // What each takes away about everybody else. Both directions, because both of them
+        // were there — and this is the only channel in the simulation by which a fact about
+        // one person reaches somebody who has never met them.
+        self.bonds.hearsay_repeatedly(id, other, evenings);
+        self.bonds.hearsay_repeatedly(other, id, evenings);
+    }
+
+    /// Who goes without, when there is not enough.
+    ///
+    /// The land falls short by the same amount for everybody standing on it — `want` is per
+    /// head — so on its own a famine kills at random. This is what makes it not random:
+    /// somebody with more, who is fond of you, takes on a share of your shortfall, and it
+    /// becomes theirs. **Nothing is created here.** Every day of hunger lifted off one
+    /// person is a day put onto another, so the Malthusian brake is exactly as strong as it
+    /// was — what changes is *who* it takes, which stops being a lottery and starts being a
+    /// question of who has friends.
+    ///
+    /// This is also the only place ordinary reciprocity is generated. Company does not put
+    /// people in each other's debt — an evening is not a favour, and treating it as one had
+    /// everybody resenting everybody within a decade. Feeding somebody through a bad year
+    /// is a favour, and whether they ever make it good decides what the two of them come to
+    /// think of each other.
+    fn share_the_shortfall(&mut self, id: PersonId, want: f32) -> f32 {
+        if want <= 0.0 {
+            return want;
+        }
+        let Some(mine) = self.people.get(id).map(|p| p.standing()) else {
+            return want;
+        };
+
+        // Taken out first: asking each ally in turn edits the ties while the walk is still
+        // holding them. Once a year per person, so the small allocation is nothing.
+        let allies: Vec<(PersonId, f32)> = self
+            .bonds
+            .of(id)
+            .filter(|(_, tie)| tie.allied())
+            .map(|(ally, tie)| (ally, tie.warmth))
+            .collect();
+
+        let mut relieved = 0.0;
+        for (ally, warmth) in allies {
+            // Only somebody with more to spare, and only in proportion to how warmly they
+            // hold you. A friend who is as badly off as you are is no help.
+            let Some(spare) = self
+                .people
+                .get(ally)
+                .filter(|p| p.is_alive())
+                .map(|p| p.standing() - mine)
+                .filter(|spare| *spare > 0.0)
+            else {
+                continue;
+            };
+            let share = (RELIEF * warmth * spare).min(want - relieved);
+            if share <= 0.0 {
+                continue;
+            }
+            relieved += share;
+            *self.shouldered.entry(ally).or_insert(0.0) += share;
+            // In days of the year gone without, which is the unit debts are kept in.
+            self.bonds.helped(ally, id, share * 365.0);
+            if relieved >= want {
+                break;
+            }
+        }
+        want - relieved
     }
 
     /// Plain luck: the windfalls and ruins that no one earns.
@@ -1414,6 +1678,13 @@ impl World {
     }
 
     /// A young adult may be taken up by someone who can open doors.
+    ///
+    /// This used to be a coin flip against local bonding capital, with **no patron in it** —
+    /// the single largest fact about a life here, worth more of the variance in attainment
+    /// than every other input combined, and there was no mentor, only a multiplier. Now
+    /// there is somebody: a specific person, older and better off, who already thinks well
+    /// of you. That is what patronage is, and it means it can now only reach people who
+    /// have made the acquaintance — which is the point.
     fn seek_patron(&mut self, at: Time, id: PersonId) {
         let Some(person) = self.people.get(id) else {
             return;
@@ -1422,26 +1693,60 @@ impl World {
         if person.is_mentored() || !(FERTILE_FROM..RESTLESS_UNTIL).contains(&age) {
             return;
         }
-        let bonding = self
-            .society
-            .place_of(id)
-            .and_then(|p| self.places.get(p))
-            .map(|place| place.env.bonding_capital)
-            .unwrap_or(0.0);
+        let mine = person.standing();
+
+        // The best-placed person who knows you and thinks well of you.
+        let mut patron: Option<(PersonId, f32)> = None;
+        for (other, tie) in self.bonds.of(id) {
+            if !tie.holds() {
+                continue;
+            }
+            let Some(elder) = self.people.get(other) else {
+                continue;
+            };
+            if !elder.is_alive()
+                || elder.age(at).years() < age + MENTOR_SENIORITY
+                || elder.standing() < mine + MENTOR_MEANS
+            {
+                continue;
+            }
+            // How well *they* hold *you* is what decides it, not how you feel about them:
+            // this is being vouched for, and the mark of it is that it can be unrequited in
+            // either direction. Both of what one person can hold about another count —
+            // regard is what travels and warmth is what is felt, and a patron needs some of
+            // one or the other and to actually know you.
+            let theirs = self.bonds.tie(other, id);
+            let worth = elder.standing() * theirs.known * (theirs.warmth + theirs.regard).max(0.0);
+            if worth > 0.0 && patron.is_none_or(|(_, best)| worth > best) {
+                patron = Some((other, worth));
+            }
+        }
+        let Some((patron, worth)) = patron else {
+            return;
+        };
 
         let mut rng = self.moment_stream(Domain::Chance, id.to_bits() ^ 0x_1e17, at);
-        if !rng.chance(MENTOR_CHANCE * f64::from(bonding)) {
+        if !rng.chance((MENTOR_CHANCE * f64::from(worth)).min(1.0)) {
             return;
         }
+        let Some(worth_of_them) = self.people.get(patron).map(|p| p.standing()) else {
+            return;
+        };
         if self
             .people
             .get_mut(id)
-            .is_some_and(|p| p.take_patron(PATRONAGE))
+            .is_some_and(|p| p.take_patron(1.0 + PATRONAGE * worth_of_them))
         {
+            // A favour of this size is owed, and the chronicle files it under both of them:
+            // taking somebody up is an event in the patron's life too.
+            self.bonds.helped(patron, id, MENTOR_FAVOUR);
             self.remember(
                 at,
                 Salience::Pivotal,
-                Happening::PersonMentored { person: id },
+                Happening::PersonMentored {
+                    person: id,
+                    by: patron,
+                },
             );
         }
     }
@@ -1599,8 +1904,68 @@ impl World {
         self.assign_detail();
         self.absorb_upbringings(at);
         self.sort_households(at);
+        self.reckon_bonds();
         self.scheduler
             .schedule_at(at + Duration::from_years(1), Task::Reckoning);
+    }
+
+    /// A year of ties fading, and a fresh count of who is next door.
+    ///
+    /// Last in the reckoning, after households have moved, so that the neighbours somebody
+    /// spends the coming year among are the ones actually living there — not the ones who
+    /// were there before the sorting.
+    fn reckon_bonds(&mut self) {
+        // Taken out and put back because the test of who is still alive has to read the
+        // people, and the ties cannot be borrowed and read from the same world at once.
+        let mut ties = std::mem::take(&mut self.bonds);
+        ties.year(&|who| self.people.get(who).is_some_and(|p| p.is_alive()));
+        self.bonds = ties;
+        // A burden somebody died still carrying goes with them. Somebody else did not go
+        // hungry for it, which is a small leak in the conservation `share_the_shortfall`
+        // otherwise keeps — but the alternative is charging a corpse.
+        self.shouldered
+            .retain(|who, _| self.people.get(*who).is_some_and(|p| p.is_alive()));
+
+        let (people, neighbours) = (&self.people, &mut self.neighbours);
+        neighbours.clear();
+        for (_, household) in self.society.households() {
+            let Some(place) = household.place else {
+                continue;
+            };
+            let here = neighbours.entry(place).or_default();
+            for member in &household.members {
+                if people.get(*member).is_some_and(|p| p.is_alive()) {
+                    here.push(*member);
+                }
+            }
+        }
+
+        self.keep_company();
+    }
+
+    /// Who everybody actually spent the year with.
+    ///
+    /// The evenings were chosen a deed at a time by four thousand separate decisions, or
+    /// estimated in one go for the people nobody is watching. Either way they arrive here as
+    /// a count, and here is where they become a society: `COMPANY_A_YEAR` draws of company,
+    /// each carrying its share of the year.
+    ///
+    /// One path for both tiers. The tiers differ only in how the count was arrived at, which
+    /// is the smallest difference they can differ by and still be two tiers — and it means
+    /// there is no separate coarse social model that could quietly drift from the fine one.
+    fn keep_company(&mut self) {
+        let at = self.now();
+        let kept = std::mem::take(&mut self.evenings);
+        for (who, evenings) in kept {
+            let each = evenings / COMPANY_A_YEAR;
+            if each == 0 || !self.people.get(who).is_some_and(|p| p.is_alive()) {
+                continue;
+            }
+            let mut rng = self.moment_stream(Domain::Behavior, who.to_bits() ^ 0x_50c1, at);
+            for _ in 0..COMPANY_A_YEAR {
+                self.spend_an_evening(who, &mut rng, each);
+            }
+        }
     }
 
     /// What every place produced this year, before anybody is asked about anything.
@@ -2042,6 +2407,45 @@ impl World {
         }
     }
 
+    /// What a household can bring to bear on getting into *somewhere in particular*.
+    ///
+    /// This is where society becomes politics. Admission is a scarcity — there is only so
+    /// much good land and only so much room on it — and it used to be settled by wealth
+    /// alone, which made this a market and not a society. Now the people already living
+    /// there count: an ally inside vouches for you, in proportion to their own standing and
+    /// to how warmly they hold you. A poor household with friends in a good quarter gets in
+    /// over a richer one with none, and the way to get on is to be liked by somebody who is
+    /// already getting on.
+    ///
+    /// Only ties *into the place being sought* count, which is what keeps this from becoming
+    /// a second wealth term: your friends elsewhere cannot speak for you here.
+    ///
+    /// The best-backed member rather than the sum of them, because it takes one person to
+    /// vouch for a household and a family of six is not six times as persuasive as one.
+    ///
+    /// **Capped, and the cap is load-bearing.** Uncapped, four allies of middling standing
+    /// were worth more than a lifetime of work, so admission stopped depending on means at
+    /// all: every household got into every quarter, the quarters stopped differing, and §15's
+    /// upbringing gap fell to nothing — where a child grew up no longer showed up in their
+    /// outcome, because everywhere had become the same place. A thumb on the scale is what
+    /// this is for. No amount of vouching makes a pauper a landowner.
+    ///
+    /// Asked only about places the household does *not* already live in — see the caller.
+    pub fn backing(&self, members: &[PersonId], into: PlaceId) -> f32 {
+        let mut most: f32 = 0.0;
+        for member in members {
+            let inside = |ally: PersonId| {
+                (self.society.place_of(ally) == Some(into))
+                    .then(|| self.people.get(ally))
+                    .flatten()
+                    .filter(|p| p.is_alive())
+                    .map(|p| p.standing())
+            };
+            most = most.max(bonds::standing_with_allies(&self.bonds, *member, 0.0, &inside));
+        }
+        most.min(VOUCHING)
+    }
+
     /// Households consider moving somewhere that suits them better.
     ///
     /// This is what produces sorting, and sorting is what makes neighbourhoods diverge
@@ -2078,6 +2482,8 @@ impl World {
                 .filter(|p| p.is_alive() && !p.stage(at).is_dependent())
                 .all(|p| p.age(at).years() < RESTLESS_UNTIL);
 
+            let backing = |world: &World, into: PlaceId| world.backing(&members, into);
+
             let occupancy_of = |world: &World, id: PlaceId| {
                 world
                     .places
@@ -2112,10 +2518,23 @@ impl World {
                 .places
                 .ids()
                 .filter(|id| {
-                    let means = if restless {
-                        standing + YOUNG_MOVER_SLACK
-                    } else {
+                    // Backing counts only towards somewhere they do not already live.
+                    // Ties are overwhelmingly local — company is drawn from neighbours — so
+                    // a term that also applied to where you already are would be a bonus for
+                    // staying put dressed up as a bonus for having friends, and it was: it
+                    // stopped displacement dead and left every world with one inhabited
+                    // quarter out of five. Pointed outward it is chain migration, which is
+                    // the thing it should have been all along — your friends who left are
+                    // what makes it possible to follow them.
+                    let means = if current == Some(*id) {
                         standing
+                    } else {
+                        backing(self, *id)
+                            + if restless {
+                                standing + YOUNG_MOVER_SLACK
+                            } else {
+                                standing
+                            }
                     };
                     // Staying put needs no admitting — unless they have been priced
                     // out of it, in which case it is no longer an option either.
@@ -3051,6 +3470,253 @@ mod tests {
         world.set_detail_budget(budget);
         world.run_for(Duration::from_years(years));
         world
+    }
+
+    // ---- society and politics (§25) -----------------------------------------------
+
+    #[test]
+    fn people_come_to_know_the_people_they_live_among() {
+        // The first claim, and the one the rest stands on: a `Deed::Socialize` is spent
+        // with somebody now, and who that somebody is follows from where you live.
+        let world = lineages();
+        let alive: Vec<PersonId> = world
+            .people
+            .iter()
+            .filter(|(_, p)| p.is_alive())
+            .map(|(id, _)| id)
+            .collect();
+        assert!(!world.bonds.is_empty(), "nobody knows anybody");
+
+        let (mut near, mut far) = (0, 0);
+        for who in &alive {
+            let Some(home) = world.society.place_of(*who) else {
+                continue;
+            };
+            for (other, tie) in world.bonds.of(*who) {
+                if !tie.allied() {
+                    continue;
+                }
+                if world.society.place_of(other) == Some(home) {
+                    near += 1;
+                } else {
+                    far += 1;
+                }
+            }
+        }
+        assert!(near > 0, "nobody has a friend");
+        assert!(
+            near > far * 3,
+            "friendships should mostly be with neighbours: {near} near, {far} far"
+        );
+    }
+
+    #[test]
+    fn patronage_has_a_patron_in_it() {
+        // It used to be a coin flip with no mentor in it, and it is the largest single
+        // lever on a life here. Every one of these now names somebody: older, better off,
+        // and already acquainted.
+        let world = lineages();
+        let taken_up: Vec<(PersonId, PersonId)> = world
+            .chronicle
+            .iter()
+            .filter_map(|r| match r.kind {
+                Happening::PersonMentored { person, by } => Some((person, by)),
+                _ => None,
+            })
+            .collect();
+        assert!(!taken_up.is_empty(), "nobody ever found a patron");
+
+        for (person, by) in &taken_up {
+            assert_ne!(person, by, "somebody was their own patron");
+            let (Some(young), Some(elder)) = (world.people.get(*person), world.people.get(*by))
+            else {
+                continue;
+            };
+            assert!(
+                elder.born < young.born,
+                "a patron younger than the person they took up"
+            );
+        }
+
+        // And it is a thing that happens between two people, so it is in both their lives.
+        let (person, by) = taken_up[0];
+        assert!(
+            world
+                .life_of(by)
+                .any(|r| matches!(r.kind, Happening::PersonMentored { person: p, .. } if p == person)),
+            "taking somebody up left no mark on the patron's life"
+        );
+    }
+
+    #[test]
+    fn friends_inside_are_what_gets_you_in() {
+        // Politics: what a household can bring to bear on a place is not only what it has.
+        let world = lineages();
+        let now = world.now();
+        let places: Vec<PlaceId> = world.places.ids().collect();
+
+        // Somebody with allies where they already live has backing there, and nobody has
+        // backing anywhere from allies who do not live there.
+        let mut backed_at_home = 0;
+        for (id, person) in world.people.iter() {
+            if !person.is_alive() || person.stage(now).is_dependent() {
+                continue;
+            }
+            let Some(home) = world.society.place_of(id) else {
+                continue;
+            };
+            let allies_at_home = world
+                .bonds
+                .of(id)
+                .filter(|(other, tie)| {
+                    tie.allied() && world.society.place_of(*other) == Some(home)
+                })
+                .count();
+            let here = world.backing(&[id], home);
+            if allies_at_home > 0 {
+                if here > 0.0 {
+                    backed_at_home += 1;
+                }
+            } else {
+                assert_eq!(here, 0.0, "somebody was vouched for by nobody");
+            }
+
+            // Somewhere they have no allies lends them nothing, whoever their friends are.
+            for elsewhere in &places {
+                if *elsewhere == home {
+                    continue;
+                }
+                let allies_there = world
+                    .bonds
+                    .of(id)
+                    .filter(|(other, tie)| {
+                        tie.allied() && world.society.place_of(*other) == Some(*elsewhere)
+                    })
+                    .count();
+                if allies_there == 0 {
+                    assert_eq!(
+                        world.backing(&[id], *elsewhere),
+                        0.0,
+                        "friends elsewhere spoke for somebody where they have none"
+                    );
+                }
+            }
+        }
+        assert!(
+            backed_at_home > 0,
+            "nobody in the world has anybody who would speak for them"
+        );
+    }
+
+    #[test]
+    fn hunger_given_away_is_hunger_somebody_else_goes_through() {
+        // The conservation that keeps §21.2's brake exactly as strong as it was. A famine
+        // that friendship could *lift* rather than move would be a population with no
+        // ceiling, and this is the assertion that it does not.
+        let mut world = World::genesis(WorldSeed::from_u128(0x11), 40);
+        world.record_only(Salience::Pivotal);
+        world.run_for(Duration::from_years(12));
+
+        let people: Vec<PersonId> = world
+            .people
+            .iter()
+            .filter(|(_, p)| p.is_alive())
+            .map(|(id, _)| id)
+            .collect();
+        assert!(people.len() > 5);
+
+        let taken = 0.4_f32;
+        let before: f32 = world.shouldered.values().sum();
+        let left = world.share_the_shortfall(people[0], taken);
+        let after: f32 = world.shouldered.values().sum();
+        assert!((0.0..=taken).contains(&left), "shortfall left {left}");
+        assert!(
+            ((taken - left) - (after - before)).abs() < 1e-4,
+            "{:.4} was lifted off one person and {:.4} landed on others",
+            taken - left,
+            after - before
+        );
+    }
+
+    #[test]
+    fn who_your_friends_are_does_not_depend_on_who_is_watching() {
+        // The §21.1 fault, applied to society: coarse people do not act, so on the naive
+        // wiring looking away from a town would dissolve everybody's friendships and
+        // looking back would rebuild them from nothing.
+        let (fine, coarse) = (at_detail(100_000, 25), at_detail(0, 25));
+        let society = |world: &World| {
+            let alive: Vec<PersonId> = world
+                .people
+                .iter()
+                .filter(|(_, p)| p.is_alive())
+                .map(|(id, _)| id)
+                .collect();
+            let allies: usize = alive
+                .iter()
+                .map(|id| world.bonds.of(*id).filter(|(_, t)| t.allied()).count())
+                .sum();
+            (
+                world.bonds.len() as f32 / alive.len().max(1) as f32,
+                allies as f32 / alive.len().max(1) as f32,
+            )
+        };
+        let ((fine_ties, fine_allies), (coarse_ties, coarse_allies)) =
+            (society(&fine), society(&coarse));
+
+        assert!(coarse_ties > 1.0, "an unwatched town knows nobody");
+        assert!(
+            (fine_ties - coarse_ties).abs() < 0.25 * fine_ties,
+            "acquaintance drifted with the observer: {fine_ties:.1} watched, {coarse_ties:.1} not"
+        );
+        // Looser, and knowingly so: past saturation more evenings buy familiarity that was
+        // already at its ceiling, so the coarse tier understates how tight a place is by
+        // about a seventh and more contact does not close it.
+        assert!(
+            (fine_allies - coarse_allies).abs() < 0.35 * fine_allies,
+            "friendship drifted with the observer: {fine_allies:.1} watched, {coarse_allies:.1} not"
+        );
+    }
+
+    /// What a year of company actually comes to, finely and coarsely.
+    ///
+    /// Ignored because it is a measurement rather than an assertion — run it when the
+    /// utilities that pick a deed change, and move `EVENINGS_PER_YEAR` to what it says.
+    #[test]
+    #[ignore]
+    fn measure_the_society_a_year_makes() {
+        for budget in [100_000, 0] {
+            let mut world = World::genesis(WorldSeed::from_u128(0x11), 60);
+            world.record_only(Salience::Pivotal);
+            world.set_detail_budget(budget);
+            world.run_for(Duration::from_years(25));
+
+            let alive: Vec<PersonId> = world
+                .people
+                .iter()
+                .filter(|(_, p)| p.is_alive())
+                .map(|(id, _)| id)
+                .collect();
+            let ties: usize = alive.iter().map(|id| world.bonds.count(*id)).sum();
+            let close = alive
+                .iter()
+                .map(|id| world.bonds.of(*id).filter(|(_, t)| t.allied()).count())
+                .sum::<usize>();
+            let warmth: f32 = alive
+                .iter()
+                .flat_map(|id| world.bonds.of(*id))
+                .map(|(_, t)| t.warmth)
+                .sum();
+            let circles = bonds::circles::circles(&world.bonds, &alive);
+            println!(
+                "budget {budget}: {} alive, {:.1} ties each, {:.1} allies each, mean warmth {:.3}, {} circles largest {}",
+                alive.len(),
+                ties as f32 / alive.len().max(1) as f32,
+                close as f32 / alive.len().max(1) as f32,
+                warmth / ties.max(1) as f32,
+                circles.len(),
+                circles.first().map_or(0, |c| c.members.len()),
+            );
+        }
     }
 
     #[test]

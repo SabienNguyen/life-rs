@@ -1984,3 +1984,190 @@ the older and broader meaning of the word and the one that does not require inve
 institution. **Conquest in particular is absent**: countries merge by converging, never by
 one taking another. That is a real gap rather than a modelling choice made confidently, and
 it is the obvious next thing to argue about.
+
+## 25. Society: what people are to each other
+
+Before this, a person could be paired with somebody, born to somebody, and live in a
+household with somebody, and that was the whole of it. Everything else was aggregate: you
+did not interact with *people*, you interacted with a statistic of your neighbours.
+
+Two things made that plain, and both were in the code for a long time before anybody looked
+at them squarely.
+
+- `Deed::Socialize` relieved the social need and **named nobody**. People in this world
+  socialised alone. It cost two hours, it moved a number, and no second person was involved
+  at any point.
+- `seek_patron` — by §15's own measurements the single largest fact about a life here, worth
+  more of the variance in attainment than genes, upbringing and luck combined — was a coin
+  flip against local `bonding_capital` with **no patron in it**. There was no mentor. There
+  was a multiplier.
+
+`bonds` is the repair. A tie runs *from* somebody *to* somebody and carries four numbers:
+**warmth** (do I like you), **regard** (do I rate you), **debt** (signed, in days of help
+owed), and **known** (how familiar we are, which gates the rest). Directed, because
+unrequited regard is the ordinary case and a model where liking is always mutual cannot
+express a hanger-on, a patron, or a grudge the other party has forgotten.
+
+### 25.1 Complexity without language
+
+There is no language here, no lies, no promises, and no violence. What there is:
+
+- **An evening is spent with somebody.** `choose_company` weights the people to hand by how
+  well you know them, how much you like them, and how many friends you have in common. That
+  last term is triadic closure, and it is what makes groups close into circles rather than
+  everybody knowing everybody equally.
+- **Opinions travel.** After time together, each person's regard for every third party
+  drifts toward the other's, in proportion to how warmly they hold them. Gossip, with no
+  words in it — and the only channel in the simulation by which a fact about one person
+  reaches somebody who has never met them. It stops dead at a cold tie, which is what makes
+  it reputation rather than broadcast.
+- **Help is owed.** Being fed through a bad year is a debt, and a debt that goes unpaid
+  sours the *creditor* — nothing tells them to resent anybody, it falls out of being out of
+  pocket for long enough.
+- **Patronage has a person in it.** A young adult is taken up by a specific older neighbour
+  who is better off and already thinks well of them. Which means it can now only reach people
+  who made the acquaintance, and the largest single lever on a life became something you can
+  fail to have.
+
+### 25.2 Politics is admission
+
+Scarcity was already here: there is only so much good land and only so much room on it, and
+`Place::admits` decided who got in by what they had. That made the model a market. It is now
+a society, because the people already living somewhere count: an ally inside vouches for
+you, in proportion to their own standing and how warmly they hold you (`standing_with_allies`,
+lent at a discount — backing somebody is not the same as being them). A poor household with
+friends in a good quarter gets in over a richer one with none.
+
+Only ties *into the place being sought* count, which is what stops this from being a second
+wealth term. Your friends elsewhere cannot speak for you here.
+
+No violence is modelled and none is needed. The whole of it is that there is not enough good
+land and some people have friends.
+
+### 25.2.1 What it took to not wreck §15
+
+Wiring real ties into the two largest levers on a life — patronage and admission — broke the
+variance decomposition twice, in two different directions, and both breakages were
+informative enough to be worth recording.
+
+**Uncapped vouching flattened the world.** `standing_with_allies` sums over every ally, so
+four allies of middling standing were worth more than a lifetime of work. Admission stopped
+depending on means: every household got into every quarter, the quarters stopped differing
+from each other, and §15's upbringing gap fell below the floor — where a child grew up no
+longer showed up in their outcome, because everywhere had become the same place. Backing is
+now capped at `VOUCHING` = 0.15, the same size as the other two thumbs on this scale
+(`DISPLACEMENT_MARGIN`, `YOUNG_MOVER_SLACK`). No amount of vouching makes a pauper a
+landowner.
+
+**Backing pointed the wrong way.** Ties are overwhelmingly local — company is drawn from
+neighbours — so "allies who live in the place I am considering" almost always meant "allies
+where I already live". Applied to the place a household was already in, the term was a bonus
+for staying put wearing the costume of a bonus for having friends, and it stopped
+displacement dead: every world ended with one inhabited quarter out of five. It now counts
+only towards somewhere the household does not already live, which turns it into **chain
+migration** — your friends who left are what makes it possible to follow them — and is the
+thing it should have been from the start.
+
+**A flat patronage multiplier moved the variance into chance.** With a real patron but a
+fixed 2.1× payoff, patronage became a large term that correlated with *whom you happened to
+befriend* and with nowhere at all: the shared-environment share fell from a fifth to one part
+in a hundred thousand and chance took three quarters. The fix is the thing that should have
+been true from the start — a patron is a person, so what patronage is worth depends on who
+your patron is (`1.0 + PATRONAGE × their standing`). Where you grew up now reaches your
+outcome through the quality of the people you could get to know there, which is what
+`bonding_capital` was a crude stand-in for and is now the thing itself.
+
+Both faults share a shape: a mechanism that is *right* can still be sized wrong, and sizing
+it wrong does not show up as a wrong-looking mechanism. It shows up three layers away, in a
+regression over two hundred lives.
+
+### 25.3 Famine picks, and it stopped picking at random
+
+`want` — how far a place fell short of feeding its people — is per head, so on its own a
+famine kills at random within a place. `share_the_shortfall` is what makes it not random: an
+ally with more than you, in proportion to how warmly they hold you, takes a share of your
+shortfall onto themselves, and goes without in your stead when their own birthday comes.
+
+**Nothing is created there.** Every day of hunger lifted off one person is a day put onto
+another, so the Malthusian brake of §21.2 is exactly as strong as it was. What changed is
+*who* it takes, which stopped being a lottery and became a question of who has friends. This
+is also the only place ordinary reciprocity is generated: company deliberately does **not**
+put people in each other's debt, because an early version where every evening with an
+unequal booked a favour had everybody resenting everybody inside a decade.
+
+### 25.4 A circle is a reading, and the first reading was wrong
+
+A faction is never stored. It is walked out of the tie graph on demand, the same rule
+`culture` applies to countries and §14 applies to a place's character.
+
+The first implementation made a circle a **connected component** of mutual warmth, on the
+argument that a chain of friendships is one faction even where the ends have never met.
+Measuring it settled the question. At a mean of three or four allies apiece the ally graph
+sits far above the percolation threshold, so the flood fill returned one blob holding two
+thirds of the town — every time, in every world, at every threshold that left anybody with
+allies at all. A faction with most of the population in it is not a faction.
+
+So a circle is now a set in which *every* pair stands together, which cannot percolate, and
+which is what the description had claimed all along. In a village of fifty-nine that gives
+about twenty overlapping circles of three to six people, which is a social structure.
+
+The finding underneath is worth keeping in view: **mutual affection alone does not divide a
+society into camps**, because liking is not transitive but reachability is. Real factions
+form around something to be against, and there is nothing here for anybody to be against.
+Structural balance — a group that is warm within *and cold toward another group* — is what
+that would take, and it is the obvious next thing to argue about.
+
+### 25.5 Ties have to survive being unwatched
+
+Coarse-tier people do not act, so on the naive wiring they would form no ties at all, and
+looking away from a town would quietly dissolve everybody's friendships while looking back
+rebuilt them from nothing. That is precisely the bug class that once had the observer setting
+the death rate (§21.1), and it was designed against from the outset rather than found later.
+
+The answer is not two social models. **Company is settled once a year, for everybody, through
+one code path.** Evenings are *counted* as they are chosen — by four thousand separate
+decisions for a watched person, by one estimate for an unwatched one — and at the reckoning
+each person makes `COMPANY_A_YEAR` draws of company, each carrying its share of the year.
+
+What that preserves is the part that has to come from the person: an extravert chooses
+`Deed::Socialize` more often, so an extravert ends the year with more friends, and that is an
+outcome of their temperament rather than a rule about temperaments. The coarse tier keeps it
+by asking `Deed::Socialize.appeal` — the fine tier's own expression — instead of writing a
+second one, because a second expression for the same question is exactly how two tiers drift
+apart.
+
+The tiers now differ only in how the count was arrived at, which is the smallest difference
+they can differ by and still be two tiers:
+
+| | ties each | allies each | circles | largest |
+|---|---|---|---|---|
+| Finely simulated | 21.4 | 3.6 | 21 | 6 |
+| Coarsely simulated | 22.0 | 3.3 | 20 | 5 |
+
+Sixty founders, twenty-five years, one seed.
+
+### 25.6 What this cost, and what it cost to make it not cost that
+
+The first wiring settled company **per evening**: every `Deed::Socialize` chose a partner, met
+them, and ran gossip in both directions — some hundred map edits. At six hundred evenings a
+year each for four hundred people over a century, that is billions of operations, and it made
+the observer's own regression fixture take minutes where it had taken seconds. All to model
+the difference between seeing a friend on Tuesday and on Wednesday.
+
+Batching it into sixteen draws a year cost nothing anybody can measure and cut it by a factor
+of forty. The two tiers agree *better* after the change than before it, which is what you
+would expect once they stopped being two mechanisms.
+
+What is left costs **12%**. The four longest-running world tests — four hundred founders
+over a century and a couple of sixty-founder worlds over the same — take 218 seconds without
+any of this and 245 seconds with it, on the same machine, same seeds. That is the price of
+every person in every world having friends, creditors, a reputation and a faction.
+
+Gossip is the other expensive part, because it touches everything the speaker knows rather
+than one other person. The first version had it carry *everything*, including what the
+speaker had merely heard, and in a village of fifty-nine that made every resident hold a tie
+to every other within a few years — a cost that grows with the square of the population
+rather than with Dunbar. It now carries only what the speaker knows first hand
+(`known > HEARD_OF`), which bounds it by the sympathy group whatever the town's size, and
+hearing of somebody can never make them familiar. You can learn who a person is by
+reputation; you cannot become close to them that way.

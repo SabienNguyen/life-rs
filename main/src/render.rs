@@ -86,9 +86,11 @@ fn sentence(world: &World, happening: Happening) -> String {
                 .unwrap_or("elsewhere")
         ),
 
-        Happening::PersonMentored { person } => {
-            format!("{} finds someone willing to open doors", who(world, person))
-        }
+        Happening::PersonMentored { person, by } => format!(
+            "{} is taken up by {}",
+            who(world, person),
+            who(world, by)
+        ),
 
         Happening::PlaceChanges { place, into } => format!(
             "{} has become {}",
