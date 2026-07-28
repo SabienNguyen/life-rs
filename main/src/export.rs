@@ -455,6 +455,15 @@ fn people(world: &World) -> String {
                         &num(world.bonds.of(id).map(|(_, t)| t.debt).sum::<f32>())
                     ),
                     field("repute", &num(world.repute_of(id))),
+                    // How wrong this person is about how they are seen, and in which
+                    // direction. §17.2.2 put a belief on every tie that can diverge from the
+                    // truth, and until it is displayed there is no way to know whether it
+                    // ever does — which is the argument §30.6 makes about the whole view.
+                    //
+                    // Averaged over the ties they hold: what they believe the other makes of
+                    // them, less what the other actually does. Positive is somebody who
+                    // thinks better of their welcome than they should.
+                    field("misreads", &num(misreading(world, id))),
                     // A child is not anything for a living. `Person` carries a trade from
                     // birth because everybody starts a farmer, but nobody is one until they
                     // are old enough to be counted as a hand.
@@ -496,6 +505,27 @@ fn people(world: &World) -> String {
         })
         .collect();
     format!("[{}]", entries.join(","))
+}
+
+/// How far somebody's idea of how they are seen is from how they are seen.
+///
+/// The one thing in the social model that can be wrong, and a number nobody could look at
+/// until now. Positive means they think themselves more welcome than they are; negative means
+/// they do not know who is glad of them.
+///
+/// Only over ties that hold, since a belief about somebody you have never met is not a
+/// mistake, it is an absence.
+fn misreading(world: &World, who: PersonId) -> f32 {
+    let mut total = 0.0;
+    let mut held = 0;
+    for (other, tie) in world.bonds.of(who) {
+        if !tie.holds() {
+            continue;
+        }
+        total += tie.welcome - world.bonds.tie(other, who).warmth;
+        held += 1;
+    }
+    if held == 0 { 0.0 } else { total / held as f32 }
 }
 
 fn events(world: &World) -> String {

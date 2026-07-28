@@ -918,7 +918,18 @@ function drawHistory() {
     (advances.length ? ` &middot; <span style="color:var(--gold)">${advances.length} worked out</span>` : "");
 }
 
-function ranks(who) {
+// How wrong somebody is about how they are seen, in words. Zero is somebody who has read
+// the room; the sign says which way they have it.
+function misreadReads(off) {
+  const v = Number(off) || 0;
+  if (Math.abs(v) < 0.04) return "seen about as they think";
+  if (v > 0.15) return "more welcome than they know";
+  if (v > 0) return "a little better liked than they think";
+  if (v < -0.15) return "less welcome than they believe";
+  return "a little less liked than they think";
+}
+
+function ranks(who) {function ranks(who) {
   return { elder: 4, patron: 3, "go-between": 2, outcast: 2, client: 1, labourer: 1, rover: 1 }[who.role] || 0;
 }
 
@@ -954,6 +965,9 @@ function drawPerson() {
     // carried through. Positive is owed to them; negative is owed by them.
     ["Owed", `${Math.round(who.owed ?? 0)} days`],
     ["Thought of", reputeReads(who.repute)],
+    // The one thing anybody here can be wrong about. Everything else on this page is a fact
+    // about them; this is what they believe about everybody else, and how far off it is.
+    ["Thinks they are", misreadReads(who.misreads)],
     ["Mentored", who.mentored ? "yes" : "no"],
     ["Upbringing", n2(who.upbringing)],
   ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");

@@ -969,6 +969,38 @@ decision — and cultural change is now something *transmitted between people* r
 imposed by editing a field. §24's peoples and countries were already built on `norms`
 drifting; this is what makes the drift travel through anybody.
 
+### 17.2.3 And measured, nobody is wrong
+
+§17.2.2 claimed the belief on a tie would produce misunderstanding, avoidance that feeds
+itself, and reconciliation when somebody is finally corrected. It was written the day the
+mechanism was built and before anything looked at it.
+
+Displayed, over 183 living people at ninety years: **mean misreading 0.002, worst case 0.04,
+and not one person more than 0.1 out.** The number that can be wrong is right.
+
+The cause is structural and was there to be seen in `meet_repeatedly` the whole time. Warmth is
+driven by `suits`, which is symmetric — the same target for both directions of a meeting — so
+what A comes to feel about B and what B comes to feel about A move together. A's belief about
+B's feelings is therefore chasing a quantity that is nearly identical to A's *own* feelings, and
+`READING` being slower than `WARMING` only makes it lag: a smaller number in the same direction
+is not a mistake. The only genuine asymmetry in a tie is debt, and grievance is rare enough that
+it does not shift the average.
+
+So the mechanism is correct, cheap, load-bearing in principle — `choose_company` really does
+read it — and produces no misunderstanding, because there is almost nothing in this world for it
+to misunderstand. It is `CROWDING_AVERSION` again: a term that is exactly right and never fires.
+
+What it would need is an asymmetry worth being wrong about. Warmth that depends on what each
+person *brings* to a meeting rather than on how well the pair suits each other; or a reading
+that is noisy per person, so that somebody with low social intelligence systematically
+misjudges. Both are real changes to how two people come to like each other, and §31.1's rules
+apply to them — particularly the third, since a symmetric warmth is exactly the kind of
+resting-state equivalence that hides everything about how a system moves.
+
+Recorded rather than fixed, and the display kept, because the display is what found it. Ten
+minutes after being shown, against a write-up that had gone unchallenged for six hours. That is
+§30.6's argument arriving for the fourth time in one day.
+
 ### 17.3 Where an LLM belongs, and where it does not
 
 Two independent findings from the scaling literature, pointing the same way.
@@ -3494,7 +3526,7 @@ paragraph somewhere else.
 |---|---|---|
 | Occupation and division of labour | §26.9 | **Closed** by §27 — five goods, five trades |
 | Norms as learned, not ambient | §17.2 | **Closed** — §17.2.1 |
-| Theory of mind: beliefs that can be wrong | §17.2 | **Closed** — §17.2.2 |
+| Theory of mind: beliefs that can be wrong | §17.2 | **Built and inert** — §17.2.3. Nobody is measurably wrong |
 | Households as political units | §26.9 | **Open.** Head and succession built and unread; two attempts measured worse (§26.10) |
 | Property that outlives its members | §26.9 | **Open**, deferred on a measurement — elasticity is already out of band (§26.10) |
 | Roles that are chosen | §26.9 | **Open.** An eighth deed built and reverted (§26.11) |
