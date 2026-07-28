@@ -2732,8 +2732,8 @@ them than where it is not.
   place is dense enough to do it for strangers, and it reads out of density rather than out of
   a new good; the distinction between a cook and the people who serve beside them needs a
   model of the *firm*, which is the item above.
-- **Tools are one thing.** A plough and a loom are the same object, so a place cannot be
-  well-equipped for one trade and not another.
+- ~~**Tools are one thing.**~~ *Closed — see §27.10.* Tools are kept per trade, so a farm's
+  ploughs are worth nothing at the quarry face.
 - **And at the sizes this project runs, it is thin — but it is no longer notional.** Counted at
   ninety years over four seeds, it used to read farmers 165–249 with hewers and smiths in the
   low single figures or *zero* in two of them. §27.4 says a trade exists when there is food
@@ -2741,6 +2741,41 @@ them than where it is not.
   spare. With §30.5's fix every seed now carries hewers, smiths, cooks and keepers — still few,
   because these worlds are genuinely poor, but the chain is being climbed rather than sitting
   unused. The remaining thinness is the population and the ground, not the mechanism.
+
+### 27.10 A plough is no use to a quarryman
+
+Tools were one number. So a place that had spent a century farming was, on the day it turned to
+hewing, exactly as well equipped for hewing as it had been for farming — and capital that
+transfers perfectly between trades is not capital, it is a bonus attached to a place.
+
+`Holdings::tools` is now per trade, and two things make it worth having.
+
+**Who new tools are made for is not a decision.** A smith makes what the people around them are
+asking for, in proportion to how many are asking — and asking is simply having hands in that
+trade. The tempting rule was "whichever trade would gain most", and §31.1 says why it was not
+taken: that is a choice read afresh each year off a quantity the choice itself moves, which is
+the shape of five separate failures already recorded here.
+
+**At rest it is exactly the pool it replaced.** Equip every trade in proportion to its hands and
+tools-per-hand comes out the same number in every trade, which is what one pooled figure meant.
+`at_rest_it_is_the_pool_it_replaced` runs a mixed village forty years and finds farmers and
+hewers equipped within 5% of each other. So nothing changes for a place that goes on doing what
+it has been doing, and the whole of the difference falls on places that *change*.
+
+What falls on them is measured rather than asserted: a village of thirty farmers with
+thirty-six tools grows a third more food than one with none, and the same village turned to
+quarrying overnight hews **exactly as much as it would with nothing at all** — the difference is
+under 1e-4, because none of what it owns is the right thing. Equip it properly and it quarries
+as well as it farmed, so this is stickiness rather than a penalty on hewing.
+
+The cost runs the right way for once. It is a brake on §30.5.1's cobweb rather than another
+instance of it: everybody moving into whatever trade looks best this year now arrives to find
+the place has no tools for it, and a decade of smithing before it pays what it promised.
+
+Only farming and hewing use tools, which is unchanged — they are the two that take something out
+of the ground, where an edge or a lever multiplies a pair of hands. A cook's pot exists but
+nothing in this model has it multiplying anything, so making tools for cooks would be making
+tools nobody uses.
 
 ## 28. Ground that is good at different things
 
@@ -3459,7 +3494,8 @@ paragraph somewhere else.
 | Property that outlives its members | §26.9 | **Open**, deferred on a measurement — elasticity is already out of band (§26.10) |
 | Roles that are chosen | §26.9 | **Open.** An eighth deed built and reverted (§26.11) |
 | Firms, employment, contracts | §27.9 | Untouched |
-| More goods; tools are one thing | §27.9 | Untouched |
+| Tools are one thing | §27.9 | **Closed** — §27.10 |
+| More goods | §27.9 | Untouched |
 | Money, prices, credit, ownership | §27.9 | Partly deliberate — §27.4 argues against prices |
 | Law | §26.9 | Untouched |
 | Conquest and the state | §24.4 | Untouched, and named there as the next thing to argue about |

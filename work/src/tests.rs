@@ -37,12 +37,12 @@ fn a_smith_with_no_stock_makes_no_tools() {
     // below it, however badly the place wants what the link makes.
     let (made, after) = make(&hands(20.0, 0.0, 5.0, 0.0, 0.0), Ground::even(ORDINARY), &Holdings::default());
     assert_eq!(made.of(Good::Tools), 0.0, "tools out of nothing");
-    assert_eq!(after.tools, 0.0);
+    assert_eq!(all_tools(&after), 0.0);
 
     // Put hewers in and the same smiths produce.
     let (made, after) = make(&hands(20.0, 5.0, 5.0, 0.0, 0.0), Ground::even(ORDINARY), &Holdings::default());
     assert!(made.of(Good::Tools) > 0.0, "hewers and smiths and still no tools");
-    assert!(after.tools > 0.0, "nothing was left standing at the end of the year");
+    assert!(all_tools(&after) > 0.0, "nothing was left standing at the end of the year");
 }
 
 #[test]
@@ -61,7 +61,7 @@ fn specialising_costs_food_and_that_is_the_point() {
 fn tools_are_what_lets_it_pay_for_itself() {
     // And the reason a chain is worth having: the hands that came off the land come back as
     // a multiplier on the hands that stayed.
-    let equipped = Holdings { tools: 36.0, ..Holdings::default() };
+    let equipped = Holdings::equipping(36.0, &Hands::all_farming(30.0));
     let bare = make(&Hands::all_farming(30.0), Ground::even(ORDINARY), &Holdings::default()).0;
     let kitted = make(&Hands::all_farming(30.0), Ground::even(ORDINARY), &equipped).0;
     assert!(
@@ -84,21 +84,21 @@ fn tools_are_what_lets_it_pay_for_itself() {
 #[test]
 fn capital_runs_down_without_anybody_keeping_it() {
     // The other half of what makes tools capital rather than a number that only grows.
-    let mut holdings = Holdings { tools: 30.0, ..Holdings::default() };
+    let mut holdings = Holdings::equipping(30.0, &Hands::all_farming(30.0));
     for _ in 0..10 {
         holdings = make(&Hands::all_farming(30.0), Ground::even(ORDINARY), &holdings).1;
     }
-    assert!(holdings.tools < 12.0, "tools kept themselves: {}", holdings.tools);
+    assert!(all_tools(&holdings) < 12.0, "tools kept themselves: {}", all_tools(&holdings));
 
     // And a keeper holds it very nearly level.
-    let mut kept = Holdings { tools: 30.0, ..Holdings::default() };
+    let mut kept = Holdings::equipping(30.0, &hands(28.0, 0.0, 0.0, 0.0, 2.0));
     for _ in 0..10 {
         kept = make(&hands(28.0, 0.0, 0.0, 0.0, 2.0), Ground::even(ORDINARY), &kept).1;
     }
     assert!(
-        kept.tools > 24.0,
+        all_tools(&kept) > 24.0,
         "two keepers could not hold thirty tools together: {}",
-        kept.tools
+        all_tools(&kept)
     );
 }
 
@@ -202,9 +202,9 @@ fn every_link_of_the_chain_can_be_reached_from_the_bottom() {
         "a comfortable place never got past farming: {seen:?}"
     );
     assert!(
-        holdings.tools > 1.0,
+        all_tools(&holdings) > 1.0,
         "sixty years and the place owns nothing: {}",
-        holdings.tools
+        all_tools(&holdings)
     );
 }
 
@@ -221,10 +221,6 @@ fn the_marginal_comparison_is_the_switching_question() {
     // bug, on exactly that argument, without checking. It is not one, and the cobweb has a
     // single cause rather than two.
     let ground = Ground::even(1.0);
-    let holdings = Holdings {
-        tools: 30.0,
-        stock: 40.0,
-    };
     let shapes = [
         hands(40.0, 8.0, 8.0, 6.0, 4.0),
         hands(20.0, 20.0, 20.0, 20.0, 20.0),
@@ -235,6 +231,11 @@ fn the_marginal_comparison_is_the_switching_question() {
     let (mut compared, mut disagreed) = (0, 0);
     let mut worst: f32 = 0.0;
     for shape in shapes {
+        // Equipped for the shape it is in, since that is what a place at rest looks like.
+        let holdings = Holdings {
+            stock: 40.0,
+            ..Holdings::equipping(30.0, &shape)
+        };
         let workers = shape.total();
         let (made, held) = make(&shape, ground, &holdings);
         let base = value_of(&made, &held, workers, ground, 0.5);
@@ -272,5 +273,62 @@ fn the_marginal_comparison_is_the_switching_question() {
         disagreed == 0,
         "{disagreed} of {compared} switches disagree on whether they are worth making, \
 worst gap {worst:.4}"
+    );
+}
+
+#[test]
+fn a_plough_is_no_use_to_a_quarryman() {
+    // §27.9's last bullet: tools used to be one number, so a place that had spent a century
+    // farming was, on the day it turned to hewing, exactly as well equipped for hewing as it
+    // had been for farming. Capital that transfers perfectly between trades is not capital.
+    let ground = Ground::even(ORDINARY);
+    let farming = Hands::all_farming(30.0);
+    let equipped = Holdings::equipping(36.0, &farming);
+
+    // A village of farmers with ploughs does well, which is the old claim and still holds.
+    let fed = make(&farming, ground, &equipped).0.of(Good::Food);
+    let barehanded = make(&farming, ground, &Holdings::default()).0.of(Good::Food);
+    assert!(fed > barehanded * 1.3, "ploughs should pay: {fed:.1} against {barehanded:.1}");
+
+    // Turn the same village to quarrying overnight and the ploughs are worth nothing to
+    // them. They own thirty-six tools and none of them are the right ones.
+    let quarrying = hands(0.0, 30.0, 0.0, 0.0, 0.0);
+    let with_ploughs = make(&quarrying, ground, &equipped).0.of(Good::Stock);
+    let with_nothing = make(&quarrying, ground, &Holdings::default()).0.of(Good::Stock);
+    assert!(
+        (with_ploughs - with_nothing).abs() < 1e-4,
+        "a farm's tools should be no help at the quarry face: {with_ploughs:.2} against \
+{with_nothing:.2}"
+    );
+
+    // And a place equipped *for* quarrying does as well at it as the farmers did at farming,
+    // so this is stickiness rather than a penalty on hewing.
+    let picks = Holdings::equipping(36.0, &quarrying);
+    let with_picks = make(&quarrying, ground, &picks).0.of(Good::Stock);
+    assert!(
+        with_picks > with_nothing * 1.3,
+        "picks should pay a quarry what ploughs pay a farm: {with_picks:.2} against \
+{with_nothing:.2}"
+    );
+}
+
+#[test]
+fn at_rest_it_is_the_pool_it_replaced() {
+    // The other half of the claim, and the one that makes this safe to land: a place that
+    // has been doing the same thing for years is equipped in proportion to its hands, and
+    // then tools-per-hand is the same number in every trade — which is exactly what one
+    // pooled figure meant. The change bites only on places that *change*.
+    let ground = Ground::even(ORDINARY);
+    let mixed = hands(20.0, 10.0, 4.0, 4.0, 2.0);
+    let mut holdings = Holdings::equipping(20.0, &mixed);
+    for _ in 0..40 {
+        holdings = make(&mixed, ground, &holdings).1;
+    }
+    let per_farmer = holdings.tools[Trade::Farmer as usize] / mixed.at(Trade::Farmer);
+    let per_hewer = holdings.tools[Trade::Hewer as usize] / mixed.at(Trade::Hewer);
+    assert!(
+        (per_farmer - per_hewer).abs() < 0.05 * per_farmer.max(1e-6),
+        "a settled place should be evenly equipped: {per_farmer:.3} a farmer against \
+{per_hewer:.3} a hewer"
     );
 }

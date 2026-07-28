@@ -276,7 +276,10 @@ fn places(world: &World) -> String {
                     field("fortune", &num(place.fortune)),
                     // What the place owns that outlives the year — the only capital in this
                     // world, and the only thing in it that compounds.
-                    field("tools", &num(world.holdings_of(id).tools)),
+                    field(
+                        "tools",
+                        &num(economy::all_tools(&world.holdings_of(id)))
+                    ),
                     // What its people actually know how to do, and how far anybody has ever
                     // worked out that it is possible to get. One is bare subsistence and one
                     // is an age nobody has left.

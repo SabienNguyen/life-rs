@@ -91,7 +91,7 @@ fn main() {
                 .map(|(t, n)| format!("{n} {t}"))
                 .collect::<Vec<_>>()
                 .join(", "),
-            world.holdings_of(id).tools,
+            economy::all_tools(&world.holdings_of(id)),
         );
         if let Some(worth) = world.worth_of(id) {
             println!(

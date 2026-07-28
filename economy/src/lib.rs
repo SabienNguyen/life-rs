@@ -41,7 +41,7 @@
 //! because its land and its position are good, not because it was rich last century. Real
 //! inequality is mostly the latter.
 
-pub use work::{Good, Ground, Hands, Holdings, Made, SUBSISTENCE, Trade};
+pub use work::{Good, Ground, Hands, Holdings, Made, SUBSISTENCE, Trade, all_tools};
 
 use society::Terrain;
 

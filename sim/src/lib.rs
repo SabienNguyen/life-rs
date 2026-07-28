@@ -4510,10 +4510,10 @@ mod tests {
         let world = lineages();
         for id in world.places.ids() {
             let held = world.holdings_of(id);
-            assert!(held.tools >= 0.0 && held.stock >= 0.0);
+            assert!(economy::all_tools(&held) >= 0.0 && held.stock >= 0.0);
             // Tools are made of stock and stock is cut by hands. Nothing can appear from
             // nowhere, which is the one thing a chain has to guarantee.
-            if held.tools > 0.0 {
+            if economy::all_tools(&held) > 0.0 {
                 assert!(
                     world.people.iter().any(|(_, p)| {
                         matches!(p.trade(), economy::Trade::Smith | economy::Trade::Hewer)
@@ -4570,7 +4570,7 @@ mod tests {
         let owning = world
             .places
             .ids()
-            .filter(|id| world.holdings_of(*id).tools > 1.0)
+            .filter(|id| economy::all_tools(&world.holdings_of(*id)) > 1.0)
             .count();
         assert!(owning > 0, "nowhere in the world owns anything");
     }
@@ -5024,7 +5024,7 @@ mod tests {
             let mut trades: std::collections::BTreeMap<&str, usize> = Default::default();
             let mut tools = 0.0;
             for (id, _) in world.places.iter() {
-                tools += world.holdings_of(id).tools;
+                tools += economy::all_tools(&world.holdings_of(id));
             }
             for (_, p) in world.people.iter() {
                 if p.is_alive() && !p.stage(now).is_dependent() {
