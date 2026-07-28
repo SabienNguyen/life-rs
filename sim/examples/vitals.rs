@@ -15,24 +15,27 @@
 //! Where the world stands, measured rather than remembered — **eight** seeds (`SEEDS=8`), 120
 //! founders, 90 years:
 //!
-//!     living     2019
-//!     churn         8%   318 of 3792 moves went straight back. Over 10% is pathological (§30.4)
-//!     biggest    0.64    share of households in one quarter. 1.00 is the collapse (§30.5)
+//!     living     2064
+//!     churn         8%   302 of 3595 moves went straight back. Over 10% is pathological (§30.4)
+//!     biggest    0.55    share of households in one quarter. 1.00 is the collapse (§30.5)
 //!     empty      0.40    quarters with nobody in them
-//!     spread     0.13    how far apart the inhabited quarters are. §14.4 needs this above 0
-//!     short      0.02    the hungriest quarter's shortfall. Should be small; near zero at
+//!     spread     0.12    how far apart the inhabited quarters are. §14.4 needs this above 0
+//!     short      0.00    the hungriest quarter's shortfall. Should be small; near zero at
 //!                        this size is expected, since §21's ceiling wants a crowded world
-//!     advances     37    things anybody ever worked out (§29)
-//!     taken up    346    people a patron ever opened a door for (§25)
-//!     trades           farm 950  hew 39  smith 33  cook 132  keep 37 — thin but not empty
-//!     acts             gave to 779  taught 153  shunned 271  robbed 97  killed 6 — what
+//!     advances     35    things anybody ever worked out (§29)
+//!     taken up    337    people a patron ever opened a door for (§25)
+//!     trades           farm 985  hew 48  smith 16  cook 147  keep 36 — thin but not empty
+//!     acts             gave to 819  taught 161  shunned 285  robbed 88  killed 6 — what
 //!                        people did to each other on purpose (§35)
-//!     withheld   4762    times somebody turned away from a neighbour visibly worse off, in a
+//!     withheld   4510    times somebody turned away from a neighbour visibly worse off, in a
 //!                        place whose ways say you do not
 //!     killed        6    deaths by another person's hand, counted off the death records
 //!                        rather than off the act tally, so the two can disagree and be seen to
-//!     assimilation 0.117, and 0.132 for somebody who has moved against 0.066 for somebody
+//!     assimilation 0.102, and 0.113 for somebody who has moved against 0.067 for somebody
 //!                        who has not — §17.2.1's claim, in a running world
+//!
+//! `ACTS=0` switches §35's vocabulary off, on the same instrument, for the comparison — which
+//! reads 1997 living, 9% churn, 0.55 biggest, 0.35 empty, and every act at zero.
 //!
 //! Under a minute at three seeds, three at eight, against eight minutes for the suite that
 //! would otherwise tell you.
@@ -74,6 +77,12 @@ fn main() {
         .unwrap_or(3)
         .clamp(1, ALL_SEEDS.len());
     let seeds = &ALL_SEEDS[..how_many];
+    // `ACTS=0` switches §35's vocabulary off. The ablation lives in the instrument rather
+    // than in a script that edits a constant and rebuilds, because two ablations in this
+    // project have left the working tree holding an edited constant after the container
+    // running them restarted — and an ablation nobody can run without editing the source is
+    // an ablation nobody runs.
+    let acts = std::env::var("ACTS").map(|v| v != "0").unwrap_or(true);
 
     let (mut moves, mut back) = (0usize, 0usize);
     let (mut biggest, mut empty, mut spread, mut short) = (0.0, 0.0, 0.0, 0.0);
@@ -91,6 +100,7 @@ fn main() {
         let mut world = World::genesis(WorldSeed::from_u128(seed), founders);
         world.record_only(Salience::Pivotal);
         world.set_detail_budget(100_000);
+        world.acts_are_possible = acts;
         world.run_for(Duration::from_years(years));
         living += world.living();
 

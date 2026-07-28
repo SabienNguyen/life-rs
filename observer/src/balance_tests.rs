@@ -58,6 +58,11 @@ fn balances() -> &'static [(u128, Balance)] {
                 let mut world = World::genesis(WorldSeed::from_u128(seed), 160);
                 world.record_only(Salience::Pivotal);
                 world.set_detail_budget(100_000);
+                // `ACTS=0` switches §35's vocabulary off, so that a band which moves after a
+                // change to it can be attributed rather than argued about. Reading it here
+                // costs nothing and is the only way this sheet can answer "was it that".
+                world.acts_are_possible =
+                    std::env::var("ACTS").map(|v| v != "0").unwrap_or(true);
                 world.run_for(Duration::from_years(120));
                 (seed, measure(&world))
             })

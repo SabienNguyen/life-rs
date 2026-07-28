@@ -283,8 +283,8 @@ Everything above is something people do to *the world*. This is the part where s
 picks a person and does something to them on purpose.
 
 ```
-  acts       gave to 779  taught 153  shunned 271  robbed 97  killed 6
-  withheld     4762   times somebody turned away from a neighbour visibly worse off
+  acts       gave to 819  taught 161  shunned 285  robbed 88  killed 6
+  withheld     4510   times somebody turned away from a neighbour visibly worse off
   killed          6   deaths by another person's hand
 ```
 
@@ -307,11 +307,22 @@ scored from who the actor is and what they hold about the target:
 - **Nobody sees a killing.** This world has no way for one person to tell another a fact,
   so the killer is the only person who ever knows. Every murder here is unsolved.
 
-Three ways of getting this wrong are written up in the design document, and all three had
-the same shape — two quantities not on a common scale, compared as though they were. The
-best of them: for a long time **murder was structurally impossible**, because shunning and
-killing run off the same hatred, shunning is cheaper, and taking the larger appetite meant
-the cheap sanction masked the grave one every single time.
+Switch the whole vocabulary off and the world lands where it landed with it — same
+population, same churn, same settlement concentration, same trade mix. That took **five
+corrections**, and every one of them was the same mistake: two quantities not on a common
+scale, used as though they were. Two are worth the price of admission:
+
+- For a long time **murder was structurally impossible**. Shunning and killing run off the
+  same hatred, shunning is far cheaper, and taking the larger appetite meant the cheap
+  sanction masked the grave one every single time. No amount of tuning fixes that.
+- Teaching wrote a person's *standing* into a childhood-quality predictor centred on zero,
+  so being taught by a middling neighbour counted as a better upbringing than being raised
+  in the best quarter in the world. Nothing in the aggregates noticed. **A calibration band
+  did** — the share of a life that upbringing explains dropped from 0.25 to 0.19 and went
+  under its floor, and running the same three worlds with the vocabulary switched off is
+  what turned that into an address.
+
+All five are written up in the design document.
 
 ---
 

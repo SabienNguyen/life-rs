@@ -3722,13 +3722,16 @@ floor larger than the effect at three, which is §35.8:
 | off | living | churn | biggest | empty | verdict |
 |---|---|---|---|---|---|
 | *baseline (8 seeds)* | 1997 | 9% | 0.55 | 0.35 | |
-| `acts_are_possible` | 2019 | 8% | **0.64** | **0.40** | load-bearing, and only here |
+| `acts_are_possible` | 2064 | 8% | 0.55 | **0.40** | **nearly free**, at the aggregate |
 
-The whole act vocabulary costs nine points of settlement concentration and nothing else — not
-population, not churn, not discovery, not patronage, not the trade mix (§35.9). It is the first
-mechanism in this table with a switch built for the purpose rather than a constant edited by a
-script, and that is not tidiness: two ablations in this project have left the working tree
-holding an edited constant after the container running them restarted.
+The whole act vocabulary costs five points of `empty` and nothing else — not population, not
+churn, not concentration, not discovery, not patronage, not the trade mix (§35.9). It is the
+first mechanism in this table with a switch built for the purpose rather than a constant edited
+by a script, and that is not tidiness: two ablations in this project have left the working tree
+holding an edited constant after the container running them restarted. It is also the first whose
+ablation was run against §15's balance sheet as well as against `vitals`, which is how the scale
+error in §35.9.1 was found — the aggregate table above was already neutral while a calibration
+band was six points out.
 
 The last two rows of the first table are the point, and the first of them nearly produced a wrong conclusion.
 Setting `READING` to zero does not make the belief *accurate*, it freezes it at nothing — which
@@ -4042,11 +4045,12 @@ each against its own bar rather than against the others — so adding a sixth ac
 five by *nothing*, not merely by little. That property is worth more than the elegance of one
 list, because this vocabulary is going to grow.
 
-### 35.2 Three ways the same mistake was made
+### 35.2 Five ways the same mistake was made
 
-All three had the same shape: **two quantities that are not on a common scale, compared as
-though they were.** None was visible in the code, and all three read as findings about human
-nature until they were measured.
+All five had the same shape: **two quantities that are not on a common scale, used as though
+they were.** None was visible in the code. Three read as findings about human nature until they
+were measured, one read as a settlement collapsing, and one read as §15's shared-environment band
+quietly failing.
 
 **A product is not a sum.** Giving was scored as a sum of four ordinary reasons — kindness,
 fondness, duty, what is owed — and landed near 1.0. Robbery was scored as a product of five
@@ -4068,6 +4072,24 @@ anybody in a measured world ever wanted to kill anybody was **0.138**, against a
 which is already rare; giving is a sum of four ordinary ones. Because `choose` rolls each act
 separately, a per-act bar changes only that act — which is the whole reason it is safe to have
 one.
+
+**A gift is not a famine.** `share_the_shortfall` books favours as `share * 365.0`, because there
+`share` is a fraction of a year's food and the product is days of hunger. A gift is standing, and
+a day of work is worth `WORK_GAIN` — 0.0017 — of it, so a fifteenth of a comfortable person's
+position is *hundreds* of days of work. `Bonds::helped` warms the receiver by a twentieth per
+day. Every gift arrived as instant devotion and left a debt nobody could ever clear, the tie
+graph stopped meaning anything, and **in one of eight worlds every household in it ended up in a
+single quarter** — §30.5's collapse, found by the test that exists for exactly that. A gift is now
+measured in days of work, because that is the unit debts are kept in and the only unit in which a
+favour has a size.
+
+**A lesson is not a standing.** `Person::absorb` takes a childhood quality on
+`Environment::upbringing`'s scale, which is `(quality - 0.5) * 2.5`: signed, centred on
+nothing-special, running about −1.25 to 1.25. Teaching handed it the teacher's *standing*, which
+runs 0 to 1 and averages near 0.4 — so every lesson was a strong positive shock to a quantity
+centred on zero, and being taught by a middling neighbour counted as a better childhood than
+being raised in the best quarter in the world. It cost six points of §15's shared-environment
+share and took that band **below its floor**, which is how it was found. See §35.9.1.
 
 ### 35.3 A gate that never fires looks exactly like a broken one
 
@@ -4182,31 +4204,78 @@ Two further things were needed before the comparison meant anything:
 
 ### 35.9 What it costs, over eight worlds
 
-`SEEDS=8 cargo run --release --example vitals`, with the vocabulary off and on:
+`SEEDS=8 cargo run --release --example vitals`, against `ACTS=0` on the same instrument:
 
 | | off | on |
 |---|---|---|
-| living | 1997 | 2019 |
-| churn | 9% (336/3626) | 8% (318/3792) |
-| biggest | 0.55 | **0.64** |
-| empty | 0.35 | **0.40** |
-| spread | 0.11 | 0.13 |
-| advances | 38 | 37 |
-| taken up | 340 | 346 |
-| trades | 924/35/25/149/45 | 950/39/33/132/37 |
-| assimilation | 0.100 | 0.117 |
-| **acts** | — | gave to 779, taught 153, shunned 271, robbed 97, **killed 6** |
+| living | 1997 | 2064 |
+| churn | 9% (336/3626) | 8% (302/3595) |
+| biggest | 0.55 | 0.55 |
+| empty | 0.35 | 0.40 |
+| spread | 0.11 | 0.12 |
+| advances | 38 | 35 |
+| taken up | 340 | 337 |
+| trades | 924/35/25/149/45 | 985/48/16/147/36 |
+| assimilation | 0.100 | 0.102 |
+| **acts** | — | gave to 819, taught 161, shunned 285, robbed 88, **killed 6** |
 
-Population, churn, discovery, patronage and the trade mix are all unchanged. The one real cost is
-settlement concentration: nine points of `biggest` and five of `empty`. That is attributable
-rather than mysterious — giving and robbing move means about, and means is what decides who gets
-into a household — and it is well short of §30.5's collapse.
+Population, churn, concentration, discovery, patronage, assimilation and the trade mix all
+land where they landed without it. The only column that moves is `empty`, by five points.
+
+That neutrality is the *result of* the five corrections above and not an assumption behind them:
+the same table read `biggest` **0.64** and `empty` **0.40** before the gift was booked in days,
+and one world in eight had collapsed into a single quarter.
 
 Six killings in eight worlds is about one murder per settlement per lifetime. The act tally and
 the death records agree on the number, which is a check worth having: they are written by two
 independent paths, and a mechanism reporting five killings in a world where nobody died of
 violence would be a bug in one of them. `people_do_things_to_each_other_and_the_two_counts_of_it_agree`
 found exactly that, on the first run — the tally was counting gifts that had nothing behind them.
+
+### 35.9.1 A band found a bug, which is what bands are for
+
+§15's `ENVIRONMENT` band — the share of lifetime outcome that shared upbringing explains — is
+0.20 to 0.55, and `the_bands_the_design_meets_stay_met` averages it over three worlds. It read
+**0.19** and failed.
+
+`targets` says a measurement outside a band *"is a finding, not necessarily a fault — but it
+should be looked at rather than shrugged off"*. Looking at it meant running the same sheet with
+`ACTS=0`, which is why that switch is now read by `balance_tests` as well as by `vitals`:
+
+| seed | off | on, before | on, after |
+|---|---|---|---|
+| 0x11 | 0.36 | 0.33 | 0.44 |
+| 0x21 | 0.24 | **0.12** | 0.19 |
+| 0x221 | 0.16 | 0.13 | 0.15 |
+| **mean** | 0.253 | **0.193** | **0.260** |
+
+The middle column is the vocabulary, unambiguously — not seed noise, because the same three seeds
+answer twice. And what it was is the scale error in §35.2: teaching wrote a person's standing into
+a predictor built from place quality, injecting a strong positive shock into a quantity centred on
+zero, so the upbringing predictor gained variance that did not carry through to attainment and its
+correlation with the outcome fell. Correcting the scale restores the band and leaves it a little
+*above* where the world was without teaching at all, which is the right direction: being taught is
+an environmental input, so it ought to raise the share that upbringing explains.
+
+Six of the seven bands move by under two points across all three columns. This one moved by six,
+and it was the only thing in the project that noticed.
+
+### 35.9.2 And a test that had been measuring the wrong thing all along
+
+`moving_is_not_a_thing_people_do_back_and_forth` pools three worlds and asks what share of moves
+went straight back. It pooled them into **one map keyed by `PersonId`** — and handles are
+per-arena, so person 5 of one world and person 5 of the next are the same key, and so are their
+places. Three strangers' lives were stitched into one path, and a move in the second world counted
+as a return to somewhere in the first.
+
+It read 10.5% against a bar of a tenth. The same three worlds measured a world at a time read
+**4%**, which is what `vitals` had been saying all along, because `vitals` builds its map inside
+the seed loop.
+
+The test has been reporting a number nobody could have obtained any other way for as long as it
+has existed, and it took a mechanism that moved churn slightly to push it over its own bar and
+make anybody look. §15.1's rule was "one seed is not a measurement"; this is the other half of it
+— **pooling is not free, and what pools across worlds is the rate, never the paths.**
 
 ### 35.10 What this does not have
 

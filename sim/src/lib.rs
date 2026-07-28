@@ -405,8 +405,13 @@ const COMPANY_A_YEAR: u32 = 16;
 /// the acts count in `vitals` comes out absurd in either direction.
 const AN_OCCASION: f32 = 0.06;
 
-/// The share of what somebody can spare that changes hands when they give.
-const GENEROSITY: f32 = 0.15;
+/// What a gift is worth, in days of the giver's work.
+///
+/// Something over a week — a real favour, well under `PATIENCE`, and small enough that
+/// `Bonds::helped`'s warmth does not saturate on it. Everything about the size of this number
+/// is set by the ledger it goes on rather than by what feels generous, because a favour whose
+/// size the reciprocity machinery cannot represent is not a favour, it is a distortion.
+const GIFT_IN_DAYS: f32 = 8.0;
 
 /// What a lesson is worth to whoever is taught, in standing.
 const TEACHING: f32 = 0.03;
@@ -2234,12 +2239,22 @@ impl World {
         use person::acts::Toward;
         match act {
             Toward::Give => {
-                let gift = self
+                // A gift is measured in **days of somebody's work**, because that is the unit
+                // debts are kept in and the only unit in which a favour has a size.
+                //
+                // It was first a share of the giver's standing, and that was out by two
+                // orders of magnitude. A day of work is worth `WORK_GAIN` of standing, so a
+                // fifteenth of a comfortable person's position is *hundreds* of days — and
+                // `Bonds::helped` warms the receiver by a twentieth per day. Every gift
+                // arrived as instant devotion and left a debt nobody could ever clear, the
+                // tie graph stopped meaning anything, and in one of eight worlds every
+                // household ended up in a single quarter, which is §30.5's collapse.
+                let gift = GIFT_IN_DAYS * WORK_GAIN;
+                let enough = self
                     .people
                     .get(who)
-                    .map(|p| (p.standing() - SUBSISTENCE_STANDING).max(0.0) * GENEROSITY)
-                    .unwrap_or(0.0);
-                if gift <= 0.0 {
+                    .is_some_and(|p| p.standing() - gift >= SUBSISTENCE_STANDING);
+                if !enough {
                     return false;
                 }
                 // An exact transfer. Nothing is created by kindness any more than it is by a
@@ -2248,17 +2263,39 @@ impl World {
                     let held = giver.standing();
                     giver.set_standing(held - gift);
                 }
+                // Into what they *own*, not into what they can do. Standing is a capacity and
+                // it decays at `STANDING_DECAY` a year, so a gift booked as standing lifts a
+                // marginal household over an admission bar and then lets it fall back —
+                // §31.1's first rule, that a decision read afresh from a moving quantity
+                // oscillates unless something damps it. It showed up as churn: 10.7% of moves
+                // going straight back, against §30.4's bar of a tenth. An estate does not
+                // decay, so what somebody is given stays given.
                 if let Some(taker) = self.people.get_mut(other) {
-                    let held = taker.standing();
-                    taker.set_standing(held + gift);
+                    taker.inherit(gift);
                 }
                 // And it goes on the ledger, because a gift in this world is a favour and
                 // reciprocity is what decides what the two of them come to think of each
-                // other. In days of work, which is the unit debts are kept in.
-                self.bonds.helped(who, other, gift * 365.0);
+                // other.
+                self.bonds.helped(who, other, GIFT_IN_DAYS);
             }
             Toward::Teach => {
-                let worth = self.people.get(who).map(|p| p.standing()).unwrap_or(0.0);
+                // On the scale `absorb` is written in, which is **not** the scale standing is
+                // written in. `Environment::upbringing` is `(quality - 0.5) * 2.5`: signed,
+                // centred on nothing-special, running about -1.25 to 1.25. Standing runs 0 to
+                // 1 and averages near 0.4, so handing it over raw made every lesson a strong
+                // *positive* shock to a quantity centred on zero — and being taught by a
+                // middling neighbour counted as a better childhood than being raised in the
+                // best quarter in the world.
+                //
+                // The same mistake as booking a gift in days of famine and as scoring one act
+                // as a product against another as a sum: two quantities that are not on a
+                // common scale, used as though they were. It cost six points of §15's
+                // shared-environment share and took that band below its floor.
+                let worth = self
+                    .people
+                    .get(who)
+                    .map(|p| (p.standing() - 0.5) * 2.5)
+                    .unwrap_or(0.0);
                 if let Some(teacher) = self.people.get_mut(who) {
                     // Time given to somebody else is time not spent on your own ground.
                     teacher.slip(TEACHING);
@@ -5019,22 +5056,29 @@ mod tests {
         // decide moves that a larger world would settle on real ones. A hundred and twenty
         // founders over ninety years is where places have had time to become different
         // places, and pooled over three seeds it reads well inside a tenth.
-        let mut path: std::collections::BTreeMap<PersonId, Vec<PlaceId>> = Default::default();
+        // One map per world, and that is not tidiness. Handles are per-arena: person 5 of one
+        // world and person 5 of the next are the same key, and so are their places. Pooling
+        // the *paths* into one map therefore stitched three strangers' lives into one and
+        // counted a move in the second world as a return to somewhere in the first. It read
+        // 10.5% while the same three worlds measured properly read 4%, and it had been
+        // reporting a number nobody could have got any other way for as long as it existed.
+        // What pools across worlds is the rate; the paths do not.
+        let (mut moves, mut returns) = (0, 0);
         for seed in [0x11u128, 0x21, 0x31] {
             let mut world = World::genesis(WorldSeed::from_u128(seed), 120);
             world.record_only(Salience::Pivotal);
             world.set_detail_budget(100_000);
             world.run_for(Duration::from_years(90));
+            let mut path: std::collections::BTreeMap<PersonId, Vec<PlaceId>> = Default::default();
             for record in world.chronicle.iter() {
                 if let Happening::PersonMoves { person, to } = record.kind {
                     path.entry(person).or_default().push(to);
                 }
             }
-        }
-        let (mut moves, mut returns) = (0, 0);
-        for steps in path.values() {
-            moves += steps.len();
-            returns += (2..steps.len()).filter(|i| steps[*i] == steps[i - 2]).count();
+            for steps in path.values() {
+                moves += steps.len();
+                returns += (2..steps.len()).filter(|i| steps[*i] == steps[i - 2]).count();
+            }
         }
         assert!(moves > 100, "too few moves to say anything: {moves}");
         assert!(
