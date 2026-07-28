@@ -22,9 +22,19 @@
 //!     spread     0.11    how far apart the inhabited quarters are. §14.4 needs this above 0
 //!     short      0.00    the hungriest quarter's shortfall. Should be small; zero at this
 //!                        size is expected, since §21's ceiling wants a crowded world
+//!     advances     12    things anybody ever worked out (§29)
+//!     taken up    108    people a patron ever opened a door for (§25)
 //!     trades           farm 318  hew 13  smith 6  cook 48  keep 19 — thin but not empty
+//!     assimilation 0.139, and 0.212 for somebody who has moved against 0.066 for somebody
+//!                        who has not — §17.2.1's claim, in a running world
 //!
 //! Seventy-eight seconds, against eight minutes for the suite that would otherwise tell you.
+//!
+//! **Add a line here before ablating the mechanism it belongs to.** §31.2 switches mechanisms
+//! off and compares against this, and an instrument that cannot see what a mechanism claims
+//! will report that switching it off changed nothing — which is the same sentence as "the
+//! mechanism is inert" and means something entirely different. `advances` and `taken up` are
+//! here for exactly that reason, added before §29's and §25's turn came up.
 
 use sim::World;
 use sim_core::{Duration, Salience, WorldSeed};
@@ -46,6 +56,7 @@ fn main() {
     let mut trades = [0usize; 5];
     let mut living = 0;
     let (mut apart, mut counted) = (0.0f32, 0usize);
+    let (mut advances, mut taken_up) = (0usize, 0usize);
     let (mut moved_apart, mut moved_counted) = (0.0f32, 0usize);
     let (mut stayed_apart, mut stayed_counted) = (0.0f32, 0usize);
 
@@ -91,6 +102,21 @@ fn main() {
         spread += (lived_in.iter().map(|a| (a - mean).powi(2)).sum::<f32>()
             / lived_in.len().max(1) as f32)
             .sqrt();
+
+        // What anybody ever worked out — §29's only output, and a thing no other line here
+        // can see. An instrument you ablate against has to be able to see what the mechanism
+        // claims, or switching it off looks like it changed nothing for the wrong reason.
+        advances += world
+            .chronicle
+            .iter()
+            .filter(|r| matches!(r.kind, sim::Happening::PersonWorksItOut { .. }))
+            .count();
+        // And who was ever taken up, which is §25's largest single fact about a life.
+        taken_up += world
+            .chronicle
+            .iter()
+            .filter(|r| matches!(r.kind, sim::Happening::PersonMentored { .. }))
+            .count();
 
         short += world
             .places
@@ -155,6 +181,8 @@ fn main() {
     println!("  empty      {:>6.2}   quarters with nobody in them", empty / n);
     println!("  spread     {:>6.2}   how far apart the inhabited quarters are", spread / n);
     println!("  short      {:>6.2}   the hungriest quarter's shortfall per head", short / n);
+    println!("  advances   {advances:>6}   things anybody ever worked out (§29)");
+    println!("  taken up   {taken_up:>6}   people a patron ever opened a door for (§25)");
     println!(
         "\n  trades     {}",
         ["farm", "hew", "smith", "cook", "keep"]
