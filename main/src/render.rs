@@ -111,6 +111,20 @@ fn sentence(world: &World, happening: Happening) -> String {
             who(world, by)
         ),
 
+        Happening::PlaceTaken { place, by } => format!(
+            "{} is raided out of {}",
+            world
+                .places
+                .get(place)
+                .map(|p| p.name.as_str())
+                .unwrap_or("somewhere"),
+            world
+                .places
+                .get(by)
+                .map(|p| p.name.as_str())
+                .unwrap_or("somewhere")
+        ),
+
         Happening::PlaceChanges { place, into } => format!(
             "{} has become {}",
             world

@@ -568,6 +568,7 @@ fn events(world: &World) -> String {
                 Happening::PersonMoves { person, to } => ("move", vec![person], vec![to]),
                 Happening::PersonMentored { person, by } => ("patron", vec![person, by], vec![]),
                 Happening::PlaceChanges { place, .. } => ("place", vec![], vec![place]),
+                Happening::PlaceTaken { place, by } => ("taken", vec![], vec![place, by]),
                 // The rarest thing in the chronicle and the only one that changes what is
                 // *possible* rather than what happened.
                 Happening::PersonWorksItOut { person, .. } => ("advance", vec![person], vec![]),

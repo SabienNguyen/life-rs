@@ -373,6 +373,16 @@ impl Person {
         }
     }
 
+    /// Lose a share of what they own, and say how much was carried off.
+    ///
+    /// Returns what was taken so that a raid can hand it over rather than destroy it — see
+    /// `World::take_what_can_be_taken`. Nothing here creates wealth.
+    pub fn plundered(&mut self, share: f32) -> f32 {
+        let lost = self.estate * share.clamp(0.0, 1.0);
+        self.estate -= lost;
+        lost
+    }
+
     /// Take a share of somebody's estate. What the dead leave is what the living receive, and
     /// nothing is created in the passing — see `World::settle_the_estate`.
     pub fn inherit(&mut self, share: f32) {

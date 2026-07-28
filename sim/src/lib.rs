@@ -122,6 +122,20 @@ const TEMPERAMENT_AT_WORK: f32 = 0.5;
 /// somebody's house the same afternoon is how it broke the world the first time.
 const WHAT_A_HOUSEHOLD_ADDS: f32 = 0.25;
 
+/// The yearly chance of a taking, per unit of the pressure behind it.
+///
+/// Small, and rare on purpose. A taking is the sort of thing a place remembers for a
+/// generation, not an annual event, and a rate high enough to see every year would make it
+/// weather rather than history.
+const TAKING: f32 = 0.02;
+
+/// What share of an estate a taking carries off.
+///
+/// Not all of it. A raid takes what can be carried and leaves people alive on their ground —
+/// which is what makes it repeatable, and what makes it different from the taking of ground
+/// that §32 says is still missing.
+const PLUNDER: f32 = 0.35;
+
 /// The standing at which a household is keeping itself and no more.
 ///
 /// Anything above this in a year is surplus and a share of it can be put by; at or below it
@@ -462,6 +476,18 @@ pub enum Happening {
         place: PlaceId,
         into: society::Archetype,
     },
+    /// Somebody's neighbours came and took what they had.
+    ///
+    /// The first thing in this world that happens *to* people rather than being chosen by
+    /// them. §24.4 kept conquest out on the grounds that it needed a state and an army, and
+    /// that was the wrong prerequisite — what it needs is something worth taking, which is
+    /// why it could not be built before there were estates.
+    PlaceTaken {
+        /// Where it was taken from.
+        place: PlaceId,
+        /// And where the takers came from.
+        by: PlaceId,
+    },
 }
 
 impl Happening {
@@ -497,6 +523,7 @@ impl Happening {
                 Subjects::of(&[person.to_bits(), to.to_bits()])
             }
             Happening::PlaceChanges { place, .. } => one(place.to_bits()),
+            Happening::PlaceTaken { place, by } => Subjects::of(&[place.to_bits(), by.to_bits()]),
         }
     }
 }
@@ -2251,6 +2278,7 @@ impl World {
         self.assign_detail();
         self.absorb_upbringings(at);
         self.work_things_out(at);
+        self.take_what_can_be_taken(at);
         self.sort_households(at);
         self.reckon_bonds();
         self.scheduler
@@ -2332,6 +2360,150 @@ impl World {
                     },
                 );
             }
+        }
+    }
+
+    /// Hungry neighbours come and take what somebody else has.
+    ///
+    /// §24.4 kept conquest out of this world on the grounds that it needed a state, an army
+    /// and a border — and that was the wrong list. What conquest needs is a **reason**, a
+    /// **means**, and something worth **taking**, and the third was what was actually
+    /// missing: until estates existed there was nothing here that could change hands.
+    ///
+    /// The other two this world already had. §25 says exclusion is its only sanction — no
+    /// violence, no law, no court, just a door that does not open. So a taking is not a new
+    /// kind of thing at all. **It is the negation of the one thing that was already
+    /// political**: a door opened by force rather than passed.
+    ///
+    /// A *rare roll* rather than a threshold, and that is the whole of what keeps it from
+    /// being §31.1's first failure again. A bar on pressure would fire and unfire as pressure
+    /// hovers, which is the revolving door of §30.4 wearing armour. Rare events cannot
+    /// flicker, which is why discovery and retraining are built the same way.
+    ///
+    /// It is self-limiting rather than a ratchet, which was the other thing to get right
+    /// before writing it. Taking moves an estate from the taken to the takers, so the takers
+    /// are better off and less hungry, so the pressure that caused it falls. The feedback is
+    /// negative, and nothing here needed a damper bolted on afterwards.
+    ///
+    /// **This is the taking of things and not yet the taking of ground.** Transferring a
+    /// place itself would mean displacing the households in it, and displacement runs through
+    /// admission — the path by which five separate mechanisms have broken this world in one
+    /// night. That half is deliberately not here, and §32 says what it would need.
+    ///
+    /// **And as it stands it never fires.** Built, wired into the year, consulted every
+    /// reckoning, and zero takings in any world measured — including at a rate of 1.0, which
+    /// makes it a closed gate rather than a small number. §32 has the diagnosis; the short
+    /// version is that the conditions for a raid keep landing on different places from each
+    /// other. It is kept, and labelled, on the same terms as `CROWDING_AVERSION` in §30.5:
+    /// a mechanism that is right and inert is worth more visible than deleted, and `vitals`
+    /// reports the count so that the day it starts firing is a day somebody notices.
+    fn take_what_can_be_taken(&mut self, at: Time) {
+        let countries = self.countries();
+        if countries.len() < 2 {
+            return;
+        }
+        let mut takings: Vec<(PlaceId, PlaceId)> = Vec::new();
+        for country in &countries {
+            for mine in &country.places {
+                // Somewhere close enough to reach, belonging to somebody else.
+                for other in &countries {
+                    if other.name == country.name {
+                        continue;
+                    }
+                    for theirs in &other.places {
+                        if !self.within_reach(*mine, *theirs) {
+                            continue;
+                        }
+                        let (Some(from), Some(to)) =
+                            (self.place_at(*theirs), self.place_at(*mine))
+                        else {
+                            continue;
+                        };
+                        // A reason: they have something, and there are more of us than them.
+                        //
+                        // Keyed on what the victim *has*, not on what the raider lacks, and
+                        // that correction came from measurement. The first version required
+                        // the taker to be hungry, and it could never fire once: reach feeds
+                        // both what a place produces and who its neighbours are, so hunger
+                        // and adjacency are anti-correlated *by construction*. Every pair the
+                        // model offered read either `reach true, want 0.000` or `reach false,
+                        // want 0.032`. A place poor enough to want to raid is a place too
+                        // isolated to reach anybody.
+                        //
+                        // Which is the more honest reading anyway. Raiding is not what the
+                        // desperate do, it is what the strong do to the wealthy — the lure is
+                        // the prize, and the licence is the numbers.
+                        let ours = self.souls_at(*mine).unwrap_or(0) as f32;
+                        let theirs_souls = self.souls_at(*theirs).unwrap_or(0) as f32;
+                        if theirs_souls < 1.0 || ours < 1.0 {
+                            continue;
+                        }
+                        let worth_taking = self
+                            .society
+                            .households_in(from)
+                            .flat_map(|(_, h)| h.members.iter().copied())
+                            .filter_map(|m| self.people.get(m))
+                            .filter(|p| p.is_alive())
+                            .map(|p| p.estate())
+                            .sum::<f32>()
+                            / theirs_souls;
+                        if worth_taking <= 0.0 {
+                            continue;
+                        }
+                        let pressure = worth_taking
+                            * ((ours / (ours + theirs_souls)) - 0.5).max(0.0)
+                            * 2.0;
+                        let mut rng = self.moment_stream(
+                            Domain::Chance,
+                            from.to_bits() ^ to.to_bits() ^ 0x_7a4e,
+                            at,
+                        );
+                        if rng.chance((TAKING * pressure) as f64) {
+                            takings.push((from, to));
+                        }
+                    }
+                }
+            }
+        }
+
+        for (from, to) in takings {
+            let raided: Vec<PersonId> = self
+                .society
+                .households_in(from)
+                .flat_map(|(_, h)| h.members.iter().copied())
+                .filter(|m| self.people.get(*m).is_some_and(|p| p.is_alive()))
+                .collect();
+            let mut taken = 0.0;
+            for who in raided {
+                if let Some(person) = self.people.get_mut(who) {
+                    taken += person.plundered(PLUNDER);
+                }
+            }
+            if taken <= 0.0 {
+                continue;
+            }
+            // What was taken is what is received. Nothing is created in a raid — that is the
+            // whole of why it is worth doing to somebody and worth nothing to the world.
+            let takers: Vec<PersonId> = self
+                .society
+                .households_in(to)
+                .flat_map(|(_, h)| h.members.iter().copied())
+                .filter(|m| self.people.get(*m).is_some_and(|p| p.is_alive()))
+                .collect();
+            if takers.is_empty() {
+                continue;
+            }
+            let share = taken / takers.len() as f32;
+            for taker in takers {
+                if let Some(person) = self.people.get_mut(taker) {
+                    person.inherit(share);
+                }
+            }
+            self.remember(
+                at,
+                Salience::Historic,
+                Happening::PlaceTaken { place: from, by: to },
+            );
         }
     }
 

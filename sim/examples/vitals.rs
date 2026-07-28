@@ -57,6 +57,7 @@ fn main() {
     let mut living = 0;
     let (mut apart, mut counted) = (0.0f32, 0usize);
     let (mut advances, mut taken_up) = (0usize, 0usize);
+    let (mut takings, mut countries) = (0usize, 0usize);
     let (mut moved_apart, mut moved_counted) = (0.0f32, 0usize);
     let (mut stayed_apart, mut stayed_counted) = (0.0f32, 0usize);
 
@@ -110,6 +111,22 @@ fn main() {
             .chronicle
             .iter()
             .filter(|r| matches!(r.kind, sim::Happening::PersonWorksItOut { .. }))
+            .count();
+        // What anybody ever took from anybody. Added *before* the mechanism that produces
+        // it — §31.2's rule, learned by ablating a famine mechanism in a world with no
+        // famine and a discovery mechanism against an instrument that could not see a
+        // discovery. An instrument that cannot see a taking will report that conquest
+        // changed nothing, which is the same sentence as "it never fires" and means
+        // something else entirely.
+        // How many countries there are to take from each other. A taking needs two, and
+        // §24's peoples take a century or two to split — so a fixture that has not run long
+        // enough to have a second country cannot answer anything about conquest, however
+        // hungry it is.
+        countries += world.countries().len();
+        takings += world
+            .chronicle
+            .iter()
+            .filter(|r| matches!(r.kind, sim::Happening::PlaceTaken { .. }))
             .count();
         // And who was ever taken up, which is §25's largest single fact about a life.
         taken_up += world
@@ -183,6 +200,8 @@ fn main() {
     println!("  short      {:>6.2}   the hungriest quarter's shortfall per head", short / n);
     println!("  advances   {advances:>6}   things anybody ever worked out (§29)");
     println!("  taken up   {taken_up:>6}   people a patron ever opened a door for (§25)");
+    println!("  takings    {takings:>6}   times anybody took anything by force (§32)");
+    println!("  countries  {:>6.1}   how many there are to take from each other", countries as f32 / n);
     println!(
         "\n  trades     {}",
         ["farm", "hew", "smith", "cook", "keep"]

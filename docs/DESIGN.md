@@ -3794,3 +3794,112 @@ makes rather than a number anybody quotes, and the one attempt at authored price
 fifty-one cooks against forty-seven farmers and cost a third of the population. That is a
 position with a measurement behind it. Money and ownership are not covered by that argument and
 remain open.
+
+## 32. Taking things, which does not happen
+
+§24.4 kept conquest out of this world on the grounds that it needed a state, an army and a
+border anybody could be stopped at. That was the wrong list. What a taking needs is a
+**reason**, a **means**, and something worth **taking** — and the third was what was actually
+missing. Until §26.12 there was nothing here that could change hands: standing is a capacity
+and dies with its owner, and a place's tools belong to the place.
+
+The other two this world already had. §25 says exclusion is its only sanction — no violence, no
+law, no court, just a door that does not open for somebody the neighbours have turned against.
+So a taking is not a new kind of thing. **It is the negation of the one thing that was already
+political**: a door opened by force rather than passed.
+
+`Happening::PlaceTaken` and `take_what_can_be_taken` are built, wired into the reckoning, and
+consulted every year. **They have never once fired.**
+
+### 32.1 Two reasons, and the first is the interesting one
+
+**Hunger and adjacency are anti-correlated by construction.** The first version keyed a raid on
+the raider's need: we are short, they are not, come on. It could not fire, and the instrument
+said why in one line each. Every pair the model offered read either
+
+    reach true   want 0.000
+    reach false  want 0.032
+
+and never both. Reach feeds what a place produces *and* decides who its neighbours are, so a
+place poor enough to want to raid is a place too isolated to reach anybody. That is not a bug in
+either mechanism; it is a true consequence of the two being built on the same term, and it means
+**desperation cannot be the trigger in a world where isolation causes the desperation.**
+
+Which is the more honest reading anyway. Raiding is not what the desperate do — it is what the
+strong do to the wealthy. So the trigger became what the victim *has* times how much the raider
+outnumbers them.
+
+**And it still does not fire**, at any rate up to 1.0, which makes it a closed gate rather than
+a small number. The remaining constraint is the numbers: among the adjacent cross-country pairs
+these worlds actually produce, the would-be raider is never the larger side. Why that is has not
+been run down.
+
+### 32.2 What it is not, and what would finish it
+
+This is the taking of **things**, not of ground. Transferring a place itself means displacing
+the households in it, and displacement runs through admission — the path by which five separate
+mechanisms broke this world in a single night (§26.10, §26.11, §26.12, §30.4, §30.5). That half
+was deliberately not attempted.
+
+It is kept and labelled rather than deleted, on the terms §30.5 sets for `CROWDING_AVERSION`: a
+mechanism that is right and inert is worth more visible than gone, and `vitals` counts takings
+so that the day one happens is a day somebody notices.
+
+### 32.3 The one thing that went right
+
+The instrument was built **before** the mechanism, for the first time in this project. §31.2's
+rule — ablate against something that can see what the mechanism claims — was applied forwards
+instead of backwards, and the `takings` line existed before there was anything to count.
+
+So this is the sixth inert mechanism here, and the first one known to be inert within minutes of
+being written rather than after months or by accident. The other five were found by a screenshot,
+a stray comment, an unrelated ablation, and twice by tripping over them. That is the whole value
+of the tooling, and it is worth more than the mechanism would have been.
+
+## 33. What people are to each other, counted
+
+Asked plainly — are there allies, enemies, lovers, spouses, pets — and answered by counting
+rather than by describing. 518 adults, 140 years, seed 0x221:
+
+| | each |
+|---|---|
+| people they know | 358.5 |
+| of whom allies | 28.1 |
+| warmly regarded | 45.0 |
+| coolly | 56.8 |
+| **actively disliked** | **25.8** |
+| owe or are owed days of help | 0.0 |
+
+The most befriended adult has 73 allies; **the most resented has 110 enemies**.
+
+**Enmity was never built.** There are almost exactly as many people somebody dislikes as likes,
+and nothing anywhere implements it: `warmth` runs from loathing at −1 to devotion at +1, so
+disliking is liking with the sign flipped and falls out of the same three lines. An *ally* is
+not a label either — `known > 0.3 && warmth > 0.25`, read whenever asked, which is §26.1's rule
+about positions applied to friendship.
+
+**One partner, exclusive, and permanent.** 504 of 518 adults live with one. `seek_partner`
+requires the opposite sex, an age near enough, and not close kin — and that is the whole of it.
+There is no distinction between a wife, a husband and a partner: one relation, `PersonPairs`,
+which the chronicle phrases as *"set up house together"*. No ceremony, no status, no contract.
+
+**Nobody separates.** 647 pairings ever and the only exit is a death; the 73 people who paired
+more than once are widowed. There is likewise no relation outside a household, so nothing in
+this model can be unfaithful — no lovers, no mistresses, no affairs.
+
+**No pets, and it is not an omission that could be patched.** Animals exist as *demes* — a
+population with a size and a range (§11.2) — and never as individuals. There is nothing here a
+person could own, name or bury, and giving them one means giving `ecology` an individual, which
+is a different model.
+
+The asymmetric relation is **patronage**: 118 taken up, and a patron is by construction older
+and better off, since between equals it is just company. §31.2 measured it as a third of all
+the churn in the world, which nothing had costed.
+
+### 33.1 One number in that table is not a result
+
+`owe or are owed` reads **0.0**, and that is the wrong fixture rather than a finding. Debt
+accrues only through famine relief, and at 160 founders nobody goes hungry — so the reciprocity
+channel §25 is built on is simply idle here. Exactly the `RELIEF` ablation of §31.2, met again
+by walking into it from the other direction: a mechanism measured in a world that never calls on
+it measures nothing at all, and the number it returns looks like an answer.
