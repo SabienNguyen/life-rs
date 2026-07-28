@@ -486,6 +486,19 @@ fn people(world: &World) -> String {
                         }
                     ),
                     field("mentored", if p.is_mentored() { "true" } else { "false" }),
+                    // What they are after (§36). A reading, not a field — so this is what
+                    // their life adds up to at the moment the world was written out, and the
+                    // same person read a decade later may well want something else.
+                    field(
+                        "wants",
+                        &match world
+                            .what_they_have_come_to(id)
+                            .and_then(|come_to| person::dreams::of(p, &come_to, world.now()))
+                        {
+                            Some((dream, _)) => quoted(dream.label()),
+                            None => "null".to_string(),
+                        }
+                    ),
                     field("upbringing", &num(p.absorbed_upbringing())),
                     field("place", &place_index(id)),
                     field("parents", &parents),

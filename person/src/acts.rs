@@ -50,6 +50,7 @@
 //! year restrains hard. Nobody has to see anything for that to work, which is what makes it
 //! conscience rather than reputation. Reputation exists too, and is the tie graph's business.
 
+use crate::dreams::Dream;
 use crate::memory::{Held, What};
 use crate::{Deed, Personality, PersonId, Values};
 use sim_core::{Rng, Time};
@@ -187,6 +188,23 @@ pub struct Actor<'a> {
     pub has_a_trade: bool,
     /// What their own upbringing says is owed to the person in front of them.
     pub own_ways: f32,
+    /// What they are trying to get out of their life, if anything — see `dreams`.
+    ///
+    /// Three of the six bear on what somebody does to the person in front of them and three
+    /// do not, and the three that do not are left doing nothing here rather than given a
+    /// token weight. A dream that wants a house has no opinion about whether to rob a
+    /// neighbour, and pretending otherwise would make this field a second personality.
+    pub dream: Option<(Dream, f32)>,
+}
+
+impl Actor<'_> {
+    /// How strongly they want that particular thing, or nothing.
+    fn dreaming_of(&self, dream: Dream) -> f32 {
+        match self.dream {
+            Some((held, how_much)) if held == dream => how_much,
+            _ => 0.0,
+        }
+    }
 }
 
 /// And who it is done to.
@@ -311,8 +329,15 @@ pub fn weigh(actor: &Actor, at: &Subject, now: Time) -> [f32; Toward::COUNT] {
         let duty = 0.6 * actor.own_ways;
         // Owing them makes it likelier; being owed makes it less so.
         let ledger = (-at.debt / 120.0).clamp(-0.4, 0.6);
+        // And what they are after. Somebody who wants to be looked to gives in order to be
+        // the person who gave; somebody who wants never to be caught short again keeps what
+        // they have. This is the whole of §36's effect on kindness and it is one line, which
+        // is the right size — a dream bends what somebody was going to do anyway.
+        let after = 0.3 * actor.dreaming_of(Dream::ToBeLookedTo)
+            - 0.4 * actor.dreaming_of(Dream::NeverAgain);
         appetite[Toward::Give as usize] =
-            (need * (kindness + fondness + duty + ledger) * (spare / (spare + 0.4))).max(0.0);
+            (need * (kindness + fondness + duty + ledger + after) * (spare / (spare + 0.4)))
+                .max(0.0);
     }
 
     // Teaching. Somebody young enough for it to take, somebody you are warm to, and something
@@ -326,8 +351,18 @@ pub fn weigh(actor: &Actor, at: &Subject, now: Time) -> [f32; Toward::COUNT] {
     if actor.has_a_trade && !at.matured && at.known > 0.15 {
         let young = ((30.0 - at.age_years) / 18.0).clamp(0.0, 1.0) as f32;
         let willing = 0.6 * warmth.max(0.0) + 0.3 * at.regard.max(0.0);
-        appetite[Toward::Teach as usize] =
-            young * willing * (0.4 + 0.6 * actor.values.achievement) * (0.5 + 0.5 * at.known);
+        // Teaching is the plainest way anybody becomes a person other people look to, and the
+        // one that costs least, so the dream weighs on it harder than it does on giving — but
+        // only by half again, not by double. At 0.7 it took teaching from 161 acts in eight
+        // worlds to 1,327, past giving and past everything else put together. A dream is
+        // supposed to bend what somebody was going to do anyway; one wiring that multiplies an
+        // act eightfold is not a bend, and an eightfold sensitivity is the kind that comes back
+        // as a calibration band six months later.
+        let after = 0.35 * actor.dreaming_of(Dream::ToBeLookedTo);
+        appetite[Toward::Teach as usize] = young
+            * (willing + after)
+            * (0.4 + 0.6 * actor.values.achievement)
+            * (0.5 + 0.5 * at.known);
     }
 
     // Shunning. What people do instead of violence, and the reason the vocabulary needs a
@@ -336,7 +371,10 @@ pub fn weigh(actor: &Actor, at: &Subject, now: Time) -> [f32; Toward::COUNT] {
     // enforcement runs through whoever cares most what is done.
     if at.known > 0.1 {
         let contempt = hate.max((-at.regard).max(0.0) * 0.7);
-        appetite[Toward::Shun as usize] = (grudge.min(1.5) * 0.55 + contempt * 0.5)
+        // Holding people at arm's length is what "never again" looks like from the outside,
+        // and it is the only way this world has of doing that.
+        let after = 0.35 * actor.dreaming_of(Dream::NeverAgain);
+        appetite[Toward::Shun as usize] = (grudge.min(1.5) * 0.55 + contempt * 0.5 + after)
             * (0.5 + 0.7 * actor.values.tradition)
             * (1.0 - 0.4 * actor.values.benevolence);
     }
@@ -350,7 +388,10 @@ pub fn weigh(actor: &Actor, at: &Subject, now: Time) -> [f32; Toward::COUNT] {
         let coveting = worth_taking / (worth_taking + 0.4);
         let need_of_it = poverty(actor.means) + actor.want.min(1.0);
         let greed = 2.0 * actor.values.power * (1.0 - actor.values.benevolence);
-        let spite = grudge.min(1.0) + hate;
+        // Wanting to get on is a reason people take things, and it belongs beside greed
+        // rather than instead of it: the difference between them is that greed is who
+        // somebody is and this is what their life has made of them.
+        let spite = grudge.min(1.0) + hate + 0.6 * actor.dreaming_of(Dream::ToRise);
         appetite[Toward::Rob as usize] = coveting
             * (need_of_it + greed + spite)
             * TAKING_BY_HAND
@@ -502,6 +543,7 @@ mod tests {
             life_ahead: 0.5,
             has_a_trade: true,
             own_ways: 0.5,
+            dream: None,
         }
     }
 

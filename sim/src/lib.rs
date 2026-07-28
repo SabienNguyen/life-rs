@@ -2154,6 +2154,13 @@ impl World {
             .count();
         let tie = self.bonds.tie(who, other);
 
+        // What they are after, read afresh — see `person::dreams`. Taken before the borrows
+        // below because it walks the society and the ties, and returned as a value so the
+        // scoring cannot go looking for anything else.
+        let longing = self
+            .what_they_have_come_to(who)
+            .and_then(|come_to| self.people.get(who).and_then(|p| person::dreams::of(p, &come_to, at)));
+
         let (Some(one), Some(two)) = (self.people.get(who), self.people.get(other)) else {
             return;
         };
@@ -2176,6 +2183,7 @@ impl World {
             life_ahead: ahead(one) as f32,
             has_a_trade: one.has_matured(),
             own_ways: person::acts::what_is_expected(one.norms()),
+            dream: longing,
         };
         let subject = Subject {
             who: other,
@@ -3676,6 +3684,41 @@ impl World {
             .map(|people| people.ways)
             .unwrap_or([0.5; culture::WAYS]);
         Some((role, culture::naming::name_a_role(&ways, role.stem())))
+    }
+
+    /// What somebody's life has come to, as far as a dream is concerned — see
+    /// `person::dreams`.
+    ///
+    /// The half of a longing that is not memory. Gathered here rather than reached for by the
+    /// reading, so that what a dream is allowed to see is a list somebody wrote down instead
+    /// of whatever happens to be on the world.
+    pub fn what_they_have_come_to(&self, who: PersonId) -> Option<person::dreams::Standing<'_>> {
+        let person = self.people.get(who)?;
+        let place = self.society.place_of(who);
+        let whole_life = life::Mortality::HUMAN.median_lifespan();
+        Some(person::dreams::Standing {
+            values: &person.values,
+            // A household of their *own*, which is not the same as living in one. Everybody
+            // lives in one — a child lives in its parents' — so `home_of(..).is_some()` was
+            // true of every adult in every world and the longing for a home was one nobody
+            // ever had. What makes it theirs is that nobody who raised them is still in it.
+            has_a_home: self.society.home_of(who).is_some_and(|home| {
+                let parents = self.society.parents_of(who);
+                !parents.is_some_and(|(mother, father)| {
+                    self.society.home_of(mother) == Some(home)
+                        || self.society.home_of(father) == Some(home)
+                })
+            }),
+            has_somebody: self.society.partner_of(who).is_some(),
+            rank: self.repute_of(who),
+            want: place
+                .and_then(|at| self.places.get(at))
+                .map(|p| p.want)
+                .unwrap_or(0.0),
+            allies: self.bonds.of(who).filter(|(_, tie)| tie.allied()).count(),
+            was_taken_up: person.is_mentored(),
+            through_life: (person.age(self.now()).years() / whole_life).clamp(0.0, 1.0) as f32,
+        })
     }
 
     /// Which people a place belongs to.

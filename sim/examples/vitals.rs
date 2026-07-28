@@ -95,6 +95,11 @@ fn main() {
     let (mut stayed_apart, mut stayed_counted) = (0.0f32, 0usize);
     let mut acted = [0usize; person::acts::Toward::COUNT];
     let (mut withheld, mut killed) = (0usize, 0usize);
+    // What people are after (§36). Here for §31.2's reason and no other: dreams act only
+    // through acts, so an ablation of the vocabulary switches them off too — and an
+    // instrument that could not see them would report that as having cost nothing.
+    let mut dreamt = [0usize; person::dreams::Dream::COUNT];
+    let mut dreamers = 0usize;
 
     for seed in seeds.iter().copied() {
         let mut world = World::genesis(WorldSeed::from_u128(seed), founders);
@@ -219,6 +224,13 @@ fn main() {
             if !person.is_alive() || !person.has_matured() {
                 continue;
             }
+            if let Some((dream, _)) = world
+                .what_they_have_come_to(id)
+                .and_then(|come_to| person::dreams::of(person, &come_to, world.now()))
+            {
+                dreamt[dream as usize] += 1;
+                dreamers += 1;
+            }
             let Some(here) = world
                 .society
                 .place_of(id)
@@ -273,6 +285,15 @@ fn main() {
             .join("  ")
     );
     println!("  withheld   {withheld:>6}   times somebody turned away where that is not done");
+    println!(
+        "\n  wants      {}",
+        person::dreams::Dream::ALL
+            .iter()
+            .map(|d| format!("{} {}", d.label(), dreamt[*d as usize]))
+            .collect::<Vec<_>>()
+            .join("  ")
+    );
+    println!("             {dreamers:>6}   adults after something in particular (§36)");
     println!("  killed     {killed:>6}   deaths by another person's hand");
     println!(
         "\n  trades     {}",

@@ -973,6 +973,11 @@ function drawPerson() {
     ["Thinks they are", misreadReads(who.misreads)],
     ["Mentored", who.mentored ? "yes" : "no"],
     ["Upbringing", n2(who.upbringing)],
+    // What their life so far adds up to wanting. Nowhere in the simulation is this stored:
+    // it is read off what they carry and where they have ended up, so the same person a
+    // decade later may well be after something else, and the man who wanted a house of his
+    // own stops wanting one the year he has it.
+    ["After", who.wants || "nothing in particular"],
   ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
 
   // Each factor arrives as three numbers, not one: what came down the genome, what

@@ -105,6 +105,9 @@ fn main() {
             life_ahead: ahead,
             has_a_trade: person.has_matured(),
             own_ways: person::acts::what_is_expected(person.norms()),
+            dream: world
+                .what_they_have_come_to(holder)
+                .and_then(|come_to| person::dreams::of(person, &come_to, now)),
         };
         for (about, tie) in world.bonds.of(holder) {
             let Some(them) = world.people.get(about).filter(|p| p.is_alive()) else {

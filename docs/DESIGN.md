@@ -4284,3 +4284,149 @@ knows who did it, and the victim's friends carry only `What::Died`. That is hone
 convenient — this world has no mechanism by which one person tells another a fact — and it means
 an unsolved killing is the only kind there is. Giving a wrong a witness is the next thing this
 vocabulary needs, and it needs a way to say something first.
+
+## 36. What somebody is trying to get out of their life
+
+Nobody in this world has ever wanted anything in particular. They have **needs**, which are
+appetites that come back every day and are answered by eating. They have **values**, fixed at
+birth, which bend how they score everything. Since §35 they have **acts**, which are things they
+do to whoever is in front of them tonight. None of that is a want with a shape — a person who was
+robbed at twenty and spends the next forty years making sure it cannot happen again is not
+expressible in any of it.
+
+`person::dreams` is that. Six longings, each grown from something that happened:
+
+| | where it comes from |
+|---|---|
+| **a home** | not having somebody, and not having a household that is yours rather than the one you were raised in — times how overdue it is |
+| **to rise** | being near the bottom of *somewhere*, sharpened by having been taken from |
+| **away** | hunger, having nobody, having been wronged here, being at the bottom |
+| **to be looked to** | having been taken up (§25), and having somewhere to stand |
+| **to make something** | having already worked one thing out (§29) |
+| **never again** | having been robbed |
+
+### 36.1 A dream is a reading, not a field
+
+There is no `Person::dream`. A longing is computed from what somebody carries (§34) and where
+they have ended up, every time it is asked — the discipline §26.1 applies to social position,
+which is read out of the state and never stored **so that it can be lost**.
+
+That is not tidiness. A stored dream has to be *given* to somebody at some moment by some rule,
+and every such rule is an author deciding what a person wants. A reading cannot be authored: it
+says what a life so far adds up to, and it changes when the life does. The man who wanted a house
+of his own stops wanting one the year he has it, and nothing anywhere has to remember to clear a
+flag.
+
+Measured over three worlds, 400 adults, at the end of ninety years:
+
+```
+  195 of 400 adults want something in particular  (49%)
+
+  a home                23   11.8%        under 35  35 to 55  over 55
+  to rise              103   52.8%   a home   20.9%      6.0%     8.2%
+  away                   2    1.0%   to rise  40.3%     56.7%    62.3%
+  to be looked to       66   33.8%   looked   35.8%     35.8%    29.5%
+  to make something      1    0.5%   to       35.8%     35.8%    29.5%
+  never again            0    0.0%
+```
+
+The age table is the claim being tested. Wanting a home falls from a fifth of the young to under
+a tenth of the old, because they get one; wanting to rise climbs, because the ones who were going
+to have risen already. Nothing schedules either of those. Half the adults want nothing in
+particular, which is the right shape — a world in which everybody is driven is one in which being
+driven means nothing.
+
+### 36.2 The same mistake, a fourth time, caught before it shipped
+
+The first version scored each longing as a product of three or four sub-unit terms. Measured
+before a line of it was wired to any decision:
+
+```
+  99 of 400 adults want something in particular  (25%)
+
+  a home                 0    0.0%
+  to rise               97   98.0%
+  away                   0    0.0%
+  to be looked to        0    0.0%
+  to make something      0    0.0%
+  never again            2    2.0%
+```
+
+**Four of six never occurred to anybody at all, and a fifth was ninety-eight percent of the
+rest.** That is a constant with a name, and this project has shipped two of those already —
+§30.5's dead crowding term and §17.2.3's belief on a tie — both of which read as mechanisms for
+months. It is the same error §35.2 records three times over, and having just written that section
+did not stop me making it a fourth time. All six are now a sum of reasons times a weight from
+values.
+
+Two of the four zeroes were something worse than a scale problem:
+
+- **`has_a_home` was true of everybody.** It asked `home_of(..).is_some()`, and everybody lives
+  in a household — a child lives in its parents'. A household of your *own* is one that nobody
+  who raised you is still in, and until that was the question the commonest longing there is was
+  one nobody in any world ever had.
+- **`friendless` was measured against one.** `2 / (allies + 1)`, which reads 0.05 for people
+  carrying tens of ties, which everybody here does. Against eight, it means something.
+
+The instrument that caught all of this — `sim/examples/what_they_want.rs` — was written and run
+**before** the dreams were connected to a single decision, on the principle that the first
+question about a reading is not whether it works but whether it distinguishes anybody.
+
+### 36.3 What a dream is allowed to do
+
+Not a `Deed`. Deeds are chosen by softmax over relative scores, so anything added to that list
+re-prices eating and sleeping (§26.11). A dream weights decisions that are already scored
+*outside* that softmax — at present, §35's acts:
+
+- **to be looked to** raises giving and teaching, which is how anybody becomes a person others
+  look to;
+- **never again** lowers giving and raises shunning, which is the only way this world has of
+  holding people at arm's length;
+- **to rise** raises robbery, beside greed rather than instead of it — the difference being that
+  greed is who somebody is and this is what their life has made of them.
+
+The first wiring gave teaching `+0.7` and took it from 161 acts in eight worlds to **1,327**, past
+giving and past everything else together. A dream is meant to bend what somebody was going to do
+anyway; one wiring that multiplies an act eightfold is not a bend, and an eightfold sensitivity is
+the kind that comes back as a calibration band six months later. It is `0.35` now.
+
+### 36.4 What it costs
+
+`SEEDS=8`, against `ACTS=0` — which switches dreams off too, since they act only through acts:
+
+| | off | acts only | acts + dreams |
+|---|---|---|---|
+| living | 1997 | 2064 | 2077 |
+| churn | 9% | 8% | **7%** |
+| biggest | 0.55 | 0.55 | 0.55 |
+| empty | 0.35 | 0.40 | **0.33** |
+| spread | 0.11 | 0.12 | **0.14** |
+| advances | 38 | 35 | 39 |
+| taken up | 340 | 337 | 368 |
+| acts | — | 819/161/285/88/6 | 1100/692/310/120/3 |
+
+Dreams are the first mechanism in a while that makes the aggregates *better* rather than costing
+something: churn falls to its lowest reading of the three, `empty` returns to where it was without
+any of this, and `spread` — how far apart the inhabited quarters are, which §14.4 wants above zero
+— goes up by a quarter. The mechanism is teaching: a longing to be looked to produces lessons,
+lessons go into upbringings, and a poor quarter whose children are taught is a quarter that stays
+lived in.
+
+That was not predicted and is not what dreams were built for. It is worth stating plainly because
+the alternative is to claim afterwards that it was the plan.
+
+### 36.5 What is not wired yet
+
+**Moving.** `away` is a longing about leaving and it does not yet move anybody, which makes it the
+one entry in the table that is at risk of being right and inert — the failure mode §31.2 exists to
+find. It is deliberate for now: migration is the most fragile thing in this world, two of the
+three reverted mechanisms moved it first, and two of 400 adults want to leave badly enough for it
+to matter. Wiring it should be its own change with its own ablation.
+
+**Trades.** `to make something` ought to push somebody toward the trades where things get made,
+and does not.
+
+**Comparison to particular people.** Every longing here is grown from what happened to *you*.
+Nobody yet wants what they saw somebody else have — which is where envy lives, and is the more
+interesting half of wanting. It needs people to compare themselves to named others rather than to
+a rank, and the tie graph already holds everything that would take.

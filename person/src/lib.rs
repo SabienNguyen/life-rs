@@ -9,6 +9,7 @@
 
 pub mod acts;
 pub mod deeds;
+pub mod dreams;
 pub mod memory;
 pub mod psyche;
 
