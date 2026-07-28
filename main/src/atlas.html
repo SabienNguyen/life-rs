@@ -179,6 +179,45 @@
   /* And something one person did to another on purpose, which is the only kind of event
      here with somebody's decision behind it rather than a year's arithmetic. */
   .life dd.act { color: var(--ember); }
+
+  /* ---- who somebody knows ------------------------------------------------
+     A tie is directed and carries four numbers, and the only one that reads at a
+     glance is warmth — so warmth is the colour of the whole row and the rest is
+     text. The bar is signed from the middle: gold to the right for fondness,
+     ember to the left for the other thing. */
+  .bonds { display: flex; flex-direction: column; gap: 3px; }
+  .bond {
+    display: grid; grid-template-columns: 1fr 84px auto; gap: 10px; align-items: center;
+    font: inherit; font-size: 12px; color: var(--ink); text-align: left;
+    background: none; border: 0; border-left: 3px solid var(--line);
+    padding: 3px 4px 3px 8px; cursor: pointer;
+  }
+  .bond:hover { background: var(--raised); border-left-color: var(--gold); }
+  .bond:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+  .bond .lot { color: var(--dim); font-size: 10.5px; letter-spacing: 0.08em;
+               text-transform: uppercase; white-space: nowrap; }
+  /* Signed, so the eye reads sides rather than lengths. */
+  .warmth { position: relative; height: 7px; background: var(--ground);
+            border: 1px solid var(--line); }
+  .warmth i { position: absolute; top: 0; bottom: 0; display: block; }
+  .warmth::after {
+    content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px;
+    width: 1px; background: var(--line);
+  }
+
+  /* What a person still holds of their own life. Opacity *is* the strength — a
+     memory half gone should be half there on the page, which no number does. */
+  .carried { display: flex; flex-wrap: wrap; gap: 4px; }
+  .carried span {
+    font-size: 11px; padding: 2px 7px; border: 1px solid var(--line);
+    background: var(--ground); white-space: nowrap;
+  }
+
+  /* The social web. Sits on the void like the globe does, because it is the same
+     kind of object: a thing you look at and turn over rather than read. */
+  #web { background: var(--void); cursor: pointer; image-rendering: auto; display: block;
+         width: 100%; height: auto; }
+  #web:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
 </style>
 
 <div class="frame">
@@ -265,6 +304,14 @@
     <div class="stage">
       <div>
         <div class="plate">
+          <div class="plate-head">The web of it</div>
+          <div class="plot" style="margin-bottom:6px">
+            <canvas id="web" width="1280" height="840" tabindex="0"
+              aria-label="Everybody here and what they are to each other"></canvas>
+          </div>
+          <p class="census" id="web-legend"></p>
+        </div>
+        <div class="plate" style="margin-top:20px">
           <div class="plate-head">Who lives here</div>
           <p class="census" id="place-society"></p>
           <div class="folk" id="place-folk"></div>
@@ -290,6 +337,10 @@
         <dl class="readout" id="person-factors"></dl>
         <div class="plate-head" style="margin-top:18px">Kin</div>
         <div class="kin" id="person-kin"></div>
+        <div class="plate-head" style="margin-top:18px">Who they know</div>
+        <div class="bonds" id="person-bonds"></div>
+        <div class="plate-head" style="margin-top:18px">What they still carry</div>
+        <div class="carried" id="person-holds"></div>
         <div class="plate-head" style="margin-top:18px">What happened</div>
         <dl class="life" id="person-life"></dl>
       </div>
@@ -793,6 +844,264 @@ function drawPlace() {
     paintPerson(c, WORLD.people[Number(c.dataset.sprite)], 1));
   $("place-folk").querySelectorAll("[data-person]").forEach(b =>
     b.addEventListener("click", () => go("person", Number(b.dataset.person))));
+
+  // Seeded on whoever you were last looking at, if they live here. Going down to a person
+  // and stepping back up should not hand you a different town — it should hand you the same
+  // town with them in the middle of it.
+  drawWeb(folk.filter(f => f.who.alive).map(f => f.i), view.person);
+}
+
+/* ---- the web of a settlement --------------------------------------------
+   Every other view here is a *reading* — a place's character, somebody's position,
+   what a people's ways come to. This is the state itself: the directed tie graph,
+   drawn.
+
+   Laid out by relaxation rather than by anything clever. Ties pull, everybody
+   pushes everybody, and thirty passes of that is enough to put the people who
+   spend their evenings together in the same corner of the picture — which is the
+   only claim the layout makes and the only one it can support. It is deliberately
+   *not* seeded randomly: the same settlement must draw the same way every time the
+   page is opened, or the picture becomes a thing you cannot point at.
+
+   Warmth is the colour of an edge and knowing is its weight, so a wall of thin
+   grey lines is a town of acquaintances and a few thick gold ones are a family.
+   Nothing here is symmetric: an arc is drawn from what one person holds, and the
+   other direction is drawn separately and often differently. */
+const WEB_PASSES = 300;
+/// How many people the picture holds. A settlement of four hundred is a hairball; this is
+/// about as many as can be told apart at a glance and laid out in a blink.
+const WEB_SHOWN = 70;
+let webPeople = [];   // indices into WORLD.people, in layout order
+let webAt = [];       // {x, y} per node, in the canvas's own coordinates
+let webOver = -1;     // whichever node the pointer is on, or -1
+
+function drawWeb(here, around) {
+  const canvas = $("web");
+  const wide = canvas.width, tall = canvas.height;
+  const inPlace = new Set(here);
+
+  // **Grown outward from one person**, not skimmed off the top of the town.
+  //
+  // Two wrong versions preceded this and the second is the instructive one. Ranking
+  // everybody by their number of ties drew almost nothing, because ties run all over the
+  // world and most of a shortlist's ties point at somebody outside it. Ranking by ties
+  // *within the settlement* fixed that and still drew 69 edges between 70 people — a tree,
+  // in a place where everybody has twelve neighbours they know well. The arithmetic says
+  // why: three hundred and seventy residents, seventy of them shown, so about one tie in
+  // five lands inside the picture however carefully the seventy are chosen. **A dense
+  // subgraph of a sparse sample does not exist.**
+  //
+  // So it takes the most tangled-up person in the settlement and grows out along their
+  // ties, then their ties' ties, preferring whoever is already best attached to what has
+  // been gathered. What comes out is a *neighbourhood* rather than a ranking — everybody
+  // in it is somebody's evening — which is both far denser and the truer thing to show.
+  const within = who =>
+    (WORLD.people[who].ties || []).filter(([other]) => inPlace.has(other)).length;
+  const start = here.includes(around)
+    ? around
+    : here.slice().sort((a, b) => within(b) - within(a) || a - b)[0];
+  const taken = new Set(start === undefined ? [] : [start]);
+  // How many of the already-taken each candidate knows. Recomputed as the set grows, which
+  // is what makes it prefer to close triangles rather than sprawl.
+  const reach = new Map();
+  const consider = who => {
+    for (const [other] of WORLD.people[who].ties || []) {
+      if (!inPlace.has(other) || taken.has(other)) continue;
+      reach.set(other, (reach.get(other) || 0) + 1);
+    }
+  };
+  if (start !== undefined) consider(start);
+  while (taken.size < WEB_SHOWN && reach.size) {
+    let best = -1, most = -1;
+    for (const [who, n] of reach) if (n > most || (n === most && who < best)) { most = n; best = who; }
+    reach.delete(best);
+    taken.add(best);
+    consider(best);
+  }
+  webPeople = [...taken].sort((a, b) => a - b);
+  const slot = new Map(webPeople.map((who, at) => [who, at]));
+
+  // Edges, kept once with both directions folded onto them: the layout wants one spring
+  // and the drawing wants one line, but the *warmth* is whichever side feels it more
+  // strongly, because an unrequited grudge should read as a grudge.
+  const edges = [];
+  for (const [at, who] of webPeople.entries()) {
+    for (const [other, warmth, , known] of WORLD.people[who].ties || []) {
+      const to = slot.get(other);
+      if (to === undefined || to === at) continue;
+      const already = edges.find(e => (e.a === to && e.b === at));
+      if (already) {
+        if (Math.abs(warmth) > Math.abs(already.warmth)) already.warmth = warmth;
+        already.known = Math.max(already.known, known);
+        continue;
+      }
+      if (to < at) continue;
+      edges.push({ a: at, b: to, warmth, known });
+    }
+  }
+
+  const n = webPeople.length;
+  // Fruchterman–Reingold, with the natural spacing `k` set from the room available so the
+  // picture fills the canvas at any size. Started on a circle in a fixed order rather than
+  // at random: **the same settlement must draw the same way every time the page opens**, or
+  // it stops being something you can point at.
+  const k = Math.sqrt((wide * tall) / Math.max(1, n)) * 0.55;
+  webAt = webPeople.map((_, at) => {
+    const turn = (at / Math.max(1, n)) * Math.PI * 2;
+    return { x: wide / 2 + Math.cos(turn) * tall * 0.30,
+             y: tall / 2 + Math.sin(turn) * tall * 0.30 };
+  });
+  let heat = wide / 8;
+  for (let pass = 0; pass < WEB_PASSES; pass++) {
+    const push = webAt.map(() => ({ x: 0, y: 0 }));
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        let dx = webAt[i].x - webAt[j].x, dy = webAt[i].y - webAt[j].y;
+        const far = Math.hypot(dx, dy) || 0.01;
+        const force = (k * k) / far;
+        dx /= far; dy /= far;
+        push[i].x += dx * force; push[i].y += dy * force;
+        push[j].x -= dx * force; push[j].y -= dy * force;
+      }
+    }
+    for (const e of edges) {
+      let dx = webAt[e.a].x - webAt[e.b].x, dy = webAt[e.a].y - webAt[e.b].y;
+      const far = Math.hypot(dx, dy) || 0.01;
+      // Weighted by how well the two know each other, which is what makes the people who
+      // spend their evenings together end up in the same corner. Kept at or under one, so
+      // it never overpowers the repulsion and collapses the whole town to a dot.
+      const force = ((far * far) / k) * (0.3 + 0.7 * e.known);
+      dx /= far; dy /= far;
+      push[e.a].x -= dx * force; push[e.a].y -= dy * force;
+      push[e.b].x += dx * force; push[e.b].y += dy * force;
+    }
+    // And everybody is drawn gently toward the middle. Without it the people nobody in
+    // this town has a tie to have *nothing* acting on them but repulsion, so they sail
+    // off to the edges and the fit-to-canvas at the end squashes the actual society into
+    // a smudge in the centre — which is exactly what the first version drew.
+    for (let i = 0; i < n; i++) {
+      push[i].x += (wide / 2 - webAt[i].x) * 0.08;
+      push[i].y += (tall / 2 - webAt[i].y) * 0.08;
+    }
+    for (let i = 0; i < n; i++) {
+      const far = Math.hypot(push[i].x, push[i].y) || 0.01;
+      const step = Math.min(far, heat);
+      webAt[i].x += (push[i].x / far) * step;
+      webAt[i].y += (push[i].y / far) * step;
+    }
+    heat *= 0.975;
+  }
+
+  // Fitted to the canvas at the end rather than clamped during, because clamping while it
+  // relaxes pins whoever reaches the wall and the picture comes out stuck to its frame.
+  const pad = 44;
+  const xs = webAt.map(p => p.x), ys = webAt.map(p => p.y);
+  const lo = { x: Math.min(...xs), y: Math.min(...ys) };
+  const span = { x: Math.max(...xs) - lo.x || 1, y: Math.max(...ys) - lo.y || 1 };
+  const scale = Math.min((wide - pad * 2) / span.x, (tall - pad * 2) / span.y);
+  const off = { x: (wide - span.x * scale) / 2, y: (tall - span.y * scale) / 2 };
+  for (const p of webAt) {
+    p.x = off.x + (p.x - lo.x) * scale;
+    p.y = off.y + (p.y - lo.y) * scale;
+  }
+
+  // And they are the one the picture is of, so they start lit.
+  webOver = start === undefined ? -1 : (slot.get(start) ?? -1);
+  paintWeb(edges);
+  canvas.onpointermove = event => {
+    const box = canvas.getBoundingClientRect();
+    const x = (event.clientX - box.left) * (wide / box.width);
+    const y = (event.clientY - box.top) * (tall / box.height);
+    let near = -1, best = 34 * 34;
+    for (let i = 0; i < n; i++) {
+      const d = (webAt[i].x - x) ** 2 + (webAt[i].y - y) ** 2;
+      if (d < best) { best = d; near = i; }
+    }
+    if (near !== webOver) { webOver = near; paintWeb(edges); }
+  };
+  canvas.onpointerleave = () => { if (webOver !== -1) { webOver = -1; paintWeb(edges); } };
+  canvas.onclick = () => {
+    if (webOver >= 0 && performance.now() - arrived > GHOST_TAP) go("person", webPeople[webOver]);
+  };
+  // Reachable without a pointer. The globe already is; a picture of a society that could
+  // only be read by hovering would be the one view here you had to have a mouse for.
+  // Arrows step along the layout in reading order, which is arbitrary but stable — and a
+  // stable arbitrary order is what a keyboard needs.
+  canvas.onkeydown = event => {
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+    if (step) {
+      event.preventDefault();
+      webOver = (webOver + step + n) % Math.max(1, n);
+      paintWeb(edges);
+      return;
+    }
+    if (event.key === "Enter" && webOver >= 0) go("person", webPeople[webOver]);
+    if (event.key === "Escape" && webOver >= 0) { webOver = -1; paintWeb(edges); }
+  };
+  canvas.onfocus = () => { if (webOver < 0 && n) { webOver = 0; paintWeb(edges); } };
+  canvas.onblur = () => { if (webOver >= 0) { webOver = -1; paintWeb(edges); } };
+
+  $("web-legend").innerHTML = n
+    ? `${n} of the ${here.length} living here &mdash;
+       ${WORLD.people[start] ? WORLD.people[start].name.split(" ")[0] : "somebody"} and everybody
+       their evenings reach &middot;
+       <span style="color:var(--gold)">gold</span> is fondness,
+       <span style="color:var(--ember)">ember</span> is the other thing &middot;
+       thickness is how well they know each other, size is how far they got &middot;
+       ${edges.length} ties drawn &middot; point at somebody, or tab in and use the arrows`
+    : "Nobody lives here now.";
+}
+
+function paintWeb(edges) {
+  const canvas = $("web");
+  const g = canvas.getContext("2d");
+  g.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Whoever is under the pointer, and everybody they hold anything about. The rest of
+  // the picture drops back rather than disappearing, so an ego-network is read against
+  // the town instead of instead of it.
+  const lit = new Set();
+  if (webOver >= 0) {
+    lit.add(webOver);
+    for (const e of edges) {
+      if (e.a === webOver) lit.add(e.b);
+      if (e.b === webOver) lit.add(e.a);
+    }
+  }
+  const dim = webOver >= 0;
+
+  for (const e of edges) {
+    const on = !dim || (e.a === webOver || e.b === webOver);
+    const w = clamp(e.warmth, -1, 1);
+    const [r, gg, b] = w >= 0 ? [224, 169, 74] : [184, 80, 63];
+    g.strokeStyle = `rgba(${r},${gg},${b},${((0.22 + Math.abs(w) * 0.55) * (on ? 1 : 0.10)).toFixed(3)})`;
+    g.lineWidth = 0.8 + e.known * 4.5;
+    g.beginPath();
+    g.moveTo(webAt[e.a].x, webAt[e.a].y);
+    g.lineTo(webAt[e.b].x, webAt[e.b].y);
+    g.stroke();
+  }
+
+  for (const [at, who] of webPeople.entries()) {
+    const person = WORLD.people[who];
+    const on = !dim || lit.has(at);
+    // Size is standing, so the picture says who got on as well as who knows whom.
+    const size = 5 + clamp(person.standing ?? 0, 0, 1) * 9;
+    g.globalAlpha = on ? 1 : 0.16;
+    g.fillStyle = at === webOver ? "#ece2c8"
+      : person.mentored ? "#e0a94a" : "#9186b0";
+    g.beginPath();
+    g.arc(webAt[at].x, webAt[at].y, size, 0, Math.PI * 2);
+    g.fill();
+    if (at === webOver || (dim && lit.has(at))) {
+      g.globalAlpha = 1;
+      g.fillStyle = "#ece2c8";
+      g.font = "18px ui-monospace, monospace";
+      g.textAlign = "center";
+      g.fillText(person.name.split(" ")[0], webAt[at].x, webAt[at].y - size - 7);
+    }
+  }
+  g.globalAlpha = 1;
 }
 
 const pct = v => Number.isFinite(v) ? `${Math.round(clamp(v, 0, 1) * 100)}%` : "—";
@@ -1022,6 +1331,78 @@ function drawPerson() {
   }).join("") : `<p class="empty">No kin in the record.</p>`;
   $("person-kin").querySelectorAll("[data-kin]").forEach(b =>
     b.addEventListener("click", () => go("person", Number(b.dataset.kin))));
+
+  drawBonds(who);
+  drawCarried(who);
+}
+
+/* ---- who somebody knows -------------------------------------------------
+   The tie graph is the one part of this world that is genuinely a graph, and it
+   was the one part you could not walk: the page said "39 stand with them" and
+   never who any of them were.
+
+   Every row is directed. It is what *this* person holds about that one — their
+   warmth, their regard, what they reckon they are owed — and clicking through
+   shows the same pair from the other side, which is very often not the same
+   thing. Unrequited is the ordinary case here and the page should let you catch
+   it rather than hide it behind a symmetric word like "friend". */
+function drawBonds(who) {
+  const ties = who.ties || [];
+  if (!ties.length) {
+    $("person-bonds").innerHTML = `<p class="empty">Nobody, which happens to the very
+      young and to whoever outlives everyone.</p>`;
+    return;
+  }
+  // Named for what it is rather than scored. A number between minus one and one is a
+  // fact about the model; "cannot stand them" is a fact about a life.
+  const feeling = w =>
+    w >  0.55 ? "devoted to"   : w >  0.25 ? "fond of"      :
+    w >  0.08 ? "warm to"      : w > -0.08 ? "indifferent"  :
+    w > -0.25 ? "cool toward"  : w > -0.55 ? "cold toward"  : "cannot stand";
+  $("person-bonds").innerHTML = ties.map(([i, warmth, regard, known, debt]) => {
+    const other = WORLD.people[i];
+    if (!other) return "";
+    // Signed from the middle: gold right for fondness, ember left for the other thing.
+    const w = clamp(warmth, -1, 1);
+    const half = Math.abs(w) * 50;
+    const bar = `<span class="warmth"><i style="${w < 0 ? `right:50%` : `left:50%`};
+      width:${half}%;background:var(--${w < 0 ? "ember" : "gold"})"></i></span>`;
+    // Debt is in days of somebody's work, and only ever arises from a bad year
+    // somebody was carried through. Positive is owed *to* the person whose page
+    // this is, which is why it reads as a claim rather than a balance.
+    const owed = Math.round(debt);
+    const note = owed > 0 ? `owes ${owed}d` : owed < 0 ? `owed ${-owed}d` :
+                 regard > 0.2 ? "rates them" : regard < -0.2 ? "thinks little of them" : "";
+    return `<button type="button" class="bond" data-bond="${i}"
+      title="warmth ${warmth.toFixed(2)}, regard ${regard.toFixed(2)}, known ${known.toFixed(2)}">
+      <span>${other.name}</span>${bar}
+      <span class="lot">${feeling(warmth)}${note ? " &middot; " + note : ""}</span>
+    </button>`;
+  }).join("");
+  $("person-bonds").querySelectorAll("[data-bond]").forEach(b =>
+    b.addEventListener("click", () => go("person", Number(b.dataset.bond))));
+}
+
+/* ---- what somebody still carries ----------------------------------------
+   Not the chronicle. The chronicle is the world's record and nobody in the world
+   can consult it; this is what one person has of their own life, which is partial
+   and fades. So the *opacity is the strength* — a memory half gone is half there
+   on the page, which no number would say as quickly. */
+function drawCarried(who) {
+  const held = who.holds || [];
+  if (!held.length) {
+    $("person-holds").innerHTML = `<p class="empty">Nothing that has stayed with them.</p>`;
+    return;
+  }
+  $("person-holds").innerHTML = held.map(([what, about, strength]) => {
+    const other = about === null ? null : WORLD.people[about];
+    const name = other ? ` &mdash; ${other.name}` : "";
+    // Never quite invisible: the point of §34's curve is that a thing which landed
+    // hard is still faintly present decades on, and a floor is how you show "faint"
+    // rather than "gone".
+    const there = clamp(0.28 + strength * 0.72, 0.28, 1);
+    return `<span style="opacity:${there.toFixed(2)}">${what}${name}</span>`;
+  }).join("");
 }
 
 /* ---- the world panel ---------------------------------------------------- */

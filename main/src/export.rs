@@ -336,6 +336,85 @@ fn places(world: &World) -> String {
     format!("[{}]", entries.join(","))
 }
 
+/// How many of somebody's ties the page carries.
+///
+/// `bonds::CLOSE_TIES` is twenty and that is what a person keeps, but most of the tail is
+/// somebody they have met twice. Twelve is enough to show a life's shape and keeps a world of
+/// six hundred people under a megabyte of edges.
+const TIES_SHOWN: usize = 12;
+
+/// What one person holds about the people they know, strongest first.
+///
+/// Ordered by how well they know them rather than by warmth, because the question the page
+/// asks is *who is in this life* — and the person somebody most despises is in it as surely as
+/// the person they are fondest of.
+fn ties(world: &World, who: PersonId, index: &impl Fn(PersonId) -> String) -> String {
+    let mut held: Vec<(PersonId, bonds::Tie)> = world
+        .bonds
+        .of(who)
+        .filter(|(_, tie)| tie.holds())
+        .filter(|(other, _)| world.people.contains(*other))
+        .collect();
+    held.sort_by(|a, b| b.1.known.total_cmp(&a.1.known));
+    held.truncate(TIES_SHOWN);
+    let entries: Vec<String> = held
+        .into_iter()
+        .map(|(other, tie)| {
+            format!(
+                "[{},{},{},{},{}]",
+                index(other),
+                num(tie.warmth),
+                num(tie.regard),
+                num(tie.known),
+                num(tie.debt.round())
+            )
+        })
+        .collect();
+    format!("[{}]", entries.join(","))
+}
+
+/// What somebody still carries of their own life — see `person::memory`.
+///
+/// The strength is what is *left* of it now, not what it was when it landed, so a page shows
+/// a fifty-year-old death faintly and last spring's slight hard. That is the whole of §34's
+/// curve, made visible for the first time.
+fn holds(world: &World, who: PersonId, index: &impl Fn(PersonId) -> String) -> String {
+    let now = world.now();
+    let Some(person) = world.people.get(who) else {
+        return "[]".to_string();
+    };
+    let mut kept: Vec<(&'static str, String, f32)> = person
+        .held()
+        .iter()
+        .map(|memory| {
+            let what = match memory.what {
+                person::memory::What::Born => "a birth",
+                person::memory::What::Died => "a death",
+                person::memory::What::Paired => "setting up house",
+                person::memory::What::TakenUp => "being taken up",
+                person::memory::What::Carried => "being carried",
+                person::memory::What::Robbed => "being robbed",
+                person::memory::What::WorkedItOut => "working it out",
+                person::memory::What::Moved => "moving",
+                person::memory::What::Wronged => "a wrong done to them",
+                person::memory::What::DidWrong => "a wrong they did",
+            };
+            let about = memory
+                .who
+                .filter(|other| world.people.contains(*other))
+                .map(&index)
+                .unwrap_or_else(|| "null".to_string());
+            (what, about, memory.strength(now))
+        })
+        .collect();
+    kept.sort_by(|a, b| b.2.total_cmp(&a.2));
+    let entries: Vec<String> = kept
+        .into_iter()
+        .map(|(what, about, strength)| format!("[{},{about},{}]", quoted(what), num(strength)))
+        .collect();
+    format!("[{}]", entries.join(","))
+}
+
 fn people(world: &World) -> String {
     let index = |id: PersonId| {
         world
@@ -486,6 +565,19 @@ fn people(world: &World) -> String {
                         }
                     ),
                     field("mentored", if p.is_mentored() { "true" } else { "false" }),
+                    // **Who this person is to everybody they know**, and what they hold about
+                    // them. The atlas has always been able to say somebody had 39 allies and
+                    // never who any of them were, which made the one part of this world that
+                    // is genuinely a graph the one part you could not walk.
+                    //
+                    // Written as bare arrays rather than objects — `[who, warmth, regard,
+                    // known, debt]` — because there are up to twenty of these per person and
+                    // the field names would be four fifths of the bytes. Strongest first and
+                    // capped, so a page stays a page.
+                    field("ties", &ties(world, id, &index)),
+                    // And what they carry of their own life (§34), which is not the chronicle:
+                    // partial, fading, and about *whom*. `[what, who, strength]`.
+                    field("holds", &holds(world, id, &index)),
                     // What they are after (§36). A reading, not a field — so this is what
                     // their life adds up to at the moment the world was written out, and the
                     // same person read a decade later may well want something else.
