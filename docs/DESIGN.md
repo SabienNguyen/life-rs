@@ -2483,9 +2483,10 @@ absent is longer than what was added:
   built and tested, and nothing in the simulation reads them: two attempts at giving a head
   something to decide were both measured worse and reverted. Property that outlives its members
   is untouched, and deferred on a measurement rather than for want of time.
-- **Roles that are chosen.** Nobody here decides to become anything. A position is read off a
-  life, never aimed at, and a society in which people pursue standing deliberately would need
-  `Deed` to include acts whose whole point is what others will make of them.
+- **Roles that are chosen.** *Still open, and attempted — see §26.11.* Nobody here decides to
+  become anything. A position is read off a life, never aimed at, and a society in which people
+  pursue standing deliberately would need `Deed` to include acts whose whole point is what
+  others will make of them. One was built and reverted.
 
 ### 26.10 A head that is well-formed and decides nothing
 
@@ -2536,6 +2537,47 @@ out. Real societies have inherited property and an IGE of 0.3–0.5, so this wor
 *without* it says the channels that already exist are too strong. Building it means finding
 which one and loosening it, not adding a field — and doing the second without the first buys a
 documented gap by breaking a documented band.
+
+### 26.11 An eighth deed, and why it was reverted
+
+`Deed::Host` — keeping open house. Built in full, measured, and taken out again.
+
+The design was right and is worth keeping on the record. It is the one act whose return is not
+a need: it relieves almost nothing, costs energy and a meal, and is done entirely for what the
+neighbours make of it afterwards. It pays into `regard` rather than `warmth`, because warmth is
+whether I like you and stays with me while regard is what I would say about you to somebody
+else — so a reputation bought at one table travels, along the gossip §25 already has, to people
+who were never at it. Both detail tiers fed the same tally, so what the neighbours make of a
+generous man does not depend on whether anybody was watching him.
+
+It even had the damper designed in rather than discovered afterwards, which was the whole
+lesson of the four failures above it. Standing is positional — a feast distinguishes you only
+insofar as the neighbours are not holding one — so `payoff[Host]` *falls* as the local practice
+of hosting rises. It is the one deed where doing what everybody does is worth less, pushing
+against the conformity pull that applies to every other.
+
+And it still failed, in a way none of that addressed. Churn went from 6% of moves going
+straight back to **16%**, and the number of moves rose 64%, from 1,018 to 1,671.
+
+Three things were ruled out by measurement rather than argument:
+
+- **The regard rate.** Cutting `THOUGHT_WELL_OF` tenfold left churn at 13.7% and moves at
+  1,659 — and cost the deed its point, since hosts were no longer better thought of than
+  anybody else. There is no value that buys both.
+- **Membership of `CHOSEN`.** Taking `Host` out of the set that positions are read from
+  changed the outcome not at all: 266 of 1,671, byte for byte.
+- Which leaves **the existence of an eighth option**. `score_all` chooses by softmax over
+  every deed, so adding one changes every choice anybody makes, whether or not they ever host.
+  The world is simply a different world, and 64% more moving is what that difference came to.
+
+That last one is the real finding and it is about the model rather than about hospitality: **a
+new deed is not an addition, it is a re-normalisation.** Anything added to `Deed::ALL` reprices
+all seven of the others, so the cost of a new act has to be paid by everything already
+calibrated against the old set — §15's shared-environment share, §21's ceiling, §30's churn.
+Whatever the next deed is, it needs those re-measured as part of building it, not afterwards.
+
+The branch is kept in `git stash` rather than deleted, since none of the above says the deed is
+wrong — only that landing it is a recalibration and not an afternoon.
 
 ## 27. A supply chain, and the trades that fill it
 
