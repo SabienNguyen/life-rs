@@ -4645,3 +4645,68 @@ The right way to make this world's pairings less bleak is not to centre `suits`.
 people *choose each other* — pairing currently asks for the opposite sex, a near enough age, not
 close kin, and the best of eight, which as measured above is worth a hundredth. That is a change
 to one rule with a bounded blast radius, and it is the next thing to try.
+
+## 39. The tie graph is directed and nothing in it is
+
+`bonds` opens by defending its central choice:
+
+> A tie runs *from* somebody *to* somebody and carries what one of them holds about the other.
+> It has to be directed: **unrequited regard is the ordinary case**, and a model where liking is
+> always mutual cannot express a hanger-on, a patron, or a grudge somebody else has forgotten.
+
+Building the atlas's tie list meant showing, beside what she holds about him, what he holds about
+her. It was going to be the best thing on the page. Measured over one world — 6,002 pairs where
+both sides are on the page, 140 years, 877 living:
+
+| | median gap | 90th | worst | over 0.25 |
+|---|---|---|---|---|
+| warmth | **0.000** | 0.000 | 0.006 | 0 |
+| regard | 0.003 | 0.010 | 0.067 | 0 |
+| known | 0.000 | 0.000 | 0.027 | 0 |
+| debt | 0.000 | 0.000 | 0.000 | 0 |
+
+**Liking in this world is always mutual.** Not usually — always, to three decimal places, in every
+one of six thousand pairs. The feature was a flag that could never once have fired, and the only
+reason it was not shipped that way is that the fixture went looking for the most unrequited person
+in the world and found nobody at all.
+
+### 39.1 Why, and why it was invisible
+
+`meet_repeatedly` is the only thing that moves warmth in the ordinary case, and it steps **both
+sides at once, at the same rate, toward the same target**, from a `Tie::STRANGERS` that is
+identical on both sides. Symmetric inputs, symmetric rule, symmetric result. Nothing was wrong;
+the asymmetry simply had no source.
+
+The things that *could* break the symmetry are all rare or tiny. `hearsay` is directional but both
+directions are called on every evening and its rate is 0.06. `helped` is asymmetric and only
+famine relief calls it. `wronged` and `cut` are asymmetric and fire a few hundred times in eight
+worlds against millions of meetings. Debt is *exactly* antisymmetric because one call writes both
+halves.
+
+So the graph is undirected in everything but its type, at twice the storage — and this is the
+third mechanism in this project to be **right, well argued, and inert**: `CROWDING_AVERSION`
+(§30.5), the belief on a tie (§17.2.3), and now the direction on all four numbers it carries.
+
+### 39.2 What is actually asymmetric, and it is worth more
+
+**Attention.** Everybody keeps their strongest ties and lets the rest fade, so B can be among the
+people A knows best while A is not among B's. That happened for **3,343 of 9,345** ties on the
+page — better than a third.
+
+That is the real "she thinks of him more than he thinks of her", and it is the one the atlas shows.
+It is a better thing than the one that was planned: an asymmetry of *feeling* would be two people
+disagreeing, where an asymmetry of *attention* is one person mattering more to the other, which is
+both commoner in life and sadder to read.
+
+### 39.3 What this costs and what it is worth
+
+Making warmth genuinely directed is not obviously desirable and is definitely not free. The
+obvious route — step each side by how much *that* side is enjoying it — needs a per-side quantity
+that does not exist, and §35 and §37 between them are a long demonstration of what happens when a
+new asymmetry is introduced into a system this coupled.
+
+What is cheap and honest is to stop claiming it. The doc comment above should say that the
+direction carries `welcome` — the one number that genuinely diverges, and which §17.2.2 built for
+exactly that — and that the other four are symmetric in practice for a reason that is structural
+rather than accidental. **A comment that argues for a property the code does not have is worse
+than no comment**, because it stops the next person measuring.

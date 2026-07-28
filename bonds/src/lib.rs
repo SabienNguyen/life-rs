@@ -12,9 +12,23 @@
 //! ## Four numbers, one direction
 //!
 //! A tie runs *from* somebody *to* somebody and carries what one of them holds about the
-//! other. It has to be directed: unrequited regard is the ordinary case, and a model where
-//! liking is always mutual cannot express a hanger-on, a patron, or a grudge somebody else
-//! has forgotten.
+//! other.
+//!
+//! **Measured, four of the five numbers below are symmetric anyway**, and this comment used to
+//! claim the opposite — that unrequited regard is the ordinary case and a model where liking is
+//! always mutual could not express a hanger-on or a forgotten grudge. Over six thousand pairs in
+//! one world the median gap between what A holds about B and what B holds about A is 0.000 on
+//! warmth, 0.003 on regard, 0.000 on knowing, and debt is exactly antisymmetric by construction
+//! (§39). Liking here is always mutual, because `meet_repeatedly` steps both sides at the same
+//! rate toward the same target from identical starting values: symmetric inputs, symmetric rule.
+//!
+//! What the direction genuinely carries is **`welcome`** — what somebody believes the other makes
+//! of them, which is the one number here that can be wrong and the one §17.2.2 built for. And it
+//! carries *attention*: everybody keeps their strongest ties and lets the rest fade, so somebody
+//! can be among the people you know best while you are not among theirs, which is true of better
+//! than a third of all ties.
+//!
+//! The storage is kept as it is. What is not kept is the claim.
 //!
 //! - **warmth** — do I like you. Moves with how well we suit each other, and sours when
 //!   what I am owed goes unpaid.

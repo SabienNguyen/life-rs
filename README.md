@@ -44,16 +44,41 @@ numbers come to.</td>
 </table>
 
 <p align="center">
-  <img src="docs/images/life.png" width="820" alt="One person's whole life, dated, beside their temperament and portrait" />
+  <img src="docs/images/web.png" width="760" alt="A settlement's social web: seventy people, the ties between them, and a dashed red line where one robbed another" />
 </p>
 
-**One life, end to end** — the chronicle filtered to the people it names. Run Meisk, a farmer,
-born 136 and dead at 91. Moved once. Married at 159. **Taken up by Viaskus Deith at 161** —
-which the design calls the largest single fact about a life here — gave up farming for cooking
-and went back to it, and then, from 176 onwards, took up four people himself: Lasteise Bild,
-Noldi Meisk, Doura Vinaesk, Dal Deith.
+**The web of a settlement.** Seventy of the 372 people living here and the 216 ties between
+them, grown outward from one person along whoever their evenings reach. Gold is fondness, ember
+is the other thing, thickness is how well two people know each other, size is how far they got.
 
-Nobody wrote that arc. It is what the record says when you ask it about one man.
+Point at somebody and the town drops back behind their own circle. The **dashed red line** is
+not a feeling — it is a thing that happened, taken from the chronicle and drawn over the ties
+because an act very often runs between two people whose tie has since gone quiet. Underneath the
+picture it is written out in words:
+
+> `233 · Noum Sath robbed Kestael Sath`
+
+<p align="center">
+  <img src="docs/images/life.png" width="820" alt="One life: temperament split three ways, kin, and everybody they know with how warmly" />
+</p>
+
+**One life, end to end.** Gath Ranil, 48, a farmer — *Gintiller* in his own people's word for
+it — householder, taken up by somebody, which the design calls the largest single fact about a
+life here. Extraversion **−2.05**, about as far from sociable as this world produces, and
+thirty-four people stand with him anyway.
+
+Every person he knows is listed with how warmly, and every one is a link. Eleven of the twelve
+carry the note **"thinks of them more"** — he counts them among the people he knows best and
+they do not count him. And under *After*, what his life so far adds up to wanting: **to be
+looked to**.
+
+<p align="center">
+  <img src="docs/images/find.png" width="820" alt="Typing four letters into the find box and getting twelve people, with their ages and settlements" />
+</p>
+
+**Nine hundred people, and any of them one keystroke away.** Press `/`, type two letters of any
+part of a name. Settlements are in the same list. So are the dead, marked — they are most of the
+world by the end, and the point of keeping a chronicle is that they stay readable.
 
 ---
 
@@ -73,8 +98,14 @@ written down somewhere:
 | A tech tree | Somebody with a spare year and an odd idea |
 
 When a mechanism turns out to be inert, that gets written down too. The design document
-records the ones that were: a discovery ceiling nobody could reach, a crowding penalty
-that never once fired, a repayment routine nothing called.
+records the ones that were: a discovery ceiling nobody could reach, a crowding penalty that never
+once fired, a repayment routine nothing called, and the direction on every tie in the graph.
+
+The same goes for mechanisms that work and still don't ship. **Leaving** — the ability to walk
+out of a household, which this world had no way to express — was built, measured, and taken out
+again: 2% of pairings ended against a third that had gone cold, which is exactly the shape it was
+built for. It broke a claim about friendship, and each of five fixes for that traded one guard
+for another. The write-up of why is worth more than the mechanism would have been.
 
 ---
 
@@ -257,7 +288,16 @@ what it is.
      [2.70] Lusithe Laen, Lol Vast, Brouldis Thialon, Nal Naemel, Diastia Naemel, …
 ```
 
-- **Ties are directed.** Warmth, regard, debt, and whether you have met at all.
+- **Ties are directed, and it turns out nothing in them is.** `bonds` opens by arguing that a
+  tie must run one way because unrequited regard is the ordinary case. Building the atlas's tie
+  list meant measuring it: over **6,002 pairs**, the median gap between what A holds about B and
+  what B holds about A is **0.000** on warmth, 0.003 on regard, 0.000 on knowing, and debt is
+  exactly antisymmetric by construction. Liking here is always mutual — not usually, *always* —
+  because the rule that moves it steps both sides at once from identical starting values.
+
+  What *is* asymmetric is attention: better than a third of ties are one where you count somebody
+  among the people you know best and they do not count you. That is the sadder and truer thing,
+  and it is the one the atlas shows. The comment has been corrected; the claim is gone.
 - **Reputation is transitive regard** — it travels between people who have never met.
   Gossip with no words in it.
 - **Patronage is real.** Somebody takes you up, and it is the single largest fact about
