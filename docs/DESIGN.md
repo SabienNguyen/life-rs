@@ -2479,51 +2479,63 @@ absent is longer than what was added:
   there. What exists is a naming habit, which is not a language.
 - **Conquest and the state.** Countries merge by converging, never by one taking another.
   There is no taxation, no army, no border anybody could be stopped at.
-- **Households as political units.** *Two thirds closed — see §26.10.* A household now has a
-  head and, through it, a succession. What it still has is **no property that outlives its
-  members**, and that one is not simply unbuilt: see below for why adding it is a rebalancing
-  rather than a field.
+- **Households as political units.** *Still open — see §26.10.* A head and a succession are
+  built and tested, and nothing in the simulation reads them: two attempts at giving a head
+  something to decide were both measured worse and reverted. Property that outlives its members
+  is untouched, and deferred on a measurement rather than for want of time.
 - **Roles that are chosen.** Nobody here decides to become anything. A position is read off a
   life, never aimed at, and a society in which people pursue standing deliberately would need
   `Deed` to include acts whose whole point is what others will make of them.
 
-### 26.10 A head, and succession for nothing
+### 26.10 A head that is well-formed and decides nothing
 
-`Household::head` is a **reading**, the same discipline §26.1 applies to a village's elders and
-for the same reason: a stored head can be dead, or absent while a grown adult stands in the
-room, or two at once, and none of those can happen to a question answered afresh each time.
+`Household::head` exists and is a **reading**, the same discipline §26.1 applies to a village's
+elders and for the same reason: a stored head can be dead, or absent while a grown adult stands
+in the room, or two at once, and none of those can happen to a question answered afresh. It is
+tested, and succession falls out of it for free — nothing schedules an inheritance and nothing
+records one, the head dies, somebody asks again, and the answer is somebody else.
 
-Which makes succession not a mechanism at all. Nothing schedules an inheritance and nothing
-records one — the head dies, somebody asks again, and the answer is somebody else. A household
-whose standing halves the year its earner dies did not have a succession crisis written for it;
-it had one because that is what the arithmetic says when you ask again.
+**And nothing in the simulation reads it.** Two things were tried and both measured worse, so
+this gap is recorded as still open rather than closed, on the principle that a mechanism
+nothing consults is decoration and this document has spent a lot of words saying so.
 
-It has to decide something or it is a label, and finding out *what* took one wrong answer.
+**Attempt one: a household's means.** The argument was that a door opens on the strength of who
+is asking, so admission should read the head's standing rather than a mean over every working
+adult that describes no individual. The head is by construction the *strongest* member, so this
+is judging every household by its best: admission stops being selective, the quarters stop
+differing, and §15's shared-environment share falls through its floor to **0.19**. That is the
+failure `backing`'s cap comment already describes, written down before any of this. The band
+test from §15.1 caught it, which is exactly what it was added for. A household's ability to keep
+a roof over itself is its collective means, and the mean is right for that even though it
+describes nobody.
 
-**Tried first, and reverted: a household's means.** The argument was that a door opens on the
-strength of who is asking, so admission should read the head's standing rather than the mean
-over every working adult. It measured worse, for a reason `backing`'s cap comment already
-records: the head is by construction the strongest member, so judging households by their head
-is judging every household by its best. Admission stops being selective, the quarters stop
-differing, and §15's shared-environment share falls through its floor to **0.19**. A
-household's ability to keep a roof over itself is its collective means, and the mean is the
-right statistic for that even though it describes no individual. The band test written this
-morning caught it, which is what it was for.
+**Attempt two: whether the household is a young one.** Better on its face — being ready to
+uproot for work is a fact about whoever leads a household, and the old rule needed *every*
+working adult under `RESTLESS_UNTIL`, so a household stopped being young the moment one member
+aged past it. But the head is read from standing, and standing moves year to year, so which
+member is the head flips between a younger and an older one. With it flips whether the
+household ranks places on what they offer in work or on what they are like to live in — and a
+household that changes which question it is asking changes where it wants to be. **107 of 1,018
+moves went straight back where they came from**, against 6% before.
 
-**What the head does decide is whether the household is a young one.** That used to require
-*every* working adult to be under `RESTLESS_UNTIL`, so a household stopped being young the
-moment one member aged past it — including three twenty-somethings and one forty-year-old
-lodger, which is a young household by any reading. Whether a household will uproot for work is
-a fact about whoever is leading it. And unlike means, reading it off the head does not make
-anybody more admissible than they were.
+The common cause is worth naming, because it is the fourth instance of it today: **a decision
+that flickers**. The revolving door of §30.4, the raw-prosperity migration cobweb of §30.5, the
+trade cobweb of §30.5.1, and this. Anything read afresh each year from a quantity that moves
+will oscillate unless something damps it, and the damping has to be part of the design rather
+than discovered afterwards.
 
-**Property that outlives its members is deliberately not here yet**, and the reason is a
-measurement rather than an omission. Intergenerational elasticity already runs **0.55 against a
-ceiling of 0.50** (§15.1), and inherited wealth pushes it further out. Real societies do have
-inherited property and their IGE is 0.3–0.5, so this world being *too high without it* says the
-channels that already exist are too strong. Building inheritance means finding out which one and
-loosening it, not adding a field — and doing the second without the first would buy a documented
-gap by breaking a documented band.
+So what a head is *for* remains open. The reading is kept because it is correct and cheap and
+the next thing that wants a household's representative will want exactly this — but the honest
+status of §26.9's third bullet is that one third of it is built and unused, and the other two
+thirds are untouched.
+
+**Property that outlives its members** is the untouched part, and it is deferred on a
+measurement rather than for want of time. Intergenerational elasticity already runs **0.55
+against a ceiling of 0.50** (§15.1), so inherited wealth pushes an out-of-band number further
+out. Real societies have inherited property and an IGE of 0.3–0.5, so this world being too high
+*without* it says the channels that already exist are too strong. Building it means finding
+which one and loosening it, not adding a field — and doing the second without the first buys a
+documented gap by breaking a documented band.
 
 ## 27. A supply chain, and the trades that fill it
 

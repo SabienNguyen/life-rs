@@ -3115,27 +3115,17 @@ impl World {
             // renting a room, not buying a house. Everyone else is choosing a place to
             // live, and is ranked out of the good ones by what they have.
             //
-            // Whether a household is that kind of household is its **head's** age, not a
-            // condition on every adult in it. The old rule needed all of them under
-            // `RESTLESS_UNTIL`, so a household stopped being young the moment one member
-            // aged past it — including a household of three twenty-somethings and one
-            // forty-year-old lodger, which is a young household by any reading. §26.10: this
-            // is the one thing a head decides, and it is deliberately not the means, because
-            // judging a household's *means* by its strongest member stops admission being
-            // selective at all.
-            let restless = self
-                .society
-                .household(home)
-                .and_then(|h| {
-                    h.head(|id| {
-                        self.people
-                            .get(id)
-                            .filter(|p| p.is_alive() && !p.stage(at).is_dependent())
-                            .map(|p| (p.standing(), p.age(at).years()))
-                    })
-                })
-                .and_then(|id| self.people.get(id))
-                .is_some_and(|p| p.age(at).years() < RESTLESS_UNTIL);
+            // Every working adult, not the head. Tried that and measured it worse: the head
+            // is read from standing, standing moves year to year, so which member is the
+            // head can flip between a younger and an older one — and with it whether the
+            // household is judged on what a place offers in work or on what it is like to
+            // live in. A household that changes which question it is asking changes where it
+            // wants to be, and 107 of 1,018 moves went straight back. See §26.10.
+            let restless = members
+                .iter()
+                .filter_map(|m| self.people.get(*m))
+                .filter(|p| p.is_alive() && !p.stage(at).is_dependent())
+                .all(|p| p.age(at).years() < RESTLESS_UNTIL);
 
             let backing = |world: &World, into: PlaceId| world.backing(&members, into);
 
