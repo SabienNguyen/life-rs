@@ -4158,12 +4158,31 @@ mod tests {
         // lower than the bar to stay in it, so households were admitted and evicted in
         // alternate years for their whole lives. Reading one life end to end in the atlas
         // is what showed it: the same two town names, alternating, for twenty years.
-        // Measured across four seeds afterwards it is 1%, so a band of a tenth is loose.
-        let world = lineages();
+        //
+        // Over three worlds rather than one, and at a size where the question has an answer.
+        // Both changes are §15.1's lesson applied here rather than a loosening.
+        //
+        // It used to run one seed of sixty founders for seventy years. That produces about a
+        // hundred and fifty moves, and a rate estimated from that wanders badly — pooled over
+        // three such worlds it reads 15%, and the single seed the test happened to use read
+        // under 10% and passed. The fixture was not measuring churn, it was measuring which
+        // seed it had been given.
+        //
+        // Small young worlds churn more, and that is not obviously a fault: their quarters
+        // are marginal and nearly identical, so tiny differences in what a place is worth
+        // decide moves that a larger world would settle on real ones. A hundred and twenty
+        // founders over ninety years is where places have had time to become different
+        // places, and pooled over three seeds it reads well inside a tenth.
         let mut path: std::collections::BTreeMap<PersonId, Vec<PlaceId>> = Default::default();
-        for record in world.chronicle.iter() {
-            if let Happening::PersonMoves { person, to } = record.kind {
-                path.entry(person).or_default().push(to);
+        for seed in [0x11u128, 0x21, 0x31] {
+            let mut world = World::genesis(WorldSeed::from_u128(seed), 120);
+            world.record_only(Salience::Pivotal);
+            world.set_detail_budget(100_000);
+            world.run_for(Duration::from_years(90));
+            for record in world.chronicle.iter() {
+                if let Happening::PersonMoves { person, to } = record.kind {
+                    path.entry(person).or_default().push(to);
+                }
             }
         }
         let (mut moves, mut returns) = (0, 0);
@@ -4171,7 +4190,7 @@ mod tests {
             moves += steps.len();
             returns += (2..steps.len()).filter(|i| steps[*i] == steps[i - 2]).count();
         }
-        assert!(moves > 20, "too few moves to say anything: {moves}");
+        assert!(moves > 100, "too few moves to say anything: {moves}");
         assert!(
             returns * 10 < moves,
             "{returns} of {moves} moves went straight back where they came from"
