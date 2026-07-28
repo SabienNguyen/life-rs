@@ -13,6 +13,48 @@ turned out the way they did.
 
 </div>
 
+<p align="center">
+  <img src="docs/images/world.png" width="820" alt="A globe of a world nobody drew, with the inhabited settlements listed beside it" />
+</p>
+
+<p align="center"><i>Year 250 of one world. Every pixel is a quarter-degree of ground the simulation solved —<br />no coastline was drawn by hand. Gold marks where somebody lives.</i></p>
+
+---
+
+## Turn it, and go down
+
+The atlas is one self-contained HTML file with the whole world in it. Drag the globe, click
+down through **world → region → settlement → person**, and every number on every panel is read
+out of the run rather than stored for display.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/region.png" alt="A region of the globe, showing biomes and one settlement" /></td>
+<td width="50%"><img src="docs/images/settlement.png" alt="A settlement, its inhabitants, its ground, and its history" /></td>
+</tr>
+<tr>
+<td><b>A region.</b> Three thousand kilometres across, 65% temperate forest, and one
+settlement standing in it — because the ground under a place is what decides whether anybody
+can live there.</td>
+<td><b>A settlement.</b> 333 people in 105 households on room for 102, and the roll-call is
+counted rather than described: 156 farmers, 39 cooks, 24 hewers, 3 keepers, 2 smiths — 16
+patrons, 6 elders, 2 outcasts. It reads as <i>working-class</i> because that is what its
+numbers come to.</td>
+</tr>
+</table>
+
+<p align="center">
+  <img src="docs/images/life.png" width="820" alt="One person's whole life, dated, beside their temperament and portrait" />
+</p>
+
+**One life, end to end** — the chronicle filtered to the people it names. Run Meisk, a farmer,
+born 136 and dead at 91. Moved once. Married at 159. **Taken up by Viaskus Deith at 161** —
+which the design calls the largest single fact about a life here — gave up farming for cooking
+and went back to it, and then, from 176 onwards, took up four people himself: Lasteise Bild,
+Noldi Meisk, Doura Vinaesk, Dal Deith.
+
+Nobody wrote that arc. It is what the record says when you ask it about one man.
+
 ---
 
 ## The one rule

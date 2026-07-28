@@ -3675,6 +3675,26 @@ result whether the new deed was in `CHOSEN` or not, and whether its own payoff w
 tenfold smaller. Anything added to `Deed::ALL` has to budget for re-measuring what was
 calibrated against the old set: §15's shared-environment share, §21's ceiling, §30's churn.
 
+### 31.1.1 The one file nothing checks
+
+The atlas is a string compiled into the binary. Nothing type-checks it, nothing runs it, and
+for several hours tonight it did not run at all: a scripted edit duplicated a function header —
+`function ranks(who) {function ranks(who) {` — and every atlas generated after that was a page
+that loads, shows an empty frame, and writes a syntax error to a console nobody is reading.
+
+**The whole suite went on passing at 714 tests.** It was found by trying to take a screenshot.
+
+That is worth more than the fix. This project has built two views specifically because looking
+at a thing catches what asserting about it cannot (§30.6), and the views themselves were the
+one part with no assertion behind them at all. A broken atlas is a *silent* failure of the
+instrument that exists to make failures visible.
+
+`the_atlas_closes_everything_it_opens` walks the script tracking strings, template literals and
+comments — which is the whole difficulty, since a brace inside a string is not a brace — and
+asserts the delimiters balance. It is not a parser and does not pretend to be. It catches the
+class of thing an editing script does to a file it cannot read, which is exactly what happened,
+and it was verified by putting the bug back and watching it fail.
+
 ### 31.2 Which mechanisms are actually load-bearing
 
 Four mechanisms in this project have turned out to be exactly right and never to fire: the

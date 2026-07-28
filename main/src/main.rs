@@ -737,4 +737,84 @@ mod tests {
         assert_eq!(parse_salience("Pivotal").unwrap(), Salience::Pivotal);
         assert_eq!(parse_salience("EPOCHAL").unwrap(), Salience::Epochal);
     }
+
+    /// The atlas's own script has to close everything it opens.
+    ///
+    /// It is a string compiled into the binary, so nothing type-checks it and nothing runs it:
+    /// a stray brace makes a page that loads, shows an empty frame, and reports a syntax error
+    /// to a console nobody is reading. That happened — a scripted edit duplicated a function
+    /// header, `function ranks(who) {function ranks(who) {`, and **the whole suite went on
+    /// passing at 714 tests** while every atlas generated after it was a page that never ran.
+    /// It was found by trying to take a screenshot.
+    ///
+    /// This is not a parser and does not pretend to be. It walks the script tracking string
+    /// literals, template literals and comments — which is the whole difficulty, since a brace
+    /// inside a string is not a brace — and asserts that the delimiters balance. That is
+    /// enough to catch the class of thing an editing script does to a file it cannot read.
+    #[test]
+    fn the_atlas_closes_everything_it_opens() {
+        let start = ATLAS.find("<script>").expect("the atlas has a script") + "<script>".len();
+        let end = ATLAS.rfind("</script>").expect("which is closed");
+        let script: Vec<char> = ATLAS[start..end].chars().collect();
+
+        #[derive(PartialEq)]
+        enum In {
+            Code,
+            Line,
+            Block,
+            Str(char),
+        }
+        let (mut mode, mut depth, mut parens) = (In::Code, 0i32, 0i32);
+        let mut at = 0;
+        while at < script.len() {
+            let c = script[at];
+            let next = script.get(at + 1).copied().unwrap_or(' ');
+            match mode {
+                In::Code => match (c, next) {
+                    ('/', '/') => {
+                        mode = In::Line;
+                        at += 2;
+                        continue;
+                    }
+                    ('/', '*') => {
+                        mode = In::Block;
+                        at += 2;
+                        continue;
+                    }
+                    ('"' | '\'' | '`', _) => mode = In::Str(c),
+                    ('{', _) => depth += 1,
+                    ('}', _) => depth -= 1,
+                    ('(', _) => parens += 1,
+                    (')', _) => parens -= 1,
+                    _ => {}
+                },
+                In::Line => {
+                    if c == '\n' {
+                        mode = In::Code;
+                    }
+                }
+                In::Block => {
+                    if c == '*' && next == '/' {
+                        mode = In::Code;
+                        at += 2;
+                        continue;
+                    }
+                }
+                In::Str(quote) => {
+                    if c == '\\' {
+                        at += 2;
+                        continue;
+                    }
+                    if c == quote {
+                        mode = In::Code;
+                    }
+                }
+            }
+            assert!(depth >= 0, "the atlas closes a brace it never opened");
+            at += 1;
+        }
+        assert_eq!(depth, 0, "the atlas leaves {depth} brace(s) open");
+        assert_eq!(parens, 0, "the atlas leaves {parens} bracket(s) open");
+        assert!(mode == In::Code, "the atlas ends inside a string or a comment");
+    }
 }
