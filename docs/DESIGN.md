@@ -963,7 +963,21 @@ alone could be had by accident:
 - **A migrant brings the old country and only partly assimilates.** Twenty years somewhere
   new moves them, and does not finish the job.
 
-The third is the point. Two people standing in the same room, one raised among these
+Those three are properties of `learn_norms` measured on its own, which is not the same as the
+mechanism mattering in a world — the belief on a tie passed its unit tests too and turned out to
+be inert (§17.2.3). So the same question was asked of a running world, three seeds at ninety
+years: **how far is anybody's picture of local practice from local practice?**
+
+    everybody          0.139
+    has moved house    0.212
+    has not            0.066
+
+Not inert, and not merely non-zero: the split is threefold and it is the claim itself rather
+than a side effect of one. Somebody who has moved carries where they came from, and somebody
+who has stayed put has very nearly the ambient number the old model gave everybody. `vitals`
+reports it, so it cannot quietly stop being true.
+
+The third property is the point. Two people standing in the same room, one raised among these
 neighbours and one who arrived from somewhere that did the opposite, no longer face the same
 decision — and cultural change is now something *transmitted between people* rather than
 imposed by editing a field. §24's peoples and countries were already built on `norms`

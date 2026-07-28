@@ -45,6 +45,9 @@ fn main() {
     let (mut biggest, mut empty, mut spread, mut short) = (0.0, 0.0, 0.0, 0.0);
     let mut trades = [0usize; 5];
     let mut living = 0;
+    let (mut apart, mut counted) = (0.0f32, 0usize);
+    let (mut moved_apart, mut moved_counted) = (0.0f32, 0usize);
+    let (mut stayed_apart, mut stayed_counted) = (0.0f32, 0usize);
 
     for seed in SEEDS {
         let mut world = World::genesis(WorldSeed::from_u128(seed), founders);
@@ -56,9 +59,11 @@ fn main() {
         // Churn: households going back where they were two moves ago. The single most
         // sensitive number here — every mechanism reverted so far moved this one first.
         let mut path: std::collections::BTreeMap<u64, Vec<u64>> = Default::default();
+        let mut movers: std::collections::BTreeSet<u64> = Default::default();
         for record in world.chronicle.iter() {
             if let sim::Happening::PersonMoves { person, to } = record.kind {
                 path.entry(person.to_bits()).or_default().push(to.to_bits());
+                movers.insert(person.to_bits());
             }
         }
         for steps in path.values() {
@@ -99,6 +104,44 @@ fn main() {
                 trades[person.trade() as usize] += 1;
             }
         }
+
+        // How far anybody's picture of local practice is from local practice, and how far
+        // two people standing in the same place are from each other. §17.2.1 claims both are
+        // non-zero — that a newcomer is not as steeped as somebody born here. If they come
+        // out at nothing then that mechanism is right and inert, which is what happened to
+        // the belief on a tie (§17.2.3), and is worth knowing before it is claimed again.
+        for (id, person) in world.people.iter() {
+            if !person.is_alive() || !person.has_matured() {
+                continue;
+            }
+            let Some(here) = world
+                .society
+                .place_of(id)
+                .and_then(|p| world.places.get(p))
+                .map(|p| p.env.norms)
+            else {
+                continue;
+            };
+            let gap: f32 = person
+                .norms()
+                .iter()
+                .zip(&here)
+                .map(|(mine, theirs)| (mine - theirs).abs())
+                .sum::<f32>()
+                / person.norms().len() as f32;
+            apart += gap;
+            counted += 1;
+            // And the claim itself, which is narrower than "the number is not zero": that
+            // somebody who *moved* carries where they came from. Split the same measurement
+            // by whether this person has ever moved house.
+            if movers.contains(&id.to_bits()) {
+                moved_apart += gap;
+                moved_counted += 1;
+            } else {
+                stayed_apart += gap;
+                stayed_counted += 1;
+            }
+        }
     }
 
     let n = SEEDS.len() as f32;
@@ -120,6 +163,15 @@ fn main() {
             .map(|(at, name)| format!("{name} {}", trades[at]))
             .collect::<Vec<_>>()
             .join("  ")
+    );
+    println!(
+        "\n  assimilation {:>5.3}   how far a person's idea of local practice is from it",
+        apart / counted.max(1) as f32
+    );
+    println!(
+        "               {:>5.3}   of somebody who has moved, against {:.3} of somebody who has not",
+        moved_apart / moved_counted.max(1) as f32,
+        stayed_apart / stayed_counted.max(1) as f32
     );
     println!("\n  (§15's bands need `cargo test -p observer` — they cost six minutes.)");
 }
