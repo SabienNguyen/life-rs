@@ -61,6 +61,36 @@
     text-transform: uppercase; letter-spacing: 0.16em;
   }
 
+  /* ---- finding somebody --------------------------------------------------
+     A world of nine hundred people reachable only by descending world, region,
+     settlement, person is a world where all but a few dozen of them are, in
+     practice, unreachable. This is the way in. */
+  .seek { position: relative; margin: -12px 0 20px; }
+  .seek input {
+    font: inherit; font-size: 12px; width: 100%; color: var(--ink);
+    background: var(--ground); border: 2px solid var(--line);
+    padding: 8px 12px; letter-spacing: 0.04em;
+  }
+  .seek input::placeholder { color: var(--dim); }
+  .seek input:focus { outline: none; border-color: var(--gold); }
+  .hits {
+    position: absolute; left: 0; right: 0; top: 100%; z-index: 20;
+    background: var(--panel); border: 2px solid var(--gold); border-top: 0;
+    box-shadow: var(--px) var(--px) 0 var(--void);
+    max-height: 340px; overflow-y: auto;
+  }
+  .hits:empty { display: none; }
+  .hits button {
+    display: flex; gap: 10px; align-items: baseline; width: 100%;
+    font: inherit; font-size: 12px; color: var(--ink); text-align: left;
+    background: none; border: 0; border-bottom: 1px solid var(--line);
+    padding: 6px 12px; cursor: pointer;
+  }
+  .hits button:last-child { border-bottom: 0; }
+  .hits button:hover, .hits button[data-on="true"] { background: var(--raised); }
+  .hits .lot { color: var(--dim); font-size: 10.5px; text-transform: uppercase;
+               letter-spacing: 0.1em; margin-left: auto; white-space: nowrap; }
+
   /* ---- scenes ------------------------------------------------------------ */
   .scene { display: none; }
   .scene[data-on="true"] { display: block; }
@@ -222,6 +252,11 @@
 
 <div class="frame">
   <nav class="rail" id="rail" aria-label="Where you are"></nav>
+  <div class="seek">
+    <input id="seek" type="search" autocomplete="off" spellcheck="false"
+      placeholder="Find anybody &mdash; press /" aria-label="Find a person or a place" />
+    <div id="seek-hits" class="hits" role="listbox" aria-label="Matches"></div>
+  </div>
 
   <!-- ---- the world ---------------------------------------------------- -->
   <section class="scene" id="scene-world" data-on="true">
@@ -310,6 +345,8 @@
               aria-label="Everybody here and what they are to each other"></canvas>
           </div>
           <p class="census" id="web-legend"></p>
+          <p class="census" id="web-said" style="color:var(--ink);text-transform:none;
+             letter-spacing:0;font-size:12px;margin:0"></p>
         </div>
         <div class="plate" style="margin-top:20px">
           <div class="plate-head">Who lives here</div>
@@ -746,6 +783,11 @@ function drawRegion() {
 /* ---- a place ------------------------------------------------------------ */
 function drawPlace() {
   const p = WORLD.places[view.place];
+  // A handle that resolves to nothing is normal here, not exceptional: the dead have no
+  // place, and anything that navigates from a person — a search hit, a kin button, an act
+  // in the record — can hand this one. A page that throws on a missing value shows nothing
+  // at all, which this one has done before.
+  if (!p) { view.scene = "world"; draw(); return; }
   $("place-title").textContent = p.name;
   $("place-note").textContent = p.ground
     ? `${p.ground}. It reads as ${p.archetype} — not because anybody said so, but because that is what its numbers come to.`
@@ -874,6 +916,28 @@ const WEB_SHOWN = 70;
 let webPeople = [];   // indices into WORLD.people, in layout order
 let webAt = [];       // {x, y} per node, in the canvas's own coordinates
 let webOver = -1;     // whichever node the pointer is on, or -1
+let webActs = new Map();  // "a-b" in the layout's own numbering -> what was done
+
+/// Everything one person ever did to another, keyed by the pair.
+///
+/// The web is otherwise a picture of *state* — how these people feel about each other as
+/// of now. This is the one thing in it that is an **event**: somebody robbed somebody, once,
+/// in a particular year, and thirty years later the two of them may be perfectly civil and
+/// the tie will say so. A society with its scars drawn on it reads very differently from one
+/// without, and the chronicle has been carrying them all along with nowhere to put them.
+function gatherActs(slot) {
+  const acts = new Map();
+  for (const event of WORLD.events || []) {
+    if (event.kind !== "act" || !event.who || event.who.length < 2) continue;
+    const a = slot.get(event.who[0]), b = slot.get(event.who[1]);
+    if (a === undefined || b === undefined || a === b) continue;
+    const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+    if (!acts.has(key)) acts.set(key, []);
+    acts.get(key).push({ text: event.text, year: event.year,
+                         grave: /killed/.test(event.text) });
+  }
+  return acts;
+}
 
 function drawWeb(here, around) {
   const canvas = $("web");
@@ -1006,6 +1070,7 @@ function drawWeb(here, around) {
   }
 
   // And they are the one the picture is of, so they start lit.
+  webActs = gatherActs(slot);
   webOver = start === undefined ? -1 : (slot.get(start) ?? -1);
   paintWeb(edges);
   canvas.onpointermove = event => {
@@ -1082,6 +1147,25 @@ function paintWeb(edges) {
     g.stroke();
   }
 
+  // On top of the ties, because a thing that was done outranks a thing that is felt — and
+  // because an act very often runs between two people whose tie has since gone quiet, so
+  // underneath it would be invisible.
+  for (const [key, what] of webActs) {
+    const [a, b] = key.split("-").map(Number);
+    const on = !dim || a === webOver || b === webOver;
+    const grave = what.some(w => w.grave);
+    g.strokeStyle = grave
+      ? `rgba(255,236,214,${on ? 0.95 : 0.14})`
+      : `rgba(184,80,63,${on ? 0.9 : 0.12})`;
+    g.lineWidth = grave ? 3.5 : 2.4;
+    g.setLineDash(grave ? [] : [7, 5]);
+    g.beginPath();
+    g.moveTo(webAt[a].x, webAt[a].y);
+    g.lineTo(webAt[b].x, webAt[b].y);
+    g.stroke();
+    g.setLineDash([]);
+  }
+
   for (const [at, who] of webPeople.entries()) {
     const person = WORLD.people[who];
     const on = !dim || lit.has(at);
@@ -1102,6 +1186,33 @@ function paintWeb(edges) {
     }
   }
   g.globalAlpha = 1;
+
+  // And spell it out. A dashed red line is a thing you notice; a sentence is a thing you
+  // can repeat, and this view is worth nothing if what it shows cannot be said.
+  const said = $("web-said");
+  if (said) {
+    if (webOver < 0) {
+      const marked = [...webActs.values()].flat();
+      said.innerHTML = marked.length
+        ? `<span style="color:var(--ember)">&#9472; &#9472;</span> ${marked.length}
+           ${marked.length === 1 ? "thing was" : "things were"} done between these people.
+           Point at somebody to read them.`
+        : "";
+    } else {
+      const mine = [];
+      for (const [key, what] of webActs) {
+        const [a, b] = key.split("-").map(Number);
+        if (a === webOver || b === webOver) mine.push(...what);
+      }
+      mine.sort((x, y) => (x.year ?? 0) - (y.year ?? 0));
+      const name = WORLD.people[webPeople[webOver]].name;
+      said.innerHTML = mine.length
+        ? mine.map(w => `<span style="color:var(--${w.grave ? "ink" : "ember"})">
+            ${w.year ? w.year + " &middot; " : ""}${w.text}</span>`).join("<br />")
+        : `<span style="color:var(--dim)">Nothing was ever done to or by ${name} that
+           anybody wrote down.</span>`;
+    }
+  }
 }
 
 const pct = v => Number.isFinite(v) ? `${Math.round(clamp(v, 0, 1) * 100)}%` : "—";
@@ -1460,9 +1571,122 @@ function drawWorldPanel() {
     }));
 }
 
+/* ---- finding somebody ---------------------------------------------------
+   Nine hundred lives, and until now all but the few dozen you happened to walk
+   past were unreachable: the only way to a person was world, region, settlement,
+   them. The graph views made that worse rather than better, because they show
+   you a name and then leave you to go and find it.
+
+   Matches on a prefix of any part of a name, so "sei" finds Breneiskia Seisk and
+   so does "bren". Places are in the same list — one box for "take me to a thing"
+   rather than two boxes and a decision about which one to use.
+
+   The dead are here too, and marked. They are most of the world by the end and
+   the whole point of a chronicle is that they are still readable. */
+const SEEK_SHOWN = 12;
+let seekHits = [], seekOn = 0;
+
+function seekMatches(typed) {
+  const want = typed.trim().toLowerCase();
+  if (want.length < 2) return [];
+  // Prefix of any word rather than a substring anywhere: "an" should find Anlaste
+  // and not everybody with an "an" in the middle of them, of whom there are hundreds.
+  const hits = (name) => name.toLowerCase().split(/\s+/).some(part => part.startsWith(want));
+  const found = [];
+  for (const [at, place] of WORLD.places.entries()) {
+    if (place.residents > 0 && hits(place.name)) {
+      found.push({ kind: "place", at, name: place.name,
+                   lot: `${place.residents} living` });
+    }
+  }
+  for (const [at, who] of WORLD.people.entries()) {
+    if (!hits(who.name)) continue;
+    const where = who.place != null && WORLD.places[who.place]
+      ? WORLD.places[who.place].name : null;
+    found.push({ kind: "person", at, name: who.name, dead: !who.alive,
+                 lot: who.alive
+                   ? `${who.age} yr${where ? " &middot; " + where : ""}`
+                   : `died${where ? " &middot; " + where : ""}` });
+  }
+  // The living before the dead, and places before either, because a place is the
+  // rarer thing to be looking for and so the likelier one to be meant.
+  found.sort((a, b) =>
+    (a.kind === "place" ? 0 : 1) - (b.kind === "place" ? 0 : 1) ||
+    (a.dead ? 1 : 0) - (b.dead ? 1 : 0) ||
+    a.name.localeCompare(b.name));
+  return found.slice(0, SEEK_SHOWN);
+}
+
+function drawHits() {
+  const box = $("seek-hits");
+  box.innerHTML = seekHits.map((hit, at) => `
+    <button type="button" data-hit="${at}" data-on="${at === seekOn}"
+      class="${hit.dead ? "dead" : ""}">
+      <span>${hit.name}</span><span class="lot">${hit.lot}</span>
+    </button>`).join("");
+  box.querySelectorAll("[data-hit]").forEach(b =>
+    b.addEventListener("mousedown", event => {
+      // `mousedown`, not `click`: the input blurs first and the blur handler
+      // clears the list out from under the click.
+      event.preventDefault();
+      takeMeThere(seekHits[Number(b.dataset.hit)]);
+    }));
+}
+
+function takeMeThere(hit) {
+  if (!hit) return;
+  $("seek").value = "";
+  $("seek").blur();
+  seekHits = [];
+  drawHits();
+  if (hit.kind === "place") { go("place", hit.at); return; }
+  // A person carries their settlement with them, so the crumb behind them is right
+  // when you arrive rather than stale from wherever you happened to be.
+  const who = WORLD.people[hit.at];
+  if (who.place != null) view.place = who.place;
+  go("person", hit.at);
+}
+
+function wireSeek() {
+  const input = $("seek");
+  input.addEventListener("input", () => {
+    seekHits = seekMatches(input.value);
+    seekOn = 0;
+    drawHits();
+  });
+  input.addEventListener("keydown", event => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      seekOn = (seekOn + step + seekHits.length) % Math.max(1, seekHits.length);
+      drawHits();
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      takeMeThere(seekHits[seekOn]);
+    } else if (event.key === "Escape") {
+      input.value = ""; seekHits = []; drawHits(); input.blur();
+    }
+  });
+  input.addEventListener("blur", () => setTimeout(() => { seekHits = []; drawHits(); }, 120));
+  input.addEventListener("focus", () => {
+    seekHits = seekMatches(input.value);
+    drawHits();
+  });
+  // One key to get to it, which is the difference between a search box people use
+  // and one they forget is there.
+  window.addEventListener("keydown", event => {
+    if (event.key === "/" && document.activeElement !== input) {
+      event.preventDefault();
+      input.focus();
+      input.select();
+    }
+  });
+}
+
 drawWorldPanel();
 drawGlobe();
 wireGlobe();
+wireSeek();
 draw();
 turn();
 </script>
