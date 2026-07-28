@@ -3092,6 +3092,16 @@ impl World {
             let members = household.members.clone();
             let current = household.place;
 
+            // What the household can sustain here, averaged over the adults who earn it.
+            //
+            // Tried and reverted: the *head's* standing rather than the mean, on the argument
+            // that a door opens on the strength of who is asking. It measured worse for the
+            // reason `backing`'s cap already records. The head is the strongest member, so
+            // judging a household by them is judging every household by its best — admission
+            // stops being selective, the quarters stop differing, and §15's shared-environment
+            // share falls through its floor to 0.19. A household's ability to keep a roof is
+            // its collective means, and the mean is the right statistic for that even though
+            // it describes no individual.
             let standing = {
                 let (sum, count) = members
                     .iter()
@@ -3104,11 +3114,28 @@ impl World {
             // The young will uproot for work, and are taken in more readily — they are
             // renting a room, not buying a house. Everyone else is choosing a place to
             // live, and is ranked out of the good ones by what they have.
-            let restless = members
-                .iter()
-                .filter_map(|m| self.people.get(*m))
-                .filter(|p| p.is_alive() && !p.stage(at).is_dependent())
-                .all(|p| p.age(at).years() < RESTLESS_UNTIL);
+            //
+            // Whether a household is that kind of household is its **head's** age, not a
+            // condition on every adult in it. The old rule needed all of them under
+            // `RESTLESS_UNTIL`, so a household stopped being young the moment one member
+            // aged past it — including a household of three twenty-somethings and one
+            // forty-year-old lodger, which is a young household by any reading. §26.10: this
+            // is the one thing a head decides, and it is deliberately not the means, because
+            // judging a household's *means* by its strongest member stops admission being
+            // selective at all.
+            let restless = self
+                .society
+                .household(home)
+                .and_then(|h| {
+                    h.head(|id| {
+                        self.people
+                            .get(id)
+                            .filter(|p| p.is_alive() && !p.stage(at).is_dependent())
+                            .map(|p| (p.standing(), p.age(at).years()))
+                    })
+                })
+                .and_then(|id| self.people.get(id))
+                .is_some_and(|p| p.age(at).years() < RESTLESS_UNTIL);
 
             let backing = |world: &World, into: PlaceId| world.backing(&members, into);
 
