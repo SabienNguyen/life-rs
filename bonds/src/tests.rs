@@ -634,3 +634,45 @@ fn a_reputation_is_what_others_hold_and_cannot_be_read_off_your_own_ties() {
     assert!(holders > 0);
     assert!((total / holders as f32 - bonds.repute_of(who[0])).abs() < 1e-5);
 }
+
+#[test]
+fn what_somebody_thinks_you_make_of_them_can_be_wrong() {
+    // §17.2's first gap. Every other number on a tie is a fact about its holder — how I
+    // feel, what I have heard, what I am owed — and none of them can be mistaken. `welcome`
+    // is a belief about somebody else, and the claim is that it lags the truth rather than
+    // mirroring it.
+    let folk = ids(2);
+    let (a, b) = (folk[0], folk[1]);
+    let mut bonds = Bonds::default();
+
+    // They get on, and both come to know it — but not at the same speed. Feelings are your
+    // own; what somebody else feels has to be read off them.
+    bonds.meet_repeatedly(a, b, 0.95, 30);
+    let tie = bonds.tie(a, b);
+    assert!(tie.warmth > 0.5, "thirty meetings should warm them: {:.2}", tie.warmth);
+    assert!(
+        tie.welcome < tie.warmth,
+        "what she thinks he makes of her should lag what he does: {:.2} against {:.2}",
+        tie.welcome,
+        tie.warmth
+    );
+    assert!(
+        tie.welcome > 0.0,
+        "and should still be pointing the right way: {:.2}",
+        tie.welcome
+    );
+
+    // And it goes stale. He sours on her while they are apart — a famine debt is the way
+    // that happens here — and she has no way of knowing until they next meet.
+    let soured = bonds.tie(b, a).warmth;
+    for _ in 0..40 {
+        bonds.meet_repeatedly(b, a, 0.0, 1);
+    }
+    let now = bonds.tie(b, a).warmth;
+    assert!(now < soured, "he should have cooled: {soured:.2} to {now:.2}");
+    let hers = bonds.tie(a, b).welcome;
+    assert!(
+        hers > now + 0.05,
+        "she should still be behind the truth about him: believes {hers:.2}, is {now:.2}"
+    );
+}

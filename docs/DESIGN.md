@@ -867,8 +867,9 @@ running for millions of years, offline and reproducibly.
 
 Checking that list against §14–16 turns up two real gaps, both cheap:
 
-**Theory of mind — beliefs about people, not just feelings about them.** The design has
-`Tie { affinity, trust }` and `impressions`: how someone *feels* about another person.
+**Theory of mind — beliefs about people, not just feelings about them.** *(Built — see
+§17.2.2.)* The design had `Tie { affinity, trust }` and `impressions`: how someone *feels*
+about another person.
 It has nothing for what someone *believes about* another person's traits, wants, and
 intentions — and, crucially, nothing that can be **wrong**.
 
@@ -900,6 +901,43 @@ imposed by editing a field.
 
 Both belong in Phase 3 (environment) and Phase 4 (chronicle and memory) respectively, not
 in Phase 1 — they need relationships and places to exist first.
+
+### 17.2.2 The one number on a tie that can be wrong
+
+Built, and much smaller than the sketch above. `Tie` gains `welcome`: **what I think you make
+of me**, from certain you loathe me to certain you are glad of me.
+
+Everything else on a tie is a fact about its holder — how I feel, what I have been told, what
+I am owed — and none of it can be mistaken. This is a belief about somebody else, and it is
+the only thing in the whole social model that can diverge from the truth.
+
+The sketch wanted traits, intent, confidence and a timestamp per tie. That is twenty bytes
+apiece and it changes nothing anybody does. One number costs four and changes **who knocks on
+whose door**, which is the test of whether a mechanism is load-bearing or decoration.
+
+Two rates do the work and the gap between them *is* the misunderstanding:
+
+- `WARMING` (0.14) — how fast your own feelings move. They are yours; you have them at once.
+- `READING` (0.06) — how fast your read of somebody else's does. It has to be inferred from
+  how they are with you, and people are not good at it.
+
+Set the two equal and belief tracks truth exactly and nothing is ever mistaken about anything.
+
+Staleness is free rather than a rule: `welcome` is revised only when two people actually meet,
+so it goes wrong exactly as fast as they drift apart. Somebody who soured on you during a bad
+year is somebody you do not know has soured.
+
+And it feeds back. `choose_company` now weighs how you feel about somebody *and* whether you
+think they will be glad to see you — so somebody who has decided they are unwelcome stops
+going, stops finding out, and keeps the mistake. That self-sustaining loop is what §17.2 was
+after and is exactly what a number that always agreed with reality could not give.
+
+One implementation note worth keeping. Both directions of a meeting are stepped together
+rather than one after the other, because what each person comes to believe depends on how the
+other actually feels *at that meeting* — and the two sides are not symmetric, since a debt
+sours one direction of a tie without touching the other. Written the obvious way, with the
+other's warmth read once before a batch of meetings, `welcome` chases a stranger's zero
+through the whole batch and never moves at all.
 
 ### 17.2.1 What is normal, learned by watching
 

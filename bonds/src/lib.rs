@@ -126,6 +126,21 @@ pub struct Tie {
     pub debt: f32,
     /// How well I know you, 0 to 1. Everything else is gated on this.
     pub known: f32,
+    /// What I think you make of me, from certain you loathe me at −1 to certain you are
+    /// glad of me at 1.
+    ///
+    /// **The one number here that can be wrong.** Everything else on this tie is a fact
+    /// about the holder — how I feel, what I have been told, what I am owed. This is a
+    /// *belief about somebody else*, and it is only ever revised when we actually meet, so
+    /// it goes stale exactly as fast as we drift apart. §17.2 asked for this and gave the
+    /// reason: a belief that diverges from the truth is the source of most of what makes
+    /// social life worth watching — misunderstanding, avoidance that feeds itself, and
+    /// reconciliation when somebody is finally corrected.
+    ///
+    /// Kept as one number rather than §17.2's whole sketch of traits, intent and
+    /// confidence. Those cost twenty bytes a tie and change nothing anybody does; this
+    /// costs four and changes who knocks on whose door.
+    pub welcome: f32,
 }
 
 impl Tie {
@@ -134,6 +149,8 @@ impl Tie {
         regard: 0.0,
         debt: 0.0,
         known: 0.0,
+        // No opinion about what a stranger makes of you, which is the correct opinion.
+        welcome: 0.0,
     };
 
     /// Whether this is a tie at all, or the memory of one.
@@ -271,15 +288,36 @@ impl Bonds {
         // Warmth follows how well they suit each other, but only as fast as they actually
         // know each other: first impressions are weak on purpose.
         let target = (suits * 2.0 - 1.0).clamp(-1.0, 1.0);
-        for (holder, subject) in [(a, b), (b, a)] {
-            let tie = self.edit(holder, subject);
-            let (mut known, mut warmth) = (tie.known, tie.warmth);
-            for _ in 0..times {
-                known = (known + MEETING * (1.0 - known)).clamp(0.0, 1.0);
-                warmth = (warmth + WARMING * known * (target - warmth)).clamp(-1.0, 1.0);
+        // Both directions are stepped together rather than one after the other, because what
+        // each of them comes to believe about the other depends on how the other actually
+        // feels *at that meeting* — and the two are not the same, since a debt sours one
+        // side of a tie without touching the other.
+        let held = [self.tie(a, b), self.tie(b, a)];
+        let mut known = [held[0].known, held[1].known];
+        let mut warmth = [held[0].warmth, held[1].warmth];
+        let mut welcome = [held[0].welcome, held[1].welcome];
+        for _ in 0..times {
+            // What there was to read, before this meeting changed it.
+            let shown = warmth;
+            for side in 0..2 {
+                known[side] = (known[side] + MEETING * (1.0 - known[side])).clamp(0.0, 1.0);
+                warmth[side] = (warmth[side]
+                    + WARMING * known[side] * (target - warmth[side]))
+                    .clamp(-1.0, 1.0);
+                // And each reads the other, badly, and only as well as they know them.
+                // `READING` is well under `WARMING`, so what somebody believes about how
+                // they are seen lags what is true — which is the whole point of keeping it
+                // apart from how they feel themselves.
+                welcome[side] = (welcome[side]
+                    + READING * known[side] * (shown[1 - side] - welcome[side]))
+                    .clamp(-1.0, 1.0);
             }
-            tie.known = known;
-            tie.warmth = warmth;
+        }
+        for (side, (holder, subject)) in [(a, b), (b, a)].into_iter().enumerate() {
+            let tie = self.edit(holder, subject);
+            tie.known = known[side];
+            tie.warmth = warmth[side];
+            tie.welcome = welcome[side];
         }
     }
 
@@ -477,7 +515,14 @@ impl Bonds {
                 .binary_search_by_key(other, |(id, _)| *id)
                 .map(|at| through[at].1)
                 .unwrap_or(0) as f32;
-            let want = 0.12 + tie.known * (1.0 + tie.warmth).max(0.0) + 0.25 * mutual.min(4.0);
+            // Who you seek out is how you feel about them *and* whether you think they
+            // will be glad to see you — the second being a belief that can be wrong, and
+            // that is only ever corrected by the meeting it is discouraging. Somebody who
+            // has decided they are unwelcome stops going, so stops finding out, and the
+            // mistake keeps itself. That is the whole reason `welcome` exists rather than
+            // this reading `warmth` twice.
+            let drawn = 1.0 + 0.6 * tie.warmth + 0.4 * tie.welcome;
+            let want = 0.12 + tie.known * drawn.max(0.0) + 0.25 * mutual.min(4.0);
             total += want;
             let roll = rng.unit_f32() * total;
             if best.is_none() || roll >= total - want {
@@ -487,6 +532,15 @@ impl Bonds {
         best
     }
 }
+
+/// How fast somebody's idea of what another makes of them follows the truth, per meeting.
+///
+/// Slower than `WARMING`, deliberately. Feelings are your own and you have them
+/// immediately; what somebody else feels has to be inferred from how they are with you, and
+/// people are not very good at it. The gap between the two rates *is* the misunderstanding:
+/// set them equal and belief tracks truth exactly, and nothing is ever mistaken about
+/// anything.
+const READING: f32 = 0.06;
 
 /// How well two temperaments suit each other, 0 to 1.
 ///

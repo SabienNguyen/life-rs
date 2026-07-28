@@ -6067,7 +6067,16 @@ mod the_land_holds {
         // What is always true is the link itself: a place that cannot feed its people leaves
         // them in worse condition than one that can, and condition is what feeds back into
         // births and deaths.
-        let mut world = World::genesis(WorldSeed::from_u128(0x222), 60);
+        //
+        // It needs a world where somewhere is actually short, and sixty founders stopped
+        // being one. §30 fixed a migration rule that had been sorting people into a quarter
+        // that could not feed them, and the worlds that followed are markedly better fed —
+        // one seed went from 326 alive at year 220 to 630. At sixty founders every inhabited
+        // place now reads `want` of exactly zero, and the test says so itself rather than
+        // passing on a world with nothing to compare. Three hundred is where the ground is
+        // strained again: measured at 120 years, wants of 0.00, 0.23, 0.03 and 0.00 across
+        // four inhabited quarters.
+        let mut world = World::genesis(WorldSeed::from_u128(0x222), 300);
         world.run_for(Duration::from_years(120));
         let now = world.now();
 
@@ -6154,13 +6163,32 @@ mod the_land_holds {
         // already establishes that a crowded founding is survivable, so this asks what such a
         // world *feels* like rather than whether it exists.
         //
-        // Four hundred was enough until households stopped commuting (§30.4), and the number
-        // is now what it should always have been — more people than *the world* will carry
-        // rather than more than one corner of it. Measured at forty years: 400, 700 and 1,000
-        // leave nobody short, 1,400 leaves one quarter 0.025 short, 2,000 leaves it 0.104.
+        // Four hundred was enough until households stopped commuting (§30.4), then two
+        // thousand until §17.2.1 changed what people take to be normal, and at that point
+        // this had been re-fixtured twice in a day by the very treadmill its own comment
+        // warns about. Every improvement to how well the world feeds itself raises the
+        // founding population this needs, and picking a new number each time is the horizon
+        // measuring itself.
+        //
+        // So it *looks* for the crowding instead of assuming it. Found a world it should
+        // strain, then run until somewhere is short, and fail only if that never happens
+        // inside a horizon nothing plausible could need. As the world gets better fed this
+        // takes longer and keeps meaning the same thing, which is what the earlier versions
+        // could not do.
         let mut world = World::genesis(WorldSeed::from_u128(0x221), 2_000);
         world.record_only(Salience::Pivotal);
-        world.run_for(Duration::from_years(40));
+
+        let short_somewhere = |world: &World| {
+            world
+                .places
+                .iter()
+                .any(|(id, p)| world.society.households_in(id).count() > 0 && p.want > 0.0)
+        };
+        let mut waited = 0;
+        while waited < 200 && !short_somewhere(&world) {
+            world.run_for(Duration::from_years(20));
+            waited += 20;
+        }
 
         let inhabited: Vec<&society::Place> = world
             .places
@@ -6171,7 +6199,8 @@ mod the_land_holds {
         assert!(!inhabited.is_empty(), "nobody lives anywhere");
         assert!(
             inhabited.iter().any(|p| p.want > 0.0),
-            "a world at its ceiling has nobody short of anything",
+            "two thousand people on this ground, {waited} years, and nobody is short of \
+anything — either the land has stopped binding or hunger has stopped being felt",
         );
         // And nowhere is so far gone that the model has stopped meaning anything.
         for place in &inhabited {
