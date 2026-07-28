@@ -7,6 +7,7 @@
 //! Nothing here is updated on a tick. Needs and health are brought forward from the last
 //! time anyone looked, which is what lets a large population sit dormant for free.
 
+pub mod acts;
 pub mod deeds;
 pub mod memory;
 pub mod psyche;
@@ -121,6 +122,14 @@ pub enum Cause {
     Illness,
     OldAge,
     Misadventure,
+    /// Somebody killed them.
+    ///
+    /// Worth its own entry rather than folding into misadventure. A world in which a murder
+    /// and a fall down a bank read the same in the record is a world where the question
+    /// "how many people here die at each other's hands" cannot be asked — and the answer to
+    /// that question is the only thing that says whether `acts::Toward::Kill` is a mechanism
+    /// or a decoration.
+    Violence,
 }
 
 impl Cause {
@@ -130,6 +139,7 @@ impl Cause {
             Cause::Illness => "illness",
             Cause::OldAge => "old age",
             Cause::Misadventure => "misadventure",
+            Cause::Violence => "violence",
         }
     }
 }

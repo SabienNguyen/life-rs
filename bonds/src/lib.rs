@@ -355,6 +355,53 @@ impl Bonds {
         mine.debt = (mine.debt + days).min(0.0);
     }
 
+    /// Somebody did something to somebody, and this is what it costs them in the other's
+    /// eyes.
+    ///
+    /// `how_badly` runs from a slight at 0 to the worst thing one person can do to another
+    /// at 1. All three of the numbers a wrong touches move at once, and they move by
+    /// different amounts on purpose: warmth goes furthest, because being hurt by somebody is
+    /// felt before it is judged; regard follows, and it is regard that travels, so a
+    /// grievance one person holds becomes a thing a whole town thinks; and `known` goes *up*,
+    /// because whatever else being wronged does, it acquaints you.
+    ///
+    /// Note what this is not. It is not symmetric, it does not touch what the wrongdoer holds
+    /// about the person they wronged, and nothing here informs anybody who was not involved.
+    /// Nobody in this world witnesses anything — the only reliable consequence of a wrong is
+    /// carried by the person who did it, in `person::acts::conscience`, and everything social
+    /// that follows has to travel out along ties from the one person who knows.
+    pub fn wronged(&mut self, wronged: PersonId, by: PersonId, how_badly: f32) {
+        if wronged == by || how_badly <= 0.0 {
+            return;
+        }
+        let badly = how_badly.clamp(0.0, 1.0);
+        let tie = self.edit(wronged, by);
+        tie.known = (tie.known + 0.25 * badly * (1.0 - tie.known)).clamp(0.0, 1.0);
+        tie.warmth = (tie.warmth - 1.4 * badly * (tie.warmth + 1.0) * 0.5).clamp(-1.0, 1.0);
+        tie.regard = (tie.regard - 0.9 * badly * (tie.regard + 1.0) * 0.5).clamp(-1.0, 1.0);
+    }
+
+    /// One person turns their back on another.
+    ///
+    /// The two sides of a shunning, which are not the same thing. The shunner's warmth and
+    /// regard fall, which is what makes their opinion of the shunned travel to everybody they
+    /// are close to when they next talk — a shunning is not private, and this is the whole of
+    /// how it spreads. And the shunned revises what they think they are worth to the shunner,
+    /// which is the one number in this model that can be wrong and is the reason being cut is
+    /// felt as being cut rather than merely observed.
+    pub fn cut(&mut self, shunner: PersonId, shunned: PersonId, how_hard: f32) {
+        if shunner == shunned || how_hard <= 0.0 {
+            return;
+        }
+        let hard = how_hard.clamp(0.0, 1.0);
+        let mine = self.edit(shunner, shunned);
+        mine.warmth = (mine.warmth - hard * (mine.warmth + 1.0) * 0.5).clamp(-1.0, 1.0);
+        mine.regard = (mine.regard - 0.8 * hard * (mine.regard + 1.0) * 0.5).clamp(-1.0, 1.0);
+        // Told plainly, so unlike every other route to `welcome` this one does not lag.
+        let theirs = self.edit(shunned, shunner);
+        theirs.welcome = (theirs.welcome - hard * (theirs.welcome + 1.0) * 0.5).clamp(-1.0, 1.0);
+    }
+
     /// What `listener` comes to think of everybody, after time spent with `speaker`.
     ///
     /// Gossip, with no words in it. The listener's regard for each third party drifts

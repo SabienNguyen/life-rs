@@ -573,6 +573,11 @@ fn events(world: &World) -> String {
                 // *possible* rather than what happened.
                 Happening::PersonWorksItOut { person, .. } => ("advance", vec![person], vec![]),
                 Happening::PersonRetrains { person, .. } => ("trade", vec![person], vec![]),
+                // Both people, because a robbery belongs in the robbed one's life as much
+                // as in the robber's — and only their own life ever shows it to them.
+                Happening::PersonActsOn {
+                    person, toward, ..
+                } => ("act", vec![person, toward], vec![]),
                 Happening::PersonArrives { person } => ("other", vec![person], vec![]),
                 Happening::PersonDoes { person, .. } => ("other", vec![person], vec![]),
                 _ => ("other", vec![], vec![]),

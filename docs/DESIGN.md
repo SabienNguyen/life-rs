@@ -3716,7 +3716,21 @@ apiece now that `vitals` exists. Three seeds, 120 founders, 90 years:
 | `READING` → 0 | 667 | **13%** (1,564 moves) | **0.62** | **0.08** | load-bearing — but see below |
 | `READING` → 1.0 | 667 | 9% | 0.55 | 0.12 | **the lag is inert** |
 
-The last two rows are the point, and the first of them nearly produced a wrong conclusion.
+One more, at **eight** seeds rather than three — because the two columns it moves have a noise
+floor larger than the effect at three, which is §35.8:
+
+| off | living | churn | biggest | empty | verdict |
+|---|---|---|---|---|---|
+| *baseline (8 seeds)* | 1997 | 9% | 0.55 | 0.35 | |
+| `acts_are_possible` | 2019 | 8% | **0.64** | **0.40** | load-bearing, and only here |
+
+The whole act vocabulary costs nine points of settlement concentration and nothing else — not
+population, not churn, not discovery, not patronage, not the trade mix (§35.9). It is the first
+mechanism in this table with a switch built for the purpose rather than a constant edited by a
+script, and that is not tidiness: two ablations in this project have left the working tree
+holding an edited constant after the container running them restarted.
+
+The last two rows of the first table are the point, and the first of them nearly produced a wrong conclusion.
 Setting `READING` to zero does not make the belief *accurate*, it freezes it at nothing — which
 removes the term from `choose_company` altogether, and since the belief tracks warmth closely
 that is removing four tenths of the warmth signal. Of course it changes everything.
@@ -3988,3 +4002,216 @@ asymmetries are the point rather than an inconvenience:
 That last asymmetry is not decoration. It is most of what will make a wrong *feel* like one when
 §35 gives this world wrongs: the injury persists on one side of the ledger and not the other,
 without anybody having to declare which side was injured.
+
+## 35. What one person does to another
+
+Everything anybody did in this world before now was addressed to the world. They ate, they
+worked, they moved. Even the social things were: `Deed::Socialize` relieved a need and named
+nobody, and the mutual aid in `share_the_shortfall` picks whoever happens to be an ally with
+something spare. **Nothing in the model was a person choosing a person and doing something to
+them on purpose.**
+
+`person::acts` is that. Five acts, each aimed at somebody, each scored from who the actor is and
+what they hold about the target:
+
+| | what it is | what it costs |
+|---|---|---|
+| **Give** | hand over some of what you have | an exact transfer of standing, booked as a debt |
+| **Teach** | pass on what you know | a share of the teacher's year, into the pupil's upbringing |
+| **Shun** | refuse them, and let everybody you are close to know | nothing, which is the point |
+| **Rob** | take what they have | an exact transfer of estate |
+| **Kill** | kill them | a death, recorded as `Cause::Violence` |
+
+And a sixth thing that is not an act, because nobody chooses it: **withholding**, the name for
+having done nothing in a moment that asked for something.
+
+The design questions behind this were put to the reader and answered: acts get targets; targets
+are *motivated*, so kindness can reach a stranger and violence needs hatred plus nothing left to
+lose; harm is wrong everywhere while obligation varies between peoples; and the consequence of a
+wrong lands **always, through conscience**, with no witness required.
+
+### 35.1 Why this is not another `Deed`
+
+The obvious home is `Deed::ALL`, and it is the wrong home for a reason already paid for twice.
+Deeds are chosen by softmax over relative scores, so **a new deed is a re-normalisation and not
+an addition** (§26.11): the one time an eighth was added it left eating and sleeping untouched in
+the source and moved migration by 64% in the world, and it was reverted.
+
+Acts are scored independently. Each appetite is a quantity in its own right, and `choose` rolls
+each against its own bar rather than against the others — so adding a sixth act changes the other
+five by *nothing*, not merely by little. That property is worth more than the elegance of one
+list, because this vocabulary is going to grow.
+
+### 35.2 Three ways the same mistake was made
+
+All three had the same shape: **two quantities that are not on a common scale, compared as
+though they were.** None was visible in the code, and all three read as findings about human
+nature until they were measured.
+
+**A product is not a sum.** Giving was scored as a sum of four ordinary reasons — kindness,
+fondness, duty, what is owed — and landed near 1.0. Robbery was scored as a product of five
+bounded factors and landed near 0.007, three hundred times under the same bar. Nothing was ever
+robbed in any world, and the first reading of that was "this society has no thieves". Robbery
+became a sum of three reasons — need, greed, spite — and started happening.
+
+**A maximum lets the cheap act mask the grave one.** Shunning and killing are driven by the same
+hatred, and shunning is far cheaper, so the shunning appetite is above the killing one at every
+level of loathing anybody ever reaches. Under a maximum, **murder is structurally impossible**,
+and no tuning fixes it: raise killing enough to win and every falling-out is a murder. There is
+something true in there — a society reaches for the cheap sanction first — but "and therefore
+nobody is ever killed" is not it. Each act is now rolled separately, and if more than one comes
+up, the gravest is what happened.
+
+**One bar across five acts is a unit mismatch.** With both of the above fixed, the strongest
+anybody in a measured world ever wanted to kill anybody was **0.138**, against a shared bar of
+0.25. That is not a fact about the population. Killing is a product of five conditions each of
+which is already rare; giving is a sum of four ordinary ones. Because `choose` rolls each act
+separately, a per-act bar changes only that act — which is the whole reason it is safe to have
+one.
+
+### 35.3 A gate that never fires looks exactly like a broken one
+
+`Toward::Kill` needs both halves of a sentence: they hate them, *and* they have nothing to lose.
+When a conjunction never fires there is no way to tell a society from a bug without measuring the
+halves separately — the same problem as §32.2, where conquest turned out to need adjacent
+countries and there were **zero adjacent cross-country pairs in any world at any size**.
+
+`sim/examples/who_could_kill.rs` measures the halves. In one 90-year world of 269 people:
+
+    ties known well enough   19000
+    of them, hate > 0.45       850   (4.47% of ties)
+    adults with nothing to lose  8   (4.8% of adults)
+    ties that are both          56
+
+Both halves are common, and fifty-six ties satisfy both. So the conjunction was not the reason —
+which is what sent the search to the bar, and found the unit mismatch above.
+
+The same example then measures the appetite itself rather than its gates, which is the step that
+mattered: *gates that both fire and an act that still never happens* is a different question from
+*can anybody*, and only the number the code actually computes answers it.
+
+**"Nothing to lose" is one minus the strongest thing holding you**, not a blend. A man with a
+child to feed is held by that alone however poor and sick and friendless he is. The anchors are
+what people would take from you, who needs you, and how much life you have left to forfeit —
+three, not four: condition was folded into the last, because being ill is not a separate thing to
+lose but a shorter remainder, and as a fourth anchor it required somebody to be at death's door
+before anything else counted, which made the whole conjunction unreachable.
+
+### 35.4 Wrongs, and the two kinds of them
+
+**Harm is wrong everywhere.** `Toward::harm` does not depend on where you are standing or who
+raised you. That is not a claim about metaethics; it is the minimum a model needs so that a
+murderer cannot emigrate into innocence.
+
+**Obligation is local.** What you owe the person in front of you when they are going short is a
+thing a people has, and peoples differ. It is *read off how they spend their days* rather than
+stored — a people that spends a large share of its doing on each other is one in which turning
+away from somebody is conspicuous — so it drifts as a culture drifts and splits when a culture
+splits, with no doctrine anywhere in the model.
+
+And because a person carries their own upbringing's version of it (§17.2.1's `norms`), somebody
+who moves **transgresses without knowing they have**: they withhold exactly as they always did,
+in a place where that is not done, and are judged by a standard they never learned. Their
+neighbours resent them; their conscience says nothing at all. That asymmetry is the whole reason
+the local number and the personal number are kept apart, and it is `norms` finally doing
+something *to* somebody rather than merely differing between people.
+
+### 35.5 Conscience, which needs no witnesses
+
+There are no witnesses in this model and there is no need for any. A wrong is kept by whoever did
+it, always, as `What::DidWrong`. What that memory does is make the next one dearer: `restraint =
+1 / (1 + guilt)`, where guilt is felt in proportion to benevolence and to how anxious somebody
+is. So the same act sits differently in two people, and somebody at the floor of both carries
+what they did as a fact rather than as a weight — which is how the model gets a person who can
+keep doing it, without anybody writing down that they are a monster.
+
+It fades on §34's hyperbolic curve, so a wrong done at twenty still faintly restrains at sixty
+while a wrong done last year restrains hard. `What::Wronged` is weighted slightly *above*
+`What::DidWrong`, and that ordering is a claim rather than a rounding: a wrong is felt harder by
+whoever it was done to. It is also what makes a feud asymmetric — my grievance outlives your
+remorse.
+
+### 35.6 Withholding is a state, not an event
+
+The first version assessed withholding on each of the sixteen evenings a year somebody spends in
+company, and counted **24,575 wrongs in three worlds** — which savaged every tie in every
+settlement and drove the largest quarter's share of households from 0.47 to 0.65. Not helping
+somebody is a standing state; counting it once per evening makes the same failure sixteen wrongs.
+It is now assessed once a year, and only against somebody *visibly* worse off, because an
+obligation everybody is failing all the time is not an obligation but a tax on being sociable.
+
+The second correction is subtler. Withholding used to keep a memory **and** damage the tie, which
+is double-counting: a slight of this kind is carried rather than acted on, and what it does to
+two people has to run through somebody deciding to do something about it. The grudge raises the
+appetite for shunning, and shunning is what cools a tie. Removing the direct damage returned a
+third of the extra migration and six points of settlement concentration.
+
+### 35.7 The currency of this world is means, not food
+
+Generosity was first keyed on hunger, which produced nothing, and then on the *hunger need*,
+which produced everything. Both were wrong and the pair of them is instructive:
+
+- At the sizes this project runs, `short` reads **0.00 to 0.02** — there is no famine, so there
+  is nobody to relieve. Keying on real shortfall gave a vocabulary that never fired.
+- `Need::Hunger` is the daily rhythm between meals and is non-zero for everybody always. Keying
+  on it made two hundred people a year guilty of not sharing lunch.
+
+What actually distinguishes people here is **means**. `poverty(means)` is the quantity generosity,
+withholding and robbery all key on, with real shortfall left as a multiplier for the worlds that
+have one.
+
+### 35.8 The instrument had to be widened before it could say anything
+
+`empty` moved from 0.33 to 0.47 on a change that added nineteen robberies to a world of six
+hundred people. That is not the mechanism; it is the fact that *any* change reshuffles which
+quarter happens to fill up. **A mechanism cannot be judged against a statistic whose noise floor
+is larger than any effect it could have** — so `vitals` now takes `SEEDS=n` up to twelve, and the
+ablation below is eight worlds against eight.
+
+Two further things were needed before the comparison meant anything:
+
+- **Acts draw from their own RNG stream.** They first drew from the evening's, and a single extra
+  draw reseeds every choice made in the world after it. The first measurement reported migration
+  up 39% and a third of the smiths gone, and most of that was not the mechanism — it was the
+  shift. A mechanism that cannot be switched off without moving everything else cannot be
+  ablated, and §31.2 is the whole method.
+- **The ablation is a switch on the world**, `acts_are_possible`, not a script that edits a
+  constant and rebuilds. Two ablations in this project have left the working tree holding an
+  edited constant after the container running them restarted, and an ablation nobody can run
+  without editing the source is an ablation nobody runs.
+
+### 35.9 What it costs, over eight worlds
+
+`SEEDS=8 cargo run --release --example vitals`, with the vocabulary off and on:
+
+| | off | on |
+|---|---|---|
+| living | 1997 | 2019 |
+| churn | 9% (336/3626) | 8% (318/3792) |
+| biggest | 0.55 | **0.64** |
+| empty | 0.35 | **0.40** |
+| spread | 0.11 | 0.13 |
+| advances | 38 | 37 |
+| taken up | 340 | 346 |
+| trades | 924/35/25/149/45 | 950/39/33/132/37 |
+| assimilation | 0.100 | 0.117 |
+| **acts** | — | gave to 779, taught 153, shunned 271, robbed 97, **killed 6** |
+
+Population, churn, discovery, patronage and the trade mix are all unchanged. The one real cost is
+settlement concentration: nine points of `biggest` and five of `empty`. That is attributable
+rather than mysterious — giving and robbing move means about, and means is what decides who gets
+into a household — and it is well short of §30.5's collapse.
+
+Six killings in eight worlds is about one murder per settlement per lifetime. The act tally and
+the death records agree on the number, which is a check worth having: they are written by two
+independent paths, and a mechanism reporting five killings in a world where nobody died of
+violence would be a bug in one of them. `people_do_things_to_each_other_and_the_two_counts_of_it_agree`
+found exactly that, on the first run — the tally was counting gifts that had nothing behind them.
+
+### 35.10 What this does not have
+
+No language, no lies, no promises. A killing has **no witness**, so nobody but the killer ever
+knows who did it, and the victim's friends carry only `What::Died`. That is honest rather than
+convenient — this world has no mechanism by which one person tells another a fact — and it means
+an unsolved killing is the only kind there is. Giving a wrong a witness is the next thing this
+vocabulary needs, and it needs a way to say something first.

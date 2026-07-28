@@ -13,7 +13,7 @@ fn main() {
     world.record_only(Salience::Pivotal);
     world.set_detail_budget(100_000);
     world.run_for(Duration::from_years(std::env::var("YEARS").ok().and_then(|v| v.parse().ok()).unwrap_or(120)));
-    let now = world.now();
+    let _now = world.now();
 
     // Distinction: how far the best-off adult is from the middle of the pack.
     let mut standing: Vec<(f32, String, usize)> = world

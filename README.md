@@ -262,9 +262,9 @@ what it is.
   Gossip with no words in it.
 - **Patronage is real.** Somebody takes you up, and it is the single largest fact about
   a life here.
-- **Politics is admission.** Exclusion is the only sanction in this world — no violence,
-  no law, no court, just a door that does not open for somebody the neighbours have
-  turned against. That is what makes reputation worth having.
+- **Politics is admission.** A door that does not open for somebody the neighbours have
+  turned against. There is still no law and no court, and that is what makes reputation
+  worth having.
 - **A faction is a clique, not a component.** Mutual affection percolates: above a mean
   degree of one, "everyone connected to everyone" is the whole town and means nothing.
 
@@ -276,6 +276,42 @@ lost, and when its holder dies somebody else is read into it. Each is ranked aga
 neighbours rather than against a number, so a rich man in a poor village is the patron.
 
 And every people has **its own word** for each: *Lorsteader*, *Lorspeaker*.
+
+### Things people do to each other
+
+Everything above is something people do to *the world*. This is the part where somebody
+picks a person and does something to them on purpose.
+
+```
+  acts       gave to 779  taught 153  shunned 271  robbed 97  killed 6
+  withheld     4762   times somebody turned away from a neighbour visibly worse off
+  killed          6   deaths by another person's hand
+```
+
+Eight worlds, ninety years, two thousand people. Five acts, each aimed at somebody, each
+scored from who the actor is and what they hold about the target:
+
+- **Kindness reaches a stranger.** Giving is the one act that does not need a tie, so a
+  benevolent person helps somebody they have never met.
+- **Violence needs both halves of a sentence.** They hate them, *and* they have nothing
+  left to lose — which is a computed quantity: what people would take from you, who needs
+  you, how much life you have left. One anchor is enough. A man with a child to feed is
+  held by that alone, however poor and sick and friendless he is.
+- **Harm is wrong everywhere; obligation is local.** What you owe the person in front of
+  you is read off how a people spends its days, so it drifts as they drift. Somebody who
+  moves can transgress **without knowing they have** — withholding exactly as they always
+  did, in a place where that is not done, judged by a standard they never learned.
+- **Conscience needs no witnesses.** A wrong is kept by whoever did it, always, and what
+  that memory does is make the next one dearer. It fades on the same hyperbolic curve
+  everything else does, so a wrong done at twenty faintly restrains at sixty.
+- **Nobody sees a killing.** This world has no way for one person to tell another a fact,
+  so the killer is the only person who ever knows. Every murder here is unsolved.
+
+Three ways of getting this wrong are written up in the design document, and all three had
+the same shape — two quantities not on a common scale, compared as though they were. The
+best of them: for a long time **murder was structurally impossible**, because shunning and
+killing run off the same hatred, shunning is cheaper, and taking the larger appetite meant
+the cheap sanction masked the grave one every single time.
 
 ---
 

@@ -72,6 +72,19 @@ pub enum What {
     WorkedItOut,
     /// They moved.
     Moved,
+    /// Somebody did them a wrong — took from them, shunned them, went for them, or stood
+    /// by while they went short in a place whose ways say you do not.
+    ///
+    /// The memory a grudge is made of. It is deliberately not signed by *what* was done:
+    /// what somebody carries about a person who hurt them is how much and how recently,
+    /// and the particular is the chronicle's business rather than theirs.
+    Wronged,
+    /// And the other side of it: a wrong they did themselves.
+    ///
+    /// Kept whether or not anybody saw. This is the whole of conscience in this model —
+    /// there is no judge, no shame and nobody keeping score, only the fact that somebody
+    /// who has done a thing is somebody who did it, and carries that.
+    DidWrong,
 }
 
 impl What {
@@ -82,8 +95,13 @@ impl What {
     pub fn weight(self) -> f32 {
         match self {
             What::Died => 1.0,
+            What::Wronged => 0.95,
             What::TakenUp => 0.9,
             What::Robbed => 0.9,
+            // Under being wronged, and that ordering is a claim rather than a rounding: a
+            // wrong is felt harder by whoever it was done to than by whoever did it. It is
+            // also what makes a feud asymmetric — my grievance outlives your remorse.
+            What::DidWrong => 0.85,
             What::Paired => 0.8,
             What::Born => 0.7,
             What::Carried => 0.6,
@@ -200,6 +218,19 @@ impl Held {
         self.kept
             .iter()
             .filter(|m| m.who == Some(about))
+            .map(|m| m.strength(now))
+            .sum()
+    }
+
+    /// What is held of one kind of thing about one particular person.
+    ///
+    /// The grudge query. `holds_about` says how much somebody is carried at all; this says
+    /// how much of what is carried is *that*, which is the difference between a person you
+    /// think about often and a person you have not forgiven.
+    pub fn holds(&self, what: What, about: PersonId, now: Time) -> f32 {
+        self.kept
+            .iter()
+            .filter(|m| m.what == what && m.who == Some(about))
             .map(|m| m.strength(now))
             .sum()
     }

@@ -111,6 +111,19 @@ fn sentence(world: &World, happening: Happening) -> String {
             who(world, by)
         ),
 
+        // Reads as a sentence because `Toward::label` is a verb in the past tense — the one
+        // place in this file where the enum does the writing rather than the match.
+        Happening::PersonActsOn {
+            person,
+            toward,
+            act,
+        } => format!(
+            "{} {} {}",
+            who(world, person),
+            act.label(),
+            who(world, toward)
+        ),
+
         Happening::PlaceTaken { place, by } => format!(
             "{} is raided out of {}",
             world

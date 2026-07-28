@@ -12,23 +12,30 @@
 //!
 //!     cargo run --release --example vitals
 //!
-//! Where the world stands, measured rather than remembered — three seeds, 120 founders, 90
-//! years, which is what the defaults produce:
+//! Where the world stands, measured rather than remembered — **eight** seeds (`SEEDS=8`), 120
+//! founders, 90 years:
 //!
-//!     living      667
-//!     churn         9%   82 of 929 moves went straight back. Over 10% is pathological (§30.4)
-//!     biggest    0.55    share of households in one quarter. 1.00 is the collapse (§30.5)
-//!     empty      0.33    quarters with nobody in them
-//!     spread     0.11    how far apart the inhabited quarters are. §14.4 needs this above 0
-//!     short      0.00    the hungriest quarter's shortfall. Should be small; zero at this
-//!                        size is expected, since §21's ceiling wants a crowded world
-//!     advances     12    things anybody ever worked out (§29)
-//!     taken up    108    people a patron ever opened a door for (§25)
-//!     trades           farm 318  hew 13  smith 6  cook 48  keep 19 — thin but not empty
-//!     assimilation 0.139, and 0.212 for somebody who has moved against 0.066 for somebody
+//!     living     2019
+//!     churn         8%   318 of 3792 moves went straight back. Over 10% is pathological (§30.4)
+//!     biggest    0.64    share of households in one quarter. 1.00 is the collapse (§30.5)
+//!     empty      0.40    quarters with nobody in them
+//!     spread     0.13    how far apart the inhabited quarters are. §14.4 needs this above 0
+//!     short      0.02    the hungriest quarter's shortfall. Should be small; near zero at
+//!                        this size is expected, since §21's ceiling wants a crowded world
+//!     advances     37    things anybody ever worked out (§29)
+//!     taken up    346    people a patron ever opened a door for (§25)
+//!     trades           farm 950  hew 39  smith 33  cook 132  keep 37 — thin but not empty
+//!     acts             gave to 779  taught 153  shunned 271  robbed 97  killed 6 — what
+//!                        people did to each other on purpose (§35)
+//!     withheld   4762    times somebody turned away from a neighbour visibly worse off, in a
+//!                        place whose ways say you do not
+//!     killed        6    deaths by another person's hand, counted off the death records
+//!                        rather than off the act tally, so the two can disagree and be seen to
+//!     assimilation 0.117, and 0.132 for somebody who has moved against 0.066 for somebody
 //!                        who has not — §17.2.1's claim, in a running world
 //!
-//! Seventy-eight seconds, against eight minutes for the suite that would otherwise tell you.
+//! Under a minute at three seeds, three at eight, against eight minutes for the suite that
+//! would otherwise tell you.
 //!
 //! **Add a line here before ablating the mechanism it belongs to.** §31.2 switches mechanisms
 //! off and compares against this, and an instrument that cannot see what a mechanism claims
@@ -39,7 +46,18 @@
 use sim::World;
 use sim_core::{Duration, Salience, WorldSeed};
 
-const SEEDS: [u128; 3] = [0x11, 0x21, 0x221];
+/// The worlds this asks about.
+///
+/// Three by default because that is what a minute buys, and `SEEDS=n` for more — which is
+/// not a convenience. Two of the numbers below, `biggest` and `empty`, swing by twenty
+/// points at three seeds on a change that added nineteen robberies to a world of six
+/// hundred people. They are not measuring the change; they are measuring the fact that
+/// *any* change reshuffles which quarter happens to fill up. A mechanism cannot be judged
+/// against a statistic whose noise floor is larger than any effect it could have, and the
+/// only cure is more worlds.
+const ALL_SEEDS: [u128; 12] = [
+    0x11, 0x21, 0x221, 0x31, 0x41, 0x5ee, 0x77, 0x8a, 0x91, 0xa3, 0xbb, 0xc7,
+];
 
 fn main() {
     let years: u64 = std::env::var("YEARS")
@@ -50,6 +68,12 @@ fn main() {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(120);
+    let how_many: usize = std::env::var("SEEDS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(3)
+        .clamp(1, ALL_SEEDS.len());
+    let seeds = &ALL_SEEDS[..how_many];
 
     let (mut moves, mut back) = (0usize, 0usize);
     let (mut biggest, mut empty, mut spread, mut short) = (0.0, 0.0, 0.0, 0.0);
@@ -60,8 +84,10 @@ fn main() {
     let (mut takings, mut countries) = (0usize, 0usize);
     let (mut moved_apart, mut moved_counted) = (0.0f32, 0usize);
     let (mut stayed_apart, mut stayed_counted) = (0.0f32, 0usize);
+    let mut acted = [0usize; person::acts::Toward::COUNT];
+    let (mut withheld, mut killed) = (0usize, 0usize);
 
-    for seed in SEEDS {
+    for seed in seeds.iter().copied() {
         let mut world = World::genesis(WorldSeed::from_u128(seed), founders);
         world.record_only(Salience::Pivotal);
         world.set_detail_budget(100_000);
@@ -135,6 +161,32 @@ fn main() {
             .filter(|r| matches!(r.kind, sim::Happening::PersonMentored { .. }))
             .count();
 
+        // What people did to each other on purpose (§35). Read off the world's own tally
+        // rather than the chronicle, because four of the five are recorded at `Notable` and
+        // every run here asks for `Pivotal` only — an instrument that could not see them at
+        // the detail everybody actually uses would report an ablation of the whole
+        // vocabulary as having changed nothing.
+        for (at, count) in world.acted.iter().enumerate() {
+            acted[at] += *count as usize;
+        }
+        withheld += world.withheld as usize;
+        // Killings are counted a second way, off the death records, because they are the one
+        // act whose consequence is somebody being gone — and a tally that says five murders
+        // in a world where nobody died of violence is a bug in one of the two.
+        killed += world
+            .chronicle
+            .iter()
+            .filter(|r| {
+                matches!(
+                    r.kind,
+                    sim::Happening::PersonDies {
+                        cause: person::Cause::Violence,
+                        ..
+                    }
+                )
+            })
+            .count();
+
         short += world
             .places
             .iter()
@@ -187,8 +239,8 @@ fn main() {
         }
     }
 
-    let n = SEEDS.len() as f32;
-    println!("{} seeds, {founders} founders, {years} years\n", SEEDS.len());
+    let n = seeds.len() as f32;
+    println!("{} seeds, {founders} founders, {years} years\n", seeds.len());
     println!("  living     {:>6}   across all three", living);
     println!(
         "  churn      {:>5.0}%   {back} of {moves} moves went straight back",
@@ -202,6 +254,16 @@ fn main() {
     println!("  taken up   {taken_up:>6}   people a patron ever opened a door for (§25)");
     println!("  takings    {takings:>6}   times anybody took anything by force (§32)");
     println!("  countries  {:>6.1}   how many there are to take from each other", countries as f32 / n);
+    println!(
+        "\n  acts       {}",
+        person::acts::Toward::ALL
+            .iter()
+            .map(|act| format!("{} {}", act.label(), acted[*act as usize]))
+            .collect::<Vec<_>>()
+            .join("  ")
+    );
+    println!("  withheld   {withheld:>6}   times somebody turned away where that is not done");
+    println!("  killed     {killed:>6}   deaths by another person's hand");
     println!(
         "\n  trades     {}",
         ["farm", "hew", "smith", "cook", "keep"]

@@ -395,6 +395,36 @@ const SPELLS_A_YEAR: [f32; Deed::COUNT] = {
 /// actually produces.
 const COMPANY_A_YEAR: u32 = 16;
 
+/// How readily a disposition becomes a thing somebody actually did.
+///
+/// An appetite is not an occasion. Somebody generous does not hand something over on all
+/// sixteen evenings a year they spend in company, and this is the factor that turns a
+/// standing willingness into an event that happens now and then — a full-blooded appetite
+/// acts about once a year, an ordinary one about once a decade. It is the single number
+/// that sets how eventful this world's social life is, and it is the first thing to move if
+/// the acts count in `vitals` comes out absurd in either direction.
+const AN_OCCASION: f32 = 0.06;
+
+/// The share of what somebody can spare that changes hands when they give.
+const GENEROSITY: f32 = 0.15;
+
+/// What a lesson is worth to whoever is taught, in standing.
+const TEACHING: f32 = 0.03;
+/// And how much of an upbringing it counts for, in years, for a pupil still young enough
+/// for it to count at all.
+const TEACHING_YEARS: f32 = 0.25;
+
+/// How hard a shunning lands.
+const SHUNNING: f32 = 0.5;
+
+/// The share of an estate one person can carry off from another by hand.
+///
+/// Well under `PLUNDER`, which is what a whole settlement takes from a whole settlement. A
+/// raid empties a place; a robbery takes what a man can carry.
+const BY_HAND: f32 = 0.30;
+
+/// How much of an obligation has to go unmet before anybody counts it as a slight.
+const WITHHOLDING_NOTICED: f32 = 0.30;
 /// How many neighbours somebody weighs up before deciding who to spend an evening with.
 ///
 /// Nobody surveys a town. This is what keeps the cost of a social life bounded by Dunbar
@@ -488,6 +518,17 @@ pub enum Happening {
         /// And where the takers came from.
         by: PlaceId,
     },
+    /// Somebody did something to somebody, on purpose.
+    ///
+    /// The first thing in this chronicle with a person on both ends of it that neither of
+    /// them is obliged to by kinship, need or the machinery of the year. Everything else two
+    /// people do here they do because they are married, related, or both hungry; this is one
+    /// of them deciding about the other. See `person::acts`.
+    PersonActsOn {
+        person: PersonId,
+        toward: PersonId,
+        act: person::acts::Toward,
+    },
 }
 
 impl Happening {
@@ -524,6 +565,12 @@ impl Happening {
             }
             Happening::PlaceChanges { place, .. } => one(place.to_bits()),
             Happening::PlaceTaken { place, by } => Subjects::of(&[place.to_bits(), by.to_bits()]),
+            // Both, always. Being given to and being robbed are events in a life whoever
+            // else was involved, and a record filed only under whoever moved first would
+            // leave every victim's biography silent about the thing done to them.
+            Happening::PersonActsOn { person, toward, .. } => {
+                Subjects::of(&[person.to_bits(), toward.to_bits()])
+            }
         }
     }
 }
@@ -570,7 +617,8 @@ impl Happening {
             | Happening::PersonPairs { person, .. }
             | Happening::PersonMoves { person, .. }
             | Happening::PersonMentored { person, .. }
-            | Happening::PersonWorksItOut { person, .. } => Some(*person),
+            | Happening::PersonWorksItOut { person, .. }
+            | Happening::PersonActsOn { person, .. } => Some(*person),
             Happening::PersonBorn { child, .. } => Some(*child),
             _ => None,
         }
@@ -695,6 +743,32 @@ pub struct World {
     /// an evening in company costs no allocation, of which there are some hundreds of
     /// millions in a run.
     company: Vec<PersonId>,
+    /// Whether people act on each other at all — see `person::acts`.
+    ///
+    /// A switch on the world rather than a script that edits a constant and rebuilds. Two
+    /// ablations in this project have left the working tree holding an edited constant after
+    /// the container running them restarted, and an ablation nobody can run without editing
+    /// the source is an ablation nobody runs. Switching this off costs nothing and moves
+    /// nothing else: acts draw from their own stream, so a world with them off follows the
+    /// same trajectory as one that never had them.
+    pub acts_are_possible: bool,
+    /// How many times each act in `person::acts` has ever been done to anybody.
+    ///
+    /// A tally on the world rather than a count of the chronicle, and that is a decision
+    /// worth stating. Most of these are not pivotal events — an evening in which somebody
+    /// was cold to somebody is not a turning point in either life — so they are recorded at
+    /// `Notable`, and every long run in this project uses `record_only(Pivotal)` and would
+    /// drop them. An instrument that can only see a mechanism at a detail setting nobody
+    /// uses cannot tell "switched off" from "never fired", which is §31.2's whole lesson.
+    /// Six words of counter can.
+    pub acted: [u32; person::acts::Toward::COUNT],
+    /// And how many times somebody stood beside a person going short, in a place whose ways
+    /// say you do not do that, and did nothing.
+    ///
+    /// The wrong nobody chooses — see `person::acts::withheld`. Counted for the same reason
+    /// and kept separately, because it is the one wrong in this world whose weight depends
+    /// on where you are standing.
+    pub withheld: u32,
     /// The ground the world stands on, if it stands on any.
     surface: Option<Surface>,
     /// How many people it was founded with. Kept because a world cannot be made again
@@ -1024,6 +1098,9 @@ impl World {
             evenings: std::collections::BTreeMap::new(),
             shouldered: std::collections::BTreeMap::new(),
             company: Vec::new(),
+            acts_are_possible: true,
+            acted: [0; person::acts::Toward::COUNT],
+            withheld: 0,
             surface: None,
             founded_with: 0,
         }
@@ -1689,7 +1766,7 @@ impl World {
     /// is written by hand per happening rather than derived from `subjects()`.
     fn let_them_remember(&mut self, at: Time, kind: Happening) {
         use person::memory::What;
-        let mut keep = |world: &mut World, who: PersonId, what: What, about: Option<PersonId>| {
+        let keep = |world: &mut World, who: PersonId, what: What, about: Option<PersonId>| {
             if let Some(person) = world.people.get_mut(who) {
                 if person.is_alive() {
                     person.keep(what, about, at);
@@ -1742,6 +1819,22 @@ impl World {
                     .collect();
                 for who in robbed {
                     keep(self, who, What::Robbed, None);
+                }
+            }
+            // Both sides of a deliberate act, and which side gets what is the whole of it.
+            // A wrong is kept by whoever did it *and* by whoever it was done to — the first
+            // is conscience, which needs no witness, and the second is a grudge. A kindness
+            // is kept only by whoever received it: being given to is a thing you remember
+            // about somebody, and giving is a Tuesday.
+            Happening::PersonActsOn { person, toward, act } => {
+                if act.harm() > 0.0 {
+                    keep(self, person, What::DidWrong, Some(toward));
+                    // `keep` passes over the dead, so a killing leaves no second memory —
+                    // which is right, and is why the killer is the only person in the world
+                    // who knows what happened.
+                    keep(self, toward, What::Wronged, Some(person));
+                } else {
+                    keep(self, toward, What::Carried, Some(person));
                 }
             }
             _ => {}
@@ -1931,10 +2024,11 @@ impl World {
     /// `evenings` is how many the one call stands for: one in the fine tier, a season's
     /// worth in the coarse. Everything below is per-evening and scales with it, so the two
     /// tiers make the same friendships out of the same year.
-    fn spend_an_evening(&mut self, id: PersonId, rng: &mut Rng, evenings: u32) {
+    fn spend_an_evening(&mut self, id: PersonId, rng: &mut Rng, evenings: u32, evening: u32) {
         let Some(place) = self.society.place_of(id) else {
             return;
         };
+        let at = self.now();
 
         let mut to_hand = std::mem::take(&mut self.company);
         to_hand.clear();
@@ -1977,6 +2071,276 @@ impl World {
         // one person reaches somebody who has never met them.
         self.bonds.hearsay_repeatedly(id, other, evenings);
         self.bonds.hearsay_repeatedly(other, id, evenings);
+        // Being with somebody keeps what you hold about them sharp — which is why the
+        // brother across the square is never forgiven and the one who moved away is.
+        //
+        // Once a year, not once an evening. `rehearse` halves the age of what it touches, so
+        // sixteen of them a year would make anything held about a neighbour permanently new
+        // and no grudge against anybody still alive would ever soften — which is the
+        // opposite of the claim `memory` makes and would have been invisible in every
+        // aggregate this project measures.
+        if evening == 0 {
+            if let Some(person) = self.people.get_mut(id) {
+                person.rehearse(other, at);
+            }
+            if let Some(person) = self.people.get_mut(other) {
+                person.rehearse(id, at);
+            }
+        }
+        // And then one of them may do something about the other. On its *own* stream, not
+        // this evening's: `spend_an_evening` draws from `rng` to pick company, and a single
+        // extra draw here would reseed every choice made in the world after it. The first
+        // measurement of this vocabulary reported migration up 39% and a third of the
+        // smiths gone, and most of that was not the mechanism — it was the shift. A
+        // mechanism that cannot be switched off without moving everything else cannot be
+        // ablated, and §31.2 is the whole method.
+        let mut theirs = self.moment_stream(
+            Domain::Behavior,
+            id.to_bits() ^ other.to_bits().rotate_left(17) ^ ((evening as u64) << 43) ^ 0xac_75,
+            at,
+        );
+        self.act_toward(id, other, at, evening, &mut theirs);
+    }
+
+    /// What one person deliberately does to another, on an evening they spend together.
+    ///
+    /// The whole of `person::acts`, joined to a world. This function's only job is to gather
+    /// what the choice is allowed to see, hand it over, and carry out the answer — and the
+    /// gathering is written out longhand rather than passing `&Person` because a scorer that
+    /// can reach the whole world is a scorer that will eventually read something nobody
+    /// thought it could.
+    ///
+    /// **Why here and not in `Deed::ALL`.** Acts are aimed at a person and deeds are not, so
+    /// the evening is where they belong on the merits. It is also the only place they *can*
+    /// go without repricing everything else: deeds are chosen by softmax over relative
+    /// scores, so an eighth deed re-normalises the other seven, and the one time that was
+    /// tried it moved migration by 64% and was reverted (§26.11). Five acts scored
+    /// independently move nothing.
+    fn act_toward(&mut self, who: PersonId, other: PersonId, at: Time, evening: u32, rng: &mut Rng) {
+        use person::acts::{Actor, Subject, Toward};
+
+        if !self.acts_are_possible {
+            return;
+        }
+        let Some(place) = self.society.place_of(who) else {
+            return;
+        };
+        let (Some(here), Some(shortfall)) = (
+            self.places.get(place).map(|p| p.env.norms),
+            self.places.get(place).map(|p| p.want),
+        ) else {
+            return;
+        };
+        // What this place expects of people — which is not what the actor thinks it expects.
+        // See `withheld`; the gap between the two is the whole of the migrant's problem.
+        let expected_here = person::acts::what_is_expected(&here);
+
+        // Who needs them. Taken before the borrow below, and the strongest single thing
+        // anybody in this world has to lose.
+        let dependents = self
+            .society
+            .children_of(who)
+            .iter()
+            .filter(|child| {
+                self.people
+                    .get(**child)
+                    .is_some_and(|p| p.is_alive() && p.stage(at).is_dependent())
+            })
+            .count();
+        let tie = self.bonds.tie(who, other);
+
+        let (Some(one), Some(two)) = (self.people.get(who), self.people.get(other)) else {
+            return;
+        };
+        // Children do not do these things to people. Not a claim about children — a claim
+        // about this model, in which nobody under maturity has standing, an estate, a trade,
+        // or anything much to give.
+        if !one.has_matured() || !one.is_alive() || !two.is_alive() {
+            return;
+        }
+        let whole_life = life::Mortality::HUMAN.median_lifespan();
+        let ahead = |p: &Person| ((whole_life - p.age(at).years()) / whole_life).clamp(0.0, 1.0);
+        let actor = Actor {
+            values: &one.values,
+            personality: &one.personality,
+            held: one.held(),
+            means: one.means(),
+            want: shortfall,
+            dependents,
+            health: one.health().vitality,
+            life_ahead: ahead(one) as f32,
+            has_a_trade: one.has_matured(),
+            own_ways: person::acts::what_is_expected(one.norms()),
+        };
+        let subject = Subject {
+            who: other,
+            warmth: tie.warmth,
+            regard: tie.regard,
+            debt: tie.debt,
+            known: tie.known,
+            means: two.means(),
+            want: shortfall,
+            age_years: two.age(at).years(),
+            matured: two.has_matured(),
+        };
+        let appetite = person::acts::weigh(&actor, &subject, at);
+        let missed = person::acts::withheld(&actor, &subject, expected_here);
+        // What the actor's *own* upbringing said was owed, kept before the borrow ends.
+        let by_their_lights = actor.own_ways;
+        let chosen = person::acts::choose(&appetite, AN_OCCASION, rng);
+
+        let did = match chosen {
+            Some(act) if self.carry_out(who, other, act, at) => Some(act),
+            // An act somebody decided on and could not manage is not an act. Giving is the
+            // case that arises: the appetite is scored against everything somebody has, and
+            // the gift comes out of their standing alone, so a person whose worth is all
+            // estate can want to give and have nothing at hand to give with. Counting that
+            // as a gift put the world's tally two ahead of the chronicle's, which is how it
+            // was found — and *is* the reason for counting it twice.
+            _ => None,
+        };
+
+        // And sometimes doing nothing is the thing that was done. This is the only wrong in
+        // the world whose weight is local: the same shrug beside the same poor neighbour is
+        // nothing in one valley and a disgrace in the next, because a people that lives in
+        // each other's company has a claim on its members that a scattered one does not.
+        //
+        // Assessed **once a year**, not on each of sixteen evenings, and that is not a
+        // tuning. Not helping somebody is a standing state rather than an event: counting it
+        // once per evening makes the same failure sixteen wrongs, which is both false and
+        // what produced twenty-four thousand of them in three worlds on the first run.
+        if evening == 0 && did != Some(Toward::Give) && missed > WITHHOLDING_NOTICED {
+            self.nobody_helped(who, other, by_their_lights, at);
+        }
+    }
+
+    /// Carry out an act, and record it.
+    ///
+    /// What each act *costs* is the part worth reading. Giving and robbing both move
+    /// something from one person to another and create nothing; teaching costs the teacher a
+    /// share of a year's ground and gives the pupil rather more than it took, because that
+    /// is what teaching is; shunning costs nothing and is therefore the cheapest thing in
+    /// this vocabulary, which is why societies reach for it first.
+    /// Returns whether it actually came about. The tally and the chronicle are both written
+    /// from the end of this function so that they cannot disagree, and an act that turned out
+    /// to be impossible is written to neither.
+    fn carry_out(
+        &mut self,
+        who: PersonId,
+        other: PersonId,
+        act: person::acts::Toward,
+        at: Time,
+    ) -> bool {
+        use person::acts::Toward;
+        match act {
+            Toward::Give => {
+                let gift = self
+                    .people
+                    .get(who)
+                    .map(|p| (p.standing() - SUBSISTENCE_STANDING).max(0.0) * GENEROSITY)
+                    .unwrap_or(0.0);
+                if gift <= 0.0 {
+                    return false;
+                }
+                // An exact transfer. Nothing is created by kindness any more than it is by a
+                // raid — what changes is who has it.
+                if let Some(giver) = self.people.get_mut(who) {
+                    let held = giver.standing();
+                    giver.set_standing(held - gift);
+                }
+                if let Some(taker) = self.people.get_mut(other) {
+                    let held = taker.standing();
+                    taker.set_standing(held + gift);
+                }
+                // And it goes on the ledger, because a gift in this world is a favour and
+                // reciprocity is what decides what the two of them come to think of each
+                // other. In days of work, which is the unit debts are kept in.
+                self.bonds.helped(who, other, gift * 365.0);
+            }
+            Toward::Teach => {
+                let worth = self.people.get(who).map(|p| p.standing()).unwrap_or(0.0);
+                if let Some(teacher) = self.people.get_mut(who) {
+                    // Time given to somebody else is time not spent on your own ground.
+                    teacher.slip(TEACHING);
+                }
+                if let Some(pupil) = self.people.get_mut(other) {
+                    let age = pupil.age(at).years();
+                    // Into the upbringing, which is where a lesson goes — and `absorb` is a
+                    // no-op after maturity, which is why `weigh` will not offer this act
+                    // toward a grown person at all. It deliberately does *not* hand over
+                    // standing: standing is what somebody's own hands are worth and cannot
+                    // be given, and a version that gave it moved migration more than every
+                    // other act in this vocabulary put together.
+                    pupil.absorb(worth, age, TEACHING_YEARS);
+                }
+            }
+            Toward::Shun => {
+                self.bonds.cut(who, other, SHUNNING);
+            }
+            Toward::Rob => {
+                let taken = self
+                    .people
+                    .get_mut(other)
+                    .map(|p| p.plundered(BY_HAND))
+                    .unwrap_or(0.0);
+                if let Some(thief) = self.people.get_mut(who) {
+                    thief.inherit(taken);
+                }
+                self.bonds.wronged(other, who, Toward::Rob.harm());
+            }
+            Toward::Kill => {
+                // Recorded first, so the death is in the record before the killing is. A
+                // person who is dead cannot keep a memory of being wronged, which is exactly
+                // the asymmetry that makes this the one wrong with no second party to it.
+                self.record_death(at, other, Cause::Violence);
+            }
+        }
+        let weight = match act {
+            // A life turns on being robbed and ends on the other one.
+            Toward::Rob | Toward::Kill => Salience::Pivotal,
+            _ => Salience::Notable,
+        };
+        self.acted[act as usize] = self.acted[act as usize].saturating_add(1);
+        self.remember(
+            at,
+            weight,
+            Happening::PersonActsOn {
+                person: who,
+                toward: other,
+                act,
+            },
+        );
+        true
+    }
+
+    /// Somebody went short beside somebody who could have helped, and nothing happened.
+    ///
+    /// Two sides that do not agree, on purpose. The person who went without is wronged by
+    /// what *this place* holds people to; the person who did nothing feels it by what they
+    /// were raised to hold people to. Somebody who moved here from a scattered people
+    /// therefore transgresses without knowing they have — they withheld exactly as they
+    /// always did — and their neighbours resent them for it while their conscience says
+    /// nothing at all. That is the point of keeping the two numbers apart, and it is §17.2.1's
+    /// `norms` finally doing something to somebody rather than merely differing.
+    fn nobody_helped(&mut self, who: PersonId, from: PersonId, by_own: f32, at: Time) {
+        use person::memory::What;
+        self.withheld = self.withheld.saturating_add(1);
+        // Only the memory, on both sides. Not the tie — and that is the difference between
+        // this and being robbed. A slight of this kind is *carried* rather than acted on, and
+        // what it does to the two of them afterwards has to go through somebody deciding to
+        // do something about it: the grudge raises the appetite for shunning, and shunning is
+        // what actually cools a tie. Damaging the tie here as well was double-counting, and
+        // it cost the world a third more migration and six points of settlement concentration
+        // for a wrong nobody had yet acted on.
+        if let Some(slighted) = self.people.get_mut(from) {
+            slighted.keep(What::Wronged, Some(who), at);
+        }
+        // And the conscience, at the actor's own rate rather than the local one.
+        if by_own > WITHHOLDING_NOTICED
+            && let Some(person) = self.people.get_mut(who)
+        {
+            person.keep(What::DidWrong, Some(from), at);
+        }
     }
 
     /// Making good, in a year that allows it.
@@ -2748,8 +3112,8 @@ impl World {
                 continue;
             }
             let mut rng = self.moment_stream(Domain::Behavior, who.to_bits() ^ 0x_50c1, at);
-            for _ in 0..COMPANY_A_YEAR {
-                self.spend_an_evening(who, &mut rng, each);
+            for evening in 0..COMPANY_A_YEAR {
+                self.spend_an_evening(who, &mut rng, each, evening);
             }
         }
     }
@@ -3951,6 +4315,108 @@ mod tests {
                 .count()
         };
         assert!(by_cause(Cause::OldAge) > by_cause(Cause::Deprivation));
+    }
+
+    #[test]
+    fn people_do_things_to_each_other_and_the_two_counts_of_it_agree() {
+        // §35's whole claim in one run: the vocabulary fires, and the tally kept on the
+        // world says the same as the record kept in the chronicle. Those are two independent
+        // paths — a counter incremented in `carry_out` and a `Happening` filed by
+        // `remember` — and a mechanism that reported five killings in a world where nobody
+        // died of violence would be a bug in one of them, which is exactly why the number is
+        // counted twice.
+        let mut world = World::genesis(WorldSeed::from_u128(0x11), 90);
+        world.record_only(Salience::Notable);
+        world.set_detail_budget(100_000);
+        world.run_for(Duration::from_years(70));
+
+        use person::acts::Toward;
+        assert!(
+            world.acted[Toward::Give as usize] > 0,
+            "somebody should have been kind to somebody in seventy years"
+        );
+        assert!(
+            world.acted[Toward::Shun as usize] > 0,
+            "and somebody should have fallen out with somebody"
+        );
+
+        let recorded = |act: Toward| {
+            world
+                .chronicle
+                .iter()
+                .filter(|r| matches!(r.kind, Happening::PersonActsOn { act: did, .. } if did == act))
+                .count()
+        };
+        for act in Toward::ALL {
+            assert_eq!(
+                recorded(act),
+                world.acted[act as usize] as usize,
+                "{} — the tally and the record disagree",
+                act.label()
+            );
+        }
+
+        // And a killing is a death. Not a separate fact that happens to coincide: the act
+        // *is* the death, so the causes of death have to account for every one of them.
+        let by_violence = world
+            .chronicle
+            .iter()
+            .filter(|r| matches!(r.kind, Happening::PersonDies { cause: Cause::Violence, .. }))
+            .count();
+        assert_eq!(
+            by_violence,
+            world.acted[Toward::Kill as usize] as usize,
+            "somebody was killed without dying, or died without being killed"
+        );
+    }
+
+    #[test]
+    fn switching_the_vocabulary_off_leaves_a_world_that_still_works() {
+        // The ablation, as a claim rather than as a thing somebody once ran. Every act's bar
+        // put out of reach is not the same as deleting the code — the scoring still runs and
+        // the stream is still drawn — so what this compares is the mechanism and not the
+        // trajectory, which is the distinction §35.2 was built to make.
+        //
+        // What it asserts is deliberately weak: that a world with the vocabulary switched on
+        // has the same population and the same rate of pointless migration as one without.
+        // The two numbers that *do* move — how concentrated settlement ends up — are measured
+        // in `vitals` over eight worlds, because at this size they are noise.
+        let run = |bars: bool| {
+            let mut world = World::genesis(WorldSeed::from_u128(0x21), 90);
+            world.record_only(Salience::Pivotal);
+            world.set_detail_budget(100_000);
+            world.acts_are_possible = bars;
+            world.run_for(Duration::from_years(70));
+            let mut path: std::collections::BTreeMap<PersonId, Vec<PlaceId>> = Default::default();
+            for record in world.chronicle.iter() {
+                if let Happening::PersonMoves { person, to } = record.kind {
+                    path.entry(person).or_default().push(to);
+                }
+            }
+            let moves: usize = path.values().map(Vec::len).sum();
+            let back: usize = path
+                .values()
+                .map(|steps| (2..steps.len()).filter(|i| steps[*i] == steps[i - 2]).count())
+                .sum();
+            (world.living(), moves, back)
+        };
+        let (with_people, with_moves, with_back) = run(true);
+        let (without_people, without_moves, without_back) = run(false);
+
+        let ratio = with_people as f32 / without_people.max(1) as f32;
+        assert!(
+            (0.85..1.18).contains(&ratio),
+            "{with_people} living with the vocabulary against {without_people} without it"
+        );
+        let churn = |back: usize, moves: usize| back as f32 / moves.max(1) as f32;
+        assert!(
+            churn(with_back, with_moves) < 0.12,
+            "{with_back} of {with_moves} moves went straight back — §30.4's bar is a tenth"
+        );
+        assert!(
+            churn(without_back, without_moves) < 0.12,
+            "and the world without it should be no worse: {without_back} of {without_moves}"
+        );
     }
 
     #[test]
