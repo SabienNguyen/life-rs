@@ -46,14 +46,39 @@ use crate::balance::{Balance, measure, targets};
 use sim::World;
 use sim_core::{Duration, Salience, WorldSeed};
 
-const SEEDS: [u128; 3] = [0x11, 0x21, 0x221];
+/// The worlds these are measured over.
+///
+/// Three by default, and `BALANCE_SEEDS=n` for more — which is not a convenience. The
+/// shared-environment share read 0.253, 0.260, 0.240, 0.213, 0.197 and 0.170 across one
+/// session's changes, and at least two of those moves had **no mechanism behind them**: a
+/// de-duplication worth a hundredth of warmth moved it by seven hundredths, because it shifted
+/// the trajectory and this is measured over three worlds (§38.2). `vitals` widened to eight
+/// worlds for exactly this reason after `biggest` and `empty` swung twenty points on nineteen
+/// robberies (§35.8); this is the same problem in the more expensive instrument.
+///
+/// Each world is a hundred and sixty founders for a hundred and twenty years and costs about
+/// three minutes, which is why the default is what it is and why raising it is a decision
+/// about the suite's runtime rather than a free improvement.
+const ALL_SEEDS: [u128; 8] = [0x11, 0x21, 0x221, 0x31, 0x41, 0x5ee, 0x77, 0x8a];
+
+fn seeds() -> &'static [u128] {
+    static HOW_MANY: std::sync::LazyLock<usize> = std::sync::LazyLock::new(|| {
+        std::env::var("BALANCE_SEEDS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(3)
+            .clamp(1, ALL_SEEDS.len())
+    });
+    &ALL_SEEDS[..*HOW_MANY]
+}
 
 /// Built once and shared. Three worlds of a hundred and sixty founders run for a hundred and
 /// twenty years is most of a minute each, and both tests below want the same three.
 fn balances() -> &'static [(u128, Balance)] {
     static MEASURED: std::sync::LazyLock<Vec<(u128, Balance)>> = std::sync::LazyLock::new(|| {
-        SEEDS
-            .into_iter()
+        seeds()
+            .iter()
+            .copied()
             .map(|seed| {
                 let mut world = World::genesis(WorldSeed::from_u128(seed), 160);
                 world.record_only(Salience::Pivotal);
@@ -129,7 +154,7 @@ fn the_bands_the_design_meets_stay_met() {
         assert!(
             band.contains(&value),
             "{name} averages {value:.2} across {} worlds, outside {band:?}",
-            SEEDS.len()
+            seeds().len()
         );
     }
     // Not asserted against its band, because it does not meet it — see below. Asserted to

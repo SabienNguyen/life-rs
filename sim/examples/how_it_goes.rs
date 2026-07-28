@@ -145,4 +145,45 @@ fn main() {
             println!("    {one:<22} and {two:<22} {warmth:>6.2}, {together:.0} years");
         }
     }
+
+    // And the thing underneath all of it: how well two people in this world go together at
+    // all. `meet_repeatedly` drives warmth toward `suits * 2 - 1`, so a mean `suits` below a
+    // half means the *average pair of people here mildly dislike each other* — which nobody
+    // would have chosen, and which would make a third of pairings going cold a fact about a
+    // normalising constant rather than about anybody's temperament.
+    let mut world = World::genesis(WorldSeed::from_u128(SEEDS[0]), 140);
+    world.record_only(Salience::Pivotal);
+    world.set_detail_budget(100_000);
+    world.run_for(Duration::from_years(years));
+    let adults: Vec<&person::Person> = world
+        .people
+        .iter()
+        .filter(|(_, p)| p.is_alive() && p.has_matured())
+        .map(|(_, p)| p)
+        .collect();
+    let mut suited: Vec<f32> = Vec::new();
+    let mut compat: Vec<f32> = Vec::new();
+    for (at, one) in adults.iter().enumerate() {
+        for two in adults.iter().skip(at + 1).take(40) {
+            suited.push(bonds::suits(&one.personality, &two.personality));
+            compat.push(one.compatibility(two));
+        }
+    }
+    let mean = |of: &[f32]| of.iter().sum::<f32>() / of.len().max(1) as f32;
+    println!(
+        "  two people at random: suits {:.3} (warmth aims at {:+.3}), compatibility {:.3}",
+        mean(&suited),
+        mean(&suited) * 2.0 - 1.0,
+        mean(&compat)
+    );
+    println!("  over {} pairs.", suited.len());
+    println!(
+        "  `seek_partner` picks the best of eight on *compatibility*; a tie then warms toward\n  \
+         `suits * 2 - 1`. Two functions of the same five numbers, a Euclidean distance over\n  \
+         six and a Manhattan one over ten — so the choosing maximises one quantity and the\n  \
+         living runs on another. Unifying them was tried (§38): it moved the median pairing's\n  \
+         warmth from 0.04 to 0.05 — which is how little the best of eight is ever buying — and\n  \
+         it is not in the world, because §15's shared-environment band failed on the trajectory\n  \
+         shift and that band is measured over three worlds."
+    );
 }

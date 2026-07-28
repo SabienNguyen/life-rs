@@ -4562,3 +4562,86 @@ findings that were not known before and cost a day between them:
    a fault in the *pairing*, not in the leaving, and it is the thing to fix first. A world where
    people chose each other would have fewer cold households to end, and the mechanism above would
    then be measuring something other than a bad matching rule.
+
+## 38. Two functions for one idea
+
+§37 went looking for why a third of this world's pairings go cold and found something underneath
+it. `sim/examples/how_it_goes.rs`, over ten thousand pairs of adults in a running world:
+
+```
+  two people at random: suits 0.482 (warmth aims at -0.036), compatibility 0.540
+```
+
+Those are two different numbers for the same question — *how well do these two go together* —
+computed from the same five traits by two functions that nobody had ever put side by side:
+
+- `bonds::suits`, a Manhattan gap over ten. **This is what a relationship runs on**:
+  `meet_repeatedly` drives warmth toward `suits * 2 - 1`.
+- `Person::compatibility`, a Euclidean distance over six. **This is what a partner is chosen
+  on**: `seek_partner` shortlists eight and takes the best.
+
+So the rule choosing a spouse maximised a quantity that read six hundredths above the one their
+marriage would actually run on.
+
+### 38.1 Unifying them, and what that was worth
+
+It was done — one `Personality::suits`, the Manhattan version kept because every tie in the world
+is already calibrated against it — and measured:
+
+| | two functions | one |
+|---|---|---|
+| median warmth between partners | 0.04 | 0.05 |
+| both still fond | 54.9% | 55.4% |
+| one of the two gone | 11.2% | 7.7% |
+
+**Choosing the best of eight was buying about a hundredth of warmth**, and it still is. Two
+monotonically-related functions rank eight nearly-identical candidates nearly identically, so the
+duplication was never producing a *wrong* choice — only one that barely mattered either way. That
+is worth recording because the instinct on finding a duplicate like this is to expect the fix to
+matter; measuring it says the shortlist is the inert part, not the disagreement.
+
+Then the suite failed. §15's shared-environment share read **0.17** against a floor of 0.20, and
+the change is not in the world.
+
+### 38.2 Which is the finding
+
+**A de-duplication worth one hundredth of warmth moved a calibration band by seven hundredths.**
+There is no causal path by which it could have: it changed which of eight nearly identical people
+somebody pairs with. What it changed was the *trajectory*, and the band is measured over three
+worlds.
+
+That statistic has now read **0.253, 0.260, 0.240, 0.213, 0.197 and 0.170** across this session,
+and at least two of those moves had no mechanism behind them. §35.8 learned exactly this about
+`biggest` and `empty` — that they swing twenty points at three seeds on a change that added
+nineteen robberies — and widened `vitals` to eight worlds in response.
+**`the_bands_the_design_meets_stay_met` has the same problem and has not been widened**, because
+each of its worlds is a hundred and sixty founders for a hundred and twenty years and three of
+them already cost ten minutes of an eighteen-minute suite.
+
+So that band is doing two jobs and doing one of them badly. It is a real constraint — it caught a
+genuine scale error in §35.9.1, where the cause was found, fixed, and the number came back. It is
+also, at three seeds, capable of failing for no reason at all. **Until it is widened, a failure
+there means investigate; it does not by itself mean revert.** This section is the case where that
+distinction was not yet available, so the change went out rather than the band being argued with —
+which is the right way round to be wrong.
+
+Nothing about the world is fixed by any of this. What is fixed is that the next person to watch
+that band fail has six readings and knows two of them were noise.
+
+### 38.3 The number underneath, which is left alone
+
+`suits` for two adults at random is **0.482**, so `meet_repeatedly` aims their warmth at
+**−0.036**. The ordinary pair of people in this world drift toward mild dislike, and that is a
+fact about a normalising constant — a gap of ten being "about as unlike as two people get" — and
+not about anybody's temperament. It is most of why a third of pairings go cold.
+
+It is **not** changed here. Centring it would move every tie in the world at once: every ally
+count, every vouching at a door, every shunning, every `share_the_shortfall`, and with them
+§30.5's concentration guard and §15's bands. §37 spent five compensating changes learning what
+happens when a plausible-looking constant is nudged in a world this coupled, and this one is
+coupled to more than any of those were.
+
+The right way to make this world's pairings less bleak is not to centre `suits`. It is to have
+people *choose each other* — pairing currently asks for the opposite sex, a near enough age, not
+close kin, and the best of eight, which as measured above is worth a hundredth. That is a change
+to one rule with a bounded blast radius, and it is the next thing to try.
