@@ -2398,70 +2398,68 @@ impl World {
     /// a mechanism that is right and inert is worth more visible than deleted, and `vitals`
     /// reports the count so that the day it starts firing is a day somebody notices.
     fn take_what_can_be_taken(&mut self, at: Time) {
-        let countries = self.countries();
-        if countries.len() < 2 {
-            return;
-        }
+        // Between *places*, not between countries — and that correction is the whole of what
+        // this mechanism taught.
+        //
+        // The first version looked for a neighbouring country to raid, and measured **zero
+        // adjacent cross-country pairs**, in every world, at every size. Not a rare event: a
+        // structurally impossible one. A country here is a set of places that can reach each
+        // other *and* share their ways, and §24 makes ways converge under contact — so any
+        // two places close enough to raid have long since become the same country, and any
+        // two countries are by construction out of each other's reach. §24.4 observed that
+        // countries here "merge by converging, never by one taking another" and read it as a
+        // missing feature; it is a theorem about how a country is defined.
+        //
+        // So a raid is between neighbours who can reach each other, whoever they call
+        // themselves. Which is also the truer thing: a raiding party does not check whether
+        // the next valley keeps the same customs.
+        let slots: Vec<usize> = (0..self.roster.len()).collect();
         let mut takings: Vec<(PlaceId, PlaceId)> = Vec::new();
-        for country in &countries {
-            for mine in &country.places {
-                // Somewhere close enough to reach, belonging to somebody else.
-                for other in &countries {
-                    if other.name == country.name {
-                        continue;
-                    }
-                    for theirs in &other.places {
-                        if !self.within_reach(*mine, *theirs) {
-                            continue;
-                        }
-                        let (Some(from), Some(to)) =
-                            (self.place_at(*theirs), self.place_at(*mine))
-                        else {
-                            continue;
-                        };
-                        // A reason: they have something, and there are more of us than them.
-                        //
-                        // Keyed on what the victim *has*, not on what the raider lacks, and
-                        // that correction came from measurement. The first version required
-                        // the taker to be hungry, and it could never fire once: reach feeds
-                        // both what a place produces and who its neighbours are, so hunger
-                        // and adjacency are anti-correlated *by construction*. Every pair the
-                        // model offered read either `reach true, want 0.000` or `reach false,
-                        // want 0.032`. A place poor enough to want to raid is a place too
-                        // isolated to reach anybody.
-                        //
-                        // Which is the more honest reading anyway. Raiding is not what the
-                        // desperate do, it is what the strong do to the wealthy — the lure is
-                        // the prize, and the licence is the numbers.
-                        let ours = self.souls_at(*mine).unwrap_or(0) as f32;
-                        let theirs_souls = self.souls_at(*theirs).unwrap_or(0) as f32;
-                        if theirs_souls < 1.0 || ours < 1.0 {
-                            continue;
-                        }
-                        let worth_taking = self
-                            .society
-                            .households_in(from)
-                            .flat_map(|(_, h)| h.members.iter().copied())
-                            .filter_map(|m| self.people.get(m))
-                            .filter(|p| p.is_alive())
-                            .map(|p| p.estate())
-                            .sum::<f32>()
-                            / theirs_souls;
-                        if worth_taking <= 0.0 {
-                            continue;
-                        }
-                        let pressure = worth_taking
-                            * ((ours / (ours + theirs_souls)) - 0.5).max(0.0)
-                            * 2.0;
-                        let mut rng = self.moment_stream(
-                            Domain::Chance,
-                            from.to_bits() ^ to.to_bits() ^ 0x_7a4e,
-                            at,
-                        );
-                        if rng.chance((TAKING * pressure) as f64) {
-                            takings.push((from, to));
-                        }
-                    }
+        for mine in &slots {
+            for theirs in &slots {
+                if mine == theirs || !self.within_reach(*mine, *theirs) {
+                    continue;
+                }
+                let (Some(from), Some(to)) = (self.place_at(*theirs), self.place_at(*mine))
+                else {
+                    continue;
+                };
+                let ours = self.souls_at(*mine).unwrap_or(0) as f32;
+                let theirs_souls = self.souls_at(*theirs).unwrap_or(0) as f32;
+                if theirs_souls < 1.0 || ours < 1.0 {
+                    continue;
+                }
+                // A reason: they have something, and there are more of us than them.
+                //
+                // Keyed on what the victim *has* rather than what the raider lacks, and that
+                // came from measurement too. Keyed on the raider's hunger it could not fire
+                // either: reach feeds what a place produces *and* decides who its neighbours
+                // are, so hunger and adjacency are anti-correlated by construction and every
+                // pair read `reach true, want 0.000` or `reach false, want 0.032`, never
+                // both. Desperation cannot be the trigger in a world where isolation is what
+                // causes the desperation — and raiding is what the strong do to the wealthy
+                // anyway, not what the desperate do.
+                let worth_taking = self
+                    .society
+                    .households_in(from)
+                    .flat_map(|(_, h)| h.members.iter().copied())
+                    .filter_map(|m| self.people.get(m))
+                    .filter(|p| p.is_alive())
+                    .map(|p| p.estate())
+                    .sum::<f32>()
+                    / theirs_souls;
+                if worth_taking <= 0.0 {
+                    continue;
+                }
+                let pressure =
+                    worth_taking * ((ours / (ours + theirs_souls)) - 0.5).max(0.0) * 2.0;
+                let mut rng = self.moment_stream(
+                    Domain::Chance,
+                    from.to_bits() ^ to.to_bits() ^ 0x_7a4e,
+                    at,
+                );
+                if rng.chance((TAKING * pressure) as f64) {
+                    takings.push((from, to));
                 }
             }
         }
@@ -2482,7 +2480,7 @@ impl World {
             if taken <= 0.0 {
                 continue;
             }
-            // What was taken is what is received. Nothing is created in a raid — that is the
+            // What was taken is what is received. Nothing is created in a raid — which is the
             // whole of why it is worth doing to somebody and worth nothing to the world.
             let takers: Vec<PersonId> = self
                 .society
@@ -3081,7 +3079,9 @@ impl World {
     /// Transitive, because `countries` walks the connections rather than testing every pair
     /// against a centre — so a chain of towns a fortnight apart is one long country even
     /// though its ends are half a world from each other, which is Chile.
-    fn within_reach(&self, a: usize, b: usize) -> bool {
+    /// Public so a reader can ask which places could reach each other — §32's raid gate is
+    /// built on it, and a gate nobody can inspect is a gate nobody can diagnose.
+    pub fn within_reach(&self, a: usize, b: usize) -> bool {
         let of = |at: usize| {
             self.roster
                 .get(at)

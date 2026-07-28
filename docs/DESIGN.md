@@ -3809,41 +3809,62 @@ So a taking is not a new kind of thing. **It is the negation of the one thing th
 political**: a door opened by force rather than passed.
 
 `Happening::PlaceTaken` and `take_what_can_be_taken` are built, wired into the reckoning, and
-consulted every year. **They have never once fired.**
+they now fire — about once in three hundred world-years, which is what these worlds afford.
+Getting there took two wrong triggers, and both were wrong in ways worth keeping.
 
-### 32.1 Two reasons, and the first is the interesting one
+### 32.1 Desperation cannot be the trigger
 
-**Hunger and adjacency are anti-correlated by construction.** The first version keyed a raid on
-the raider's need: we are short, they are not, come on. It could not fire, and the instrument
-said why in one line each. Every pair the model offered read either
+The first version keyed a raid on the raider's need: we are short, they are not, come on. It
+could not fire, and the instrument said why in one line per pair. Every pair the model offered
+read either
 
     reach true   want 0.000
     reach false  want 0.032
 
 and never both. Reach feeds what a place produces *and* decides who its neighbours are, so a
 place poor enough to want to raid is a place too isolated to reach anybody. That is not a bug in
-either mechanism; it is a true consequence of the two being built on the same term, and it means
-**desperation cannot be the trigger in a world where isolation causes the desperation.**
+either mechanism; it is a true consequence of both being built on the same term, and it means
+**desperation cannot be the trigger in a world where isolation is what causes the desperation.**
 
 Which is the more honest reading anyway. Raiding is not what the desperate do — it is what the
-strong do to the wealthy. So the trigger became what the victim *has* times how much the raider
+strong do to the wealthy. So the trigger became what the victim *has*, times how far the raider
 outnumbers them.
 
-**And it still does not fire**, at any rate up to 1.0, which makes it a closed gate rather than
-a small number. The remaining constraint is the numbers: among the adjacent cross-country pairs
-these worlds actually produce, the would-be raider is never the larger side. Why that is has not
-been run down.
+### 32.2 Countries cannot touch, and that is a theorem
 
-### 32.2 What it is not, and what would finish it
+It still did not fire, at any rate up to 1.0 — a closed gate rather than a small number. The
+guess written here was that the numbers never favoured the raider. That guess was wrong, and
+measuring it took one probe: **zero adjacent cross-country pairs**, in every world, at every
+size.
+
+Not a rare configuration. A structurally impossible one. A country here is a set of places that
+can reach each other *and* share their ways, and §24 makes ways converge under contact — so any
+two places close enough to raid have long since become the same country, and any two countries
+are by construction out of each other's reach.
+
+§24.4 observed that countries here *"merge by converging, never by one taking another"* and
+filed it as a missing feature, *"the obvious next thing to argue about"*. It is not a missing
+feature. **It is a theorem about how a country is defined**, and no conquest mechanism keyed on
+countries can ever fire, however it is written.
+
+So a raid is between *places* that can reach each other, whoever they call themselves — which is
+also truer: a raiding party does not check whether the next valley keeps the same customs. Keyed
+that way it fires.
+
+### 32.2.1 Opportunity-limited, not rate-limited
+
+`TAKING` turns out to be a knob that does nothing. At 0.02, 0.10 and 0.30 the same worlds
+produce the **same single taking** — because pressure is near-zero almost everywhere and
+occasionally large, so the rate multiplies a number that is either negligible or already
+decisive. What limits raiding here is how rarely a place is at once reachable, richer, and
+smaller than its neighbour. It is left at 0.02, since raising it buys nothing.
+
+### 32.2.2 What this is not
 
 This is the taking of **things**, not of ground. Transferring a place itself means displacing
 the households in it, and displacement runs through admission — the path by which five separate
 mechanisms broke this world in a single night (§26.10, §26.11, §26.12, §30.4, §30.5). That half
 was deliberately not attempted.
-
-It is kept and labelled rather than deleted, on the terms §30.5 sets for `CROWDING_AVERSION`: a
-mechanism that is right and inert is worth more visible than gone, and `vitals` counts takings
-so that the day one happens is a day somebody notices.
 
 ### 32.3 The one thing that went right
 
@@ -3851,10 +3872,11 @@ The instrument was built **before** the mechanism, for the first time in this pr
 rule — ablate against something that can see what the mechanism claims — was applied forwards
 instead of backwards, and the `takings` line existed before there was anything to count.
 
-So this is the sixth inert mechanism here, and the first one known to be inert within minutes of
-being written rather than after months or by accident. The other five were found by a screenshot,
-a stray comment, an unrelated ablation, and twice by tripping over them. That is the whole value
-of the tooling, and it is worth more than the mechanism would have been.
+It is what caught both wrong triggers within minutes rather than months, and what turned the
+second one from a guess into a theorem. The other six inert mechanisms in this project were
+found by a screenshot, a stray comment, an unrelated ablation, and by tripping over them. This
+one was found on purpose, and then fixed — which is the first time round that loop has closed
+here.
 
 ## 33. What people are to each other, counted
 
