@@ -3438,3 +3438,67 @@ project had six views and, until now, not one of them did.
 And it compounds: the churn was itself hiding the dead crowding term underneath it, which had
 been hiding an absorbing state. Three defects in one stack, none of them visible to anything
 the suite measured, all of them found by printing one woman's life in order.
+
+## 31. Every gap, in one place
+
+This document has recorded what is missing in five separate sections written months apart —
+§17.2, §23, §24.4, §26.9, §27.9 — and the entries went stale without anybody noticing. §26.9's
+first bullet said the largest single thing this world lacked was an economy with more than one
+product; §27 gave it five, and the bullet sat there for weeks saying otherwise. A gap list that
+quietly rots is worse than none, because it is read as evidence.
+
+So: one table, and the rule that closing anything means editing this row rather than adding a
+paragraph somewhere else.
+
+| Gap | Where | Status |
+|---|---|---|
+| Occupation and division of labour | §26.9 | **Closed** by §27 — five goods, five trades |
+| Norms as learned, not ambient | §17.2 | **Closed** — §17.2.1 |
+| Theory of mind: beliefs that can be wrong | §17.2 | **Closed** — §17.2.2 |
+| Households as political units | §26.9 | **Open.** Head and succession built and unread; two attempts measured worse (§26.10) |
+| Property that outlives its members | §26.9 | **Open**, deferred on a measurement — elasticity is already out of band (§26.10) |
+| Roles that are chosen | §26.9 | **Open.** An eighth deed built and reverted (§26.11) |
+| Firms, employment, contracts | §27.9 | Untouched |
+| More goods; tools are one thing | §27.9 | Untouched |
+| Money, prices, credit, ownership | §27.9 | Partly deliberate — §27.4 argues against prices |
+| Law | §26.9 | Untouched |
+| Conquest and the state | §24.4 | Untouched, and named there as the next thing to argue about |
+| Language, religion, ritual, kinship | §24.4 | **Deliberate.** Argued for, not deferred |
+| Concentration counterforce | §30.5 | Partly closed; how much sorting was lost is unmeasured |
+| Grid level, second planet, observer intervention | §23 | Parameters and decisions, not defects |
+
+### 31.1 Two things any future gap has to pay for
+
+Both were learned by ignoring them, and both cost a working change that had to be reverted.
+
+**A decision read afresh from a moving quantity will oscillate.** Six instances now: households
+admitted on one test and evicted by a stricter one (§30.4); migration reading raw output per
+head, which answers the very move that reads it (§30.5); everyone re-choosing a trade from the
+same signal in the same instant (§30.5.1); a household's character read from a standing that
+moves (§26.10); and hosting's reputation saturating against a 2%-a-year decay (§26.11). The
+damping is part of the design, not something to find afterwards — and note that §26.11 *did*
+design a damper, for the wrong loop. Ask which quantity the new decision reads, how fast it
+moves, and what the decision does to it.
+
+**A new deed is not an addition, it is a re-normalisation.** `score_all` chooses by softmax over
+every deed, so adding one reprices all seven of the others for everybody, whether or not they
+ever do it. §26.11 raised churn from 6% to 16% and moving by 64% purely by existing — the same
+result whether the new deed was in `CHOSEN` or not, and whether its own payoff was large or
+tenfold smaller. Anything added to `Deed::ALL` has to budget for re-measuring what was
+calibrated against the old set: §15's shared-environment share, §21's ceiling, §30's churn.
+
+### 31.2 What "deliberate" means in the table above
+
+Two rows say deliberate rather than open, and they are not the same kind of claim.
+
+**Language, religion, ritual, kinship** are argued against in §24.4 and §23's sixth question.
+Languages need phonology and sound change to be worth having, and a people named for a practice
+carries more real information than an invented word would. Religion and kinship rules are
+genuinely open questions the design has not taken a position on — they are listed as deliberate
+because *not having them* was a choice, not because having them would be wrong.
+
+**Prices** are different: §27.4 argues that what a trade is worth is a comparison somebody
+makes rather than a number anybody quotes, and the one attempt at authored prices produced
+fifty-one cooks against forty-seven farmers and cost a third of the population. That is a
+position with a measurement behind it. Money and ownership are not covered by that argument and
+remain open.
