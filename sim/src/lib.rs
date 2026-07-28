@@ -113,6 +113,15 @@ const MOVE_THRESHOLD: f32 = 0.05;
 /// §15.2 has the four numbers before and after.
 const TEMPERAMENT_AT_WORK: f32 = 0.5;
 
+/// How much what a household owns adds to the childhood it can give, per unit of estate.
+///
+/// §14 makes the *quarter* almost all of what shapes a child, which was always a little too
+/// clean: two families on the same street do not raise children identically, and what they
+/// have is a large part of why. This is that difference, and it is the only thing an estate
+/// does — it deliberately buys no admission, since wealth arriving at a funeral moving
+/// somebody's house the same afternoon is how it broke the world the first time.
+const WHAT_A_HOUSEHOLD_ADDS: f32 = 0.25;
+
 /// The standing at which a household is keeping itself and no more.
 ///
 /// Anything above this in a year is surplus and a share of it can be put by; at or below it
@@ -3058,6 +3067,29 @@ impl World {
                 .map(|p| (p.env.upbringing(), p.env.job_opportunity, p.env.norms));
             let (quality, opportunity, norms) =
                 here.unwrap_or((0.0, 0.0, [0.5; person::Deed::COUNT]));
+            // What a household owns, per adult in it, added to the childhood it can give.
+            //
+            // This is where an estate belongs. A quarter's character is most of what shapes a
+            // child (§14), and what their own household has is the rest of it — the same
+            // claim §15 makes about circumstance, at the scale a family rather than a
+            // neighbourhood operates on. It also enters *smoothly*: an estate arriving at a
+            // funeral changes what a child absorbs from that year onwards rather than moving
+            // anybody's house the same afternoon.
+            let born_to = self
+                .society
+                .home_of(id)
+                .and_then(|home| self.society.household(home))
+                .map(|home| {
+                    let (sum, count) = home
+                        .members
+                        .iter()
+                        .filter_map(|m| self.people.get(*m))
+                        .filter(|p: &&person::Person| p.is_alive())
+                        .fold((0.0, 0), |(s, c), p| (s + p.estate(), c + 1));
+                    if count == 0 { 0.0 } else { sum / count as f32 }
+                })
+                .unwrap_or(0.0);
+            let quality = quality + born_to * WHAT_A_HOUSEHOLD_ADDS;
 
             let Some(person) = self.people.get_mut(id) else {
                 continue;
@@ -3176,16 +3208,23 @@ impl World {
             // its collective means, and the mean is the right statistic for that even though
             // it describes no individual.
             let standing = {
-                // `means` rather than `standing`: what a household can put behind a claim is
-                // what its adults can do *and* what they own. Before estates existed these
-                // were the same number, and the mean is still the right statistic for it —
-                // see §26.10 for the measurement that says judging a household by its
-                // strongest member stops admission being selective at all.
+                // `standing`, not `means` — an estate deliberately does not open doors.
+                //
+                // It did, briefly, and it was the wrong place for it. An estate steps
+                // *discontinuously* when a parent dies: a household's means jump the year of
+                // a funeral, admission jumps with them, and somebody moves. Churn went from
+                // 9% to 21% and one seed in three stopped fitting in its quarters at all.
+                // §31.1's first rule is about quantities that move; this is the same rule for
+                // quantities that *jump*, and admission has now been the path by which five
+                // separate mechanisms broke this world.
+                //
+                // What wealth actually does to a life is not which door opens. It is how you
+                // are raised — see `absorb_upbringings`, where it went instead.
                 let (sum, count) = members
                     .iter()
                     .filter_map(|m| self.people.get(*m))
                     .filter(|p| p.is_alive() && !p.stage(at).is_dependent())
-                    .fold((0.0, 0), |(s, c), p| (s + p.means(), c + 1));
+                    .fold((0.0, 0), |(s, c), p| (s + p.standing(), c + 1));
                 if count == 0 { 0.0 } else { sum / count as f32 }
             };
 

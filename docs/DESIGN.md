@@ -2595,8 +2595,37 @@ outlives the claimant: a tenth of anything a year leaves over above keeping a ho
 never decaying, and at death divided among the children.
 
 It measures as real rather than notional — **93% of adults own something**, mean 0.42 against a
-mean standing of 0.59 — and it does something, since what a household can put behind a claim at
-a door is now what its adults can do *and* what they own.
+mean standing of 0.59 — and what it does is shape a childhood: what a household owns per adult
+adds to the quality of upbringing the children in it absorb.
+
+#### It buys no admission, and that took two tries
+
+The first version put an estate into what a household could put behind a claim at a door, which
+seemed obvious: means are means. It was wrong, and wrong in a way §31.1 has a rule for.
+
+An estate **steps discontinuously when a parent dies**. A household's means jump the year of a
+funeral, admission jumps with them, and somebody moves house. Churn went from 9% of moves going
+straight back to **21%**, and one seed in three stopped fitting in its quarters at all. §31.1's
+first rule is about decisions read from quantities that *move*; this is the same rule for
+quantities that **jump**, and admission has now been the path by which five separate mechanisms
+broke this world.
+
+What wealth does to a life is not which door opens. It is how you are raised — §14 makes the
+quarter almost all of what shapes a child, which was always a little too clean, since two
+families on the same street do not raise children identically and what they have is a large
+part of why. Moved there, the estate enters *smoothly*: an inheritance changes what a child
+absorbs from that year onwards rather than moving anybody's house the same afternoon.
+
+The world with it is better than the world without on every line that was measured:
+
+| | no estates | estate at a door | estate in a childhood |
+|---|---|---|---|
+| churn | 9% | **21%** | **4%** |
+| biggest quarter | 0.55 | — | **0.47** |
+| empty quarters | 0.33 | — | **0.27** |
+| upbringing share | 0.397 | 0.217 | 0.360 |
+| luck share | 0.401 | 0.499 `<<` | 0.449 |
+| elasticity | 0.655 `<<` | 0.542 `<<` | 0.601 `<<` |
 
 #### The deferral was wrong, and the direction is the interesting part
 
