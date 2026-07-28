@@ -1000,9 +1000,16 @@ B's feelings is therefore chasing a quantity that is nearly identical to A's *ow
 is not a mistake. The only genuine asymmetry in a tie is debt, and grievance is rare enough that
 it does not shift the average.
 
-So the mechanism is correct, cheap, load-bearing in principle — `choose_company` really does
-read it — and produces no misunderstanding, because there is almost nothing in this world for it
-to misunderstand. It is `CROWDING_AVERSION` again: a term that is exactly right and never fires.
+So the mechanism is correct, cheap, and produces no misunderstanding, because there is almost
+nothing in this world for it to misunderstand.
+
+Sharpened by ablation afterwards (§31.2), because the first way of asking was wrong. Setting
+`READING` to zero changes a great deal — but that freezes the belief at nothing rather than
+making it accurate, and since the belief tracks warmth closely, it removes four tenths of the
+warmth signal from `choose_company`. The experiment that asks the actual question is
+`READING = 1.0`: belief exactly equal to truth, no lag, no possibility of error. That is
+indistinguishable from the baseline. **The term is load-bearing as a carrier of warmth; the
+divergence it exists for is inert.**
 
 What it would need is an asymmetry worth being wrong about. Warmth that depends on what each
 person *brings* to a meeting rather than on how well the pair suits each other; or a reading
@@ -3580,6 +3587,56 @@ ever do it. §26.11 raised churn from 6% to 16% and moving by 64% purely by exis
 result whether the new deed was in `CHOSEN` or not, and whether its own payoff was large or
 tenfold smaller. Anything added to `Deed::ALL` has to budget for re-measuring what was
 calibrated against the old set: §15's shared-environment share, §21's ceiling, §30's churn.
+
+### 31.2 Which mechanisms are actually load-bearing
+
+Four mechanisms in this project have turned out to be exactly right and never to fire: the
+technique ceiling nobody could reach (§29.5), `Bonds::repaid` which nothing called,
+`CROWDING_AVERSION` which bites only past a capacity no place reaches (§30.5), and the belief on
+a tie (§17.2.3). Every one was found by accident — three of them on the same day, by looking at
+something for an unrelated reason.
+
+Accident is not a method. Switching a mechanism off and measuring is, and it costs two minutes
+apiece now that `vitals` exists. Three seeds, 120 founders, 90 years:
+
+| off | living | churn | biggest | spread | verdict |
+|---|---|---|---|---|---|
+| *baseline* | 667 | 9% | 0.55 | 0.11 | |
+| `CROWDING_AVERSION` | 665 | 9% | 0.54 | 0.11 | **inert**, as §30.5 says |
+| `VOUCHING` | 667 | **4%** | **0.60** | **0.16** | load-bearing |
+| `RETRAINING` | 667 | 7% (1,128 moves) | **0.62** | 0.13 | load-bearing |
+| `HEARD_OF` | 662 | **5%** | 0.53 | **0.08** | load-bearing |
+| `READING` → 0 | 667 | **13%** (1,564 moves) | **0.62** | **0.08** | load-bearing — but see below |
+| `READING` → 1.0 | 667 | 9% | 0.55 | 0.12 | **the lag is inert** |
+
+The last two rows are the point, and the first of them nearly produced a wrong conclusion.
+Setting `READING` to zero does not make the belief *accurate*, it freezes it at nothing — which
+removes the term from `choose_company` altogether, and since the belief tracks warmth closely
+that is removing four tenths of the warmth signal. Of course it changes everything.
+
+The question §17.2.3 actually asks is whether the belief's capacity to be *wrong* does any
+work, and the ablation for that is `READING = 1.0`: belief exactly equal to truth, no lag, no
+possibility of error. That is indistinguishable from the baseline. So the sharp statement is
+that **the term is load-bearing as a carrier of warmth, and the divergence it exists for is
+inert** — which is a more useful thing to know than either half alone.
+
+Two other findings fall out and neither was being looked for.
+
+**`VOUCHING` costs churn and costs sorting.** Turning off what your allies will lend you at a
+door more than halves the going-back rate (9% → 4%) and makes the quarters *more* different
+from each other (0.11 → 0.16). Admission that depends on who you know is a source of the
+oscillation §30.4 was about, and it flattens the sorting §14.4 wants. That is not an argument
+for removing it — chain migration is real and §25 wants it — but it is a cost that was not on
+the books.
+
+**Gossip holds the world together more than it looks.** `HEARD_OF` at zero drops the spread of
+affluence across quarters from 0.11 to 0.08. Reputation travelling between people who have
+never met is doing a third of the work of making places differ.
+
+The discipline this suggests: **ablate a mechanism when it is built, not when somebody trips
+over it.** And ablate the thing the mechanism claims, not the constant that implements it —
+zeroing a rate usually removes a term rather than neutralising an effect, and those are
+different experiments.
 
 ### 31.2 What "deliberate" means in the table above
 
