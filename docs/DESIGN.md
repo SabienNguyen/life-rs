@@ -4430,3 +4430,135 @@ and does not.
 Nobody yet wants what they saw somebody else have — which is where envy lives, and is the more
 interesting half of wanting. It needs people to compare themselves to named others rather than to
 a rank, and the tie graph already holds everything that would take.
+
+## 37. Leaving, built and taken out again
+
+§33 counted what people are to each other and found the sharpest gap in the model: **nobody
+separates**. Six hundred and forty-seven pairings in one world and the only exit is a death. There
+is no ceremony to dissolve and no contract to break — `seek_partner` writes one entry in a map —
+so what was missing was never a legal apparatus. It was the plain fact that people leave.
+
+It was built, it worked, and it is not in the world. What follows is the measurement, because the
+reason it is out is worth more than the mechanism would have been.
+
+### 37.1 There was plenty to fire on
+
+Two mechanisms here have been built on triggers that could not occur: conquest keyed on adjacent
+countries, of which there were **zero in any world at any size** (§32.2), and generosity keyed on a
+famine in worlds whose hungriest quarter reads 0.00 (§35.7). So the question came first, in
+`sim/examples/how_it_goes.rs`, which is kept. Three worlds, a hundred and twenty years:
+
+```
+  living pairings              384
+  both still fond              211    54.9%
+  one of the two has gone       43    11.2%
+  both have                    130    33.9%
+
+  warmth between partners: worst -0.86, tenth -0.31, middle 0.04, best 0.77
+  and the ones that have gone had been together 19 years on average
+```
+
+A third of living partnerships have gone cold on both sides. But the number that matters is the
+middle one: **0.04**. The ordinary pairing in this world is between two people who feel almost
+nothing about each other, because `seek_partner` asks for the opposite sex, an age near enough and
+not close kin, and never asks whether they like each other. Nobody had looked, because until
+something depended on it there was nothing to look at.
+
+### 37.2 What it did, which was right
+
+Wanting out was a **sum** of grievances — how cold they have gone, what they believe the other
+makes of them, what they hold against them. Being held was the **strongest single thing** holding
+them, never a blend: children who still depend on somebody, having nothing to set up with, what
+their people think is done, the years already spent. The same shape as `acts::nothing_to_lose`, and
+it earned its place a second time.
+
+Over eight worlds: **1,722 pairings, 35 ended by somebody walking out — 2.0%**, against the 34%
+that have gone cold. *Most miserable households do not end*, because one anchor is enough and
+nearly everybody has one. Remarriage fell out for free. On the aggregates it was cheap: `biggest`
+0.47 against 0.55 without it, churn 8%, population unchanged.
+
+### 37.3 What it broke, and the four fixes that each broke something else
+
+`people_come_to_know_the_people_they_live_among` asserts friendships are mostly with neighbours.
+It went from **24 distant allies to 290** in one seventy-year world — a ratio of 2.28 against a bar
+of 3.
+
+The cause was not partings. It was that **`seek_partner` searches the entire world**, and a
+pairing settles in the seeker's quarter, so the person who was *found* relocates. That was
+harmless for as long as pairing happened once in a life at maturity: a founding population is all
+in one place, and a twenty-year-old has almost nobody to leave behind. Make pairing something that
+can happen twice and the second time it happens to somebody of forty with thirty people who stand
+with them — and moving them costs thirty friendships their distance.
+
+Four fixes, each measured:
+
+| fix | near/far | biggest | churn |
+|---|---|---|---|
+| *committed baseline* | 24.5 | 0.55 | 7% |
+| partings, nothing else | **2.28** | 0.47 | 8% |
+| pair within the same quarter | 791 | **0.63** | 10% |
+| pair within reach | good | 0.56 | **10%** |
+| settle where the roots are | 920 | **0.71** | 9% |
+| settle where the roots are, only when stark | 31.7 | **0.65** | **10%** |
+
+Every one traded a guard for a guard. Restricting who you can pair with seals each quarter into a
+breeding population and settlement concentrates; settling couples where the deeper roots are means
+nobody ever goes anywhere and it concentrates harder. §30.5's guard is 0.75 of households in one
+quarter and the last two rows put a seed at 0.80.
+
+**Four compensating changes without a green run is the signal to stop.** §26.11, §27.10, the
+household head, `Deed::Host` and per-trade tools were all taken out at this point, and this is the
+same point.
+
+### 37.4 Two things that came out of it and are kept
+
+**`seek_partner` searching the whole world is a real defect**, and it is now on the record with a
+measurement attached rather than being rediscovered by whoever next makes pairing more frequent.
+It cannot be fixed on its own: every version of a fix concentrates settlement, because long-range
+pairing is quietly one of the main things spreading this world's people around. That coupling was
+not known before.
+
+**`spread` and §15's shared-environment share move together**, which nothing had connected. `env`
+measures how much of a lifetime outcome the quarter somebody grew up in explains, so when the
+quarters become more alike there is less for it to explain. Partings first failed that band at
+0.19 against a floor of 0.20, and the cause was that every parting founded a household of *one* —
+a singleton sorts differently from a family. Sending leavers home to kin recovered it to 0.213.
+Both halves are worth carrying forward, and the margin is the thing to watch: the band sits at
+0.24 without any of this, and has been falling all session.
+
+### 37.5 A fifth change, which also looked free and also was not
+
+Teaching charges the teacher `slip(TEACHING)` — three hundredths of their standing,
+multiplicatively — on the reasoning that a day spent teaching is a day not spent working. Six
+hundred lessons across eight worlds is the well-off draining and re-earning the same few
+hundredths over and over: a moving quantity under a decision read afresh each year, which is
+§31.1's first rule waiting to happen. Removing it is also *truer* — passing on what you know is
+not giving it away, and teaching is the one act in the vocabulary where nothing leaves the person
+doing it.
+
+Removing it improves the eight-world mean: `biggest` from 0.55 to **0.49**, `empty` from 0.33 to
+0.32, against churn rising from 7% to 9%. It was kept, and then the suite failed anyway — **41 of
+49 households in one quarter on seed 0x221**, 0.84 against §30.5's guard of 0.75.
+
+That is the sixth measurement in this section to say the same thing, and it is the section's real
+content. **A mean over eight worlds moving the right way is not evidence that no single world
+broke.** `vitals` averages; the guards do not. Every change in the table above was adopted on a
+mean and reverted on a seed.
+
+### 37.6 What is kept
+
+Nothing of the mechanism. What is kept is `sim/examples/how_it_goes.rs`, this write-up, and three
+findings that were not known before and cost a day between them:
+
+1. **`seek_partner` searches the whole world**, and the person who is *found* is the one who
+   relocates. Harmless while pairing happens once in a life; a migration pump the moment it can
+   happen twice. Every fix for it concentrates settlement, because long-range pairing turns out to
+   be one of the main things spreading this world's people around.
+2. **`spread` and §15's shared-environment share move together**, which nothing had connected. If
+   the quarters become more alike there is less for "where you grew up" to explain. The band sits
+   at 0.24 and has been falling all session; it is the tightest constraint in the project now.
+3. **The ordinary pairing in this world is between two people who feel nothing about each other**
+   — median warmth 0.04 — because `seek_partner` never asks whether they like one another. That is
+   a fault in the *pairing*, not in the leaving, and it is the thing to fix first. A world where
+   people chose each other would have fewer cold households to end, and the mechanism above would
+   then be measuring something other than a bad matching rule.
