@@ -244,23 +244,8 @@ impl Hands {
 /// out, is kept up by other people, and multiplies what everybody else's hands produce.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Holdings {
-    /// Tools in hand, in years of one person's work to make — **per trade**.
-    ///
-    /// A plough is not a saw. They used to be one number, so a place that had spent a
-    /// century farming was, on the day it turned to hewing, exactly as well equipped for
-    /// hewing as it had been for farming. Capital that transfers perfectly between trades is
-    /// not capital, it is a bonus attached to a place.
-    ///
-    /// Kept per trade, the stickiness is the mechanism: new tools are made for the trades
-    /// people are actually working, so at rest each trade is equipped in proportion to its
-    /// hands and this behaves exactly as one pooled number did. It bites only when a place
-    /// *changes* what it does — and then a village that has all turned cook finds it owns
-    /// ploughs, and has to spend a decade of smithing before cooking pays what it promised.
-    ///
-    /// That cost is also a brake on §30.5.1's cobweb, which is the reverse of what usually
-    /// happens when something is added here: everybody moving into the trade that looks best
-    /// this year now arrives to find the place has no tools for it.
-    pub tools: [f32; Trade::COUNT],
+    /// Tools in hand, in years of one person's work to make.
+    pub tools: f32,
     /// Timber, stone and ore cut but not yet worked.
     ///
     /// It has to keep, or the chain cannot start: a hewer in a place with no smith would be
@@ -270,34 +255,6 @@ pub struct Holdings {
     /// chain be filled before the third.
     pub stock: f32,
 }
-
-impl Holdings {
-    /// A place equipped with `total` tools, spread over the hands that would use them.
-    ///
-    /// The same distribution `make` maintains, so this is what a place at rest looks like —
-    /// and it is what lets a caller say "thirty tools" and mean what that meant when tools
-    /// were one number.
-    pub fn equipping(total: f32, hands: &Hands) -> Holdings {
-        let wanted: f32 = USES_TOOLS.iter().map(|t| hands.at(*t)).sum();
-        let mut tools = [0.0; Trade::COUNT];
-        for trade in USES_TOOLS {
-            tools[trade as usize] = if wanted > 0.0 {
-                total * hands.at(trade) / wanted
-            } else {
-                total / USES_TOOLS.len() as f32
-            };
-        }
-        Holdings { tools, stock: 0.0 }
-    }
-}
-
-/// The trades a tool is any use to.
-///
-/// Farming and hewing: the two that take something out of the ground, which is where an edge
-/// or a lever multiplies what a pair of hands can do. A cook's pot and a keeper's kit exist,
-/// but nothing in this model has them multiplying anything, so making tools for them would
-/// be making tools nobody uses.
-pub const USES_TOOLS: [Trade; 2] = [Trade::Farmer, Trade::Hewer];
 
 /// How much stock a year of one person's smithing turns into tools.
 ///
@@ -362,22 +319,12 @@ fn lift(per_worker: f32, most: f32, at: f32) -> f32 {
     1.0 + most * per / (per + at)
 }
 
-/// What the tools for one trade are worth to the hands working in it.
-pub fn toolage(holdings: &Holdings, hands: &Hands, trade: Trade) -> f32 {
-    let working = hands.at(trade);
-    if working <= 0.0 {
+/// What tools in hand are worth to everybody working.
+pub fn toolage(holdings: &Holdings, workers: f32) -> f32 {
+    if workers <= 0.0 {
         return 1.0;
     }
-    lift(
-        holdings.tools[trade as usize] / working,
-        TOOL_LIFT,
-        WELL_EQUIPPED,
-    )
-}
-
-/// Everything the place owns, whatever it is for.
-pub fn all_tools(holdings: &Holdings) -> f32 {
-    holdings.tools.iter().sum()
+    lift(holdings.tools / workers, TOOL_LIFT, WELL_EQUIPPED)
 }
 
 /// What a year's production came to, good by good.
@@ -411,12 +358,14 @@ pub fn make(hands: &Hands, ground: Ground, holdings: &Holdings) -> (Made, Holdin
         return (made, Holdings::default());
     }
 
-    // Off the land, each trade with the tools that were made for *it*. This is where a tool
-    // actually helps, and a sickle is no use to somebody quarrying stone.
-    let hewn = hands.at(Trade::Hewer) * ground.stock * toolage(holdings, hands, Trade::Hewer);
+    // What the tools in hand are worth to everybody who uses them. Applied to the goods
+    // that come off the land, which is where a tool actually helps.
+    let equipped = toolage(holdings, workers);
+
+    // Off the land, with what they have to work with.
+    let hewn = hands.at(Trade::Hewer) * ground.stock * equipped;
     made.set(Good::Stock, hewn);
-    let raw_food =
-        hands.at(Trade::Farmer) * ground.food * toolage(holdings, hands, Trade::Farmer);
+    let raw_food = hands.at(Trade::Farmer) * ground.food * equipped;
 
     // Out of what came off the land. Leontief: a trade makes what its hands could make, or
     // what its inputs allow, whichever is less. There is no substituting labour for stock.
@@ -454,39 +403,10 @@ pub fn make(hands: &Hands, ground: Ground, holdings: &Holdings) -> (Made, Holdin
     // takes its share of what there was, less whatever the keepers held together.
     // What the keepers held together, as a share of the year's wear — not of the tools. The
     // two differ by a factor of ten and getting it wrong makes upkeep almost worthless.
-    let held = all_tools(holdings);
-    let wear = WEAR * held;
+    let wear = WEAR * holdings.tools;
     let kept = (MENDING * made.of(Good::Upkeep) / wear.max(1e-6)).clamp(0.0, 1.0);
-
-    // Who this year's tools were made for: the trades people are actually working, in
-    // proportion to how many are working them. Not a decision anybody makes — a smith makes
-    // what the people around them are asking for, and asking is what having hands in a trade
-    // *is*. Deliberately not "whichever trade would gain most", which would be a choice read
-    // afresh every year off a quantity the choice itself moves. §31.1.
-    //
-    // The consequence is that at rest this is exactly the old single pool: equip every trade
-    // in proportion to its hands and every trade's tools-per-hand is the same number. What
-    // differs is a place that *changes* what it does, which now carries the wrong tools for
-    // a decade.
-    let mut tools = holdings.tools;
-    let wanted: f32 = Trade::ALL
-        .into_iter()
-        .filter(|t| USES_TOOLS.contains(t))
-        .map(|t| hands.at(t))
-        .sum();
-    for trade in Trade::ALL {
-        let share = if wanted > 0.0 && USES_TOOLS.contains(&trade) {
-            hands.at(trade) / wanted
-        } else {
-            0.0
-        };
-        let mine = tools[trade as usize];
-        let lost = if held > 0.0 { wear * (mine / held) } else { 0.0 };
-        tools[trade as usize] =
-            (mine - lost * (1.0 - kept) + made.of(Good::Tools) * share).max(0.0);
-    }
     let after = Holdings {
-        tools,
+        tools: (holdings.tools - wear * (1.0 - kept) + made.of(Good::Tools)).max(0.0),
         // What was cut and not worked keeps, less what the weather takes. Nobody roofs a
         // timber pile, so upkeep does not reach it.
         stock: (stock_left * (1.0 - WEAR)).max(0.0),
@@ -515,18 +435,12 @@ fn value_of(made: &Made, holdings: &Holdings, workers: f32, ground: Ground, spar
     let land_food = made.of(Good::Food);
     // What a given quantity of tools is worth: the extra food it will pull out of the same
     // hands, for as long as it lasts. Saturating, because `toolage` is.
-    // Asked of a total rather than per trade: what a place would give for one more tool
-    // does not depend on which shed it ends up in, because a smith making tools makes them
-    // for whoever is asking. Valuing them per trade here would price the mis-equipment of a
-    // place that has just changed its work, which is a real cost but is one the *production*
-    // already charges — counting it twice would have a village that turned cook also decide
-    // its ploughs had never been worth anything.
     let tools_worth = |tools: f32| {
-        let equipped = lift(tools / workers, TOOL_LIFT, WELL_EQUIPPED);
+        let equipped = toolage(&Holdings { tools, stock: 0.0 }, workers);
         land_food * (equipped - 1.0) / equipped.max(1e-6) * TOOL_LIFE
     };
 
-    let standing = tools_worth(all_tools(holdings));
+    let standing = tools_worth(holdings.tools);
     // And what the pile of unworked material is worth: what it would add *if it were all
     // worked*, less the years of somebody's hands that would take, and discounted because it
     // is not the thing yet.
@@ -538,7 +452,7 @@ fn value_of(made: &Made, holdings: &Holdings, workers: f32, ground: Ground, spar
     // in a village of forty is not worth a hundred and eighty times one unit. It is worth
     // about what one is.
     let all_worked = holdings.stock / STOCK_PER_TOOL;
-    let unworked = (WORTH_UNWORKED * (tools_worth(all_tools(holdings) + all_worked) - standing)
+    let unworked = (WORTH_UNWORKED * (tools_worth(holdings.tools + all_worked) - standing)
         - all_worked * ground.food)
         .max(0.0);
     // Or what it fetches, if there is anybody to sell it to. Whichever is worth more, because

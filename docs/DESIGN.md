@@ -2732,8 +2732,8 @@ them than where it is not.
   place is dense enough to do it for strangers, and it reads out of density rather than out of
   a new good; the distinction between a cook and the people who serve beside them needs a
   model of the *firm*, which is the item above.
-- ~~**Tools are one thing.**~~ *Closed — see §27.10.* Tools are kept per trade, so a farm's
-  ploughs are worth nothing at the quarry face.
+- **Tools are one thing.** A plough and a loom are the same object, so a place cannot be
+  well-equipped for one trade and not another.
 - **And at the sizes this project runs, it is thin — but it is no longer notional.** Counted at
   ninety years over four seeds, it used to read farmers 165–249 with hewers and smiths in the
   low single figures or *zero* in two of them. §27.4 says a trade exists when there is food
@@ -2742,40 +2742,45 @@ them than where it is not.
   because these worlds are genuinely poor, but the chain is being climbed rather than sitting
   unused. The remaining thinness is the population and the ground, not the mechanism.
 
-### 27.10 A plough is no use to a quarryman
+### 27.10 Tools per trade: attempted, and the argument that was wrong
 
-Tools were one number. So a place that had spent a century farming was, on the day it turned to
-hewing, exactly as well equipped for hewing as it had been for farming — and capital that
-transfers perfectly between trades is not capital, it is a bonus attached to a place.
+Tools are one number, so a place that has spent a century farming is, on the day it turns to
+hewing, exactly as well equipped for hewing as it was for farming. Capital that transfers
+perfectly between trades is not capital, it is a bonus attached to a place. That is still true
+and still worth fixing.
 
-`Holdings::tools` is now per trade, and two things make it worth having.
+`Holdings::tools` was made per trade, and the mechanism worked. Measured: thirty farmers with
+thirty-six tools grow a third more food than thirty with none, and the same village turned to
+quarrying overnight hews **exactly what it would with nothing at all** — under 1e-4 apart,
+because none of what it owns is the right thing. Equip it for quarrying and it quarries as well
+as it farmed. Who new tools are made for was deliberately not a decision: a smith makes what
+the people around them are asking for, in proportion to how many are asking, so there was
+nothing for §31.1's oscillation to get hold of.
 
-**Who new tools are made for is not a decision.** A smith makes what the people around them are
-asking for, in proportion to how many are asking — and asking is simply having hands in that
-trade. The tempting rule was "whichever trade would gain most", and §31.1 says why it was not
-taken: that is a choice read afresh each year off a quantity the choice itself moves, which is
-the shape of five separate failures already recorded here.
+**Churn went from 6% of moves going straight back to 12%, and it was reverted.**
 
-**At rest it is exactly the pool it replaced.** Equip every trade in proportion to its hands and
-tools-per-hand comes out the same number in every trade, which is what one pooled figure meant.
-`at_rest_it_is_the_pool_it_replaced` runs a mixed village forty years and finds farmers and
-hewers equipped within 5% of each other. So nothing changes for a place that goes on doing what
-it has been doing, and the whole of the difference falls on places that *change*.
+The interesting part is why the safety argument failed, because it was checked and it was true.
+`at_rest_it_is_the_pool_it_replaced` runs a mixed village forty years and finds every trade
+equipped within 5% of the same tools-per-hand — which is exactly what one pooled figure meant.
+So a place that goes on doing what it has been doing sees no difference at all.
 
-What falls on them is measured rather than asserted: a village of thirty farmers with
-thirty-six tools grows a third more food than one with none, and the same village turned to
-quarrying overnight hews **exactly as much as it would with nothing at all** — the difference is
-under 1e-4, because none of what it owns is the right thing. Equip it properly and it quarries
-as well as it farmed, so this is stickiness rather than a penalty on hewing.
+That is a proof about **rest**, and it was used as an argument about **safety**. The failure is
+entirely in motion: tools-per-hand is now divided by the hands *in one trade* rather than by
+everybody, and a trade's hands are a smaller and far more volatile number than a place's. A few
+farmers leaving now moves farmer-tools-per-farmer sharply, which moves what the ground gives a
+head, which moves what draws anybody there — so the emptying-and-refilling cycle that §30.5's
+twenty-five-year memory was calibrated to damp comes back through a denominator that got
+smaller.
 
-The cost runs the right way for once. It is a brake on §30.5.1's cobweb rather than another
-instance of it: everybody moving into whatever trade looks best this year now arrives to find
-the place has no tools for it, and a decade of smithing before it pays what it promised.
+Which is worth adding to §31.1 as a third rule: **equivalence at rest is not equivalence.** A
+change can be provably identical in equilibrium and still change everything about how a system
+moves, because what oscillates is decided by the *derivatives* — and a smaller denominator is a
+larger derivative. Ask what the change does to the sensitivity of the quantities decisions read,
+not only to their resting values.
 
-Only farming and hewing use tools, which is unchanged — they are the two that take something out
-of the ground, where an edge or a lever multiplies a pair of hands. A cook's pot exists but
-nothing in this model has it multiplying anything, so making tools for cooks would be making
-tools nobody uses.
+The reverted commit is kept in history rather than deleted. Nothing above says per-trade tools
+are wrong — the fix is a denominator that does not move as fast, and that is a piece of design
+rather than a correction.
 
 ## 28. Ground that is good at different things
 
@@ -3494,7 +3499,7 @@ paragraph somewhere else.
 | Property that outlives its members | §26.9 | **Open**, deferred on a measurement — elasticity is already out of band (§26.10) |
 | Roles that are chosen | §26.9 | **Open.** An eighth deed built and reverted (§26.11) |
 | Firms, employment, contracts | §27.9 | Untouched |
-| Tools are one thing | §27.9 | **Closed** — §27.10 |
+| Tools are one thing | §27.9 | **Open**, attempted and reverted — §27.10 |
 | More goods | §27.9 | Untouched |
 | Money, prices, credit, ownership | §27.9 | Partly deliberate — §27.4 argues against prices |
 | Law | §26.9 | Untouched |
@@ -3515,6 +3520,13 @@ moves (§26.10); and hosting's reputation saturating against a 2%-a-year decay (
 damping is part of the design, not something to find afterwards — and note that §26.11 *did*
 design a damper, for the wrong loop. Ask which quantity the new decision reads, how fast it
 moves, and what the decision does to it.
+
+**Equivalence at rest is not equivalence.** §27.10 made a change provably identical in
+equilibrium — every trade equipped to the same tools-per-hand, which is what the single pooled
+number meant — and it doubled churn anyway. What oscillates is decided by derivatives, and that
+change replaced a denominator (everybody in the place) with a smaller one (the hands in one
+trade). A smaller denominator is a larger derivative. Ask what a change does to the
+*sensitivity* of the quantities decisions read, not only to their resting values.
 
 **A new deed is not an addition, it is a re-normalisation.** `score_all` chooses by softmax over
 every deed, so adding one reprices all seven of the others for everybody, whether or not they
