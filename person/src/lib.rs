@@ -8,6 +8,7 @@
 //! time anyone looked, which is what lets a large population sit dormant for free.
 
 pub mod deeds;
+pub mod memory;
 pub mod psyche;
 
 use faker_rand::en_us::names::FullName;
@@ -197,6 +198,11 @@ pub struct Person {
     opportunity: (f32, f32),
     /// Childhood exposure, accumulating until maturity: weighted sum and total weight.
     upbringing: (f32, f32),
+    /// What they carry of their own life — see `memory`.
+    ///
+    /// Not part of a person's identity: two people are the same person or not regardless of
+    /// what either happens to remember, so `Held` is skipped when `Person` is compared.
+    held: memory::Held,
     /// What this person takes to be normal, learned by watching — their own estimate of
     /// §14.2's fourth channel rather than the channel itself.
     ///
@@ -281,6 +287,7 @@ impl Person {
             patronage: 1.0,
             opportunity: (0.0, 0.0),
             upbringing: (0.0, 0.0),
+            held: memory::Held::default(),
             // No opinion about what is normal until they have seen some of it.
             norms: [0.5; Deed::COUNT],
             matured: false,
@@ -446,6 +453,21 @@ impl Person {
             self.upbringing.0 += quality * weight;
             self.upbringing.1 += weight;
         }
+    }
+
+    /// What they carry of their own life.
+    pub fn held(&self) -> &memory::Held {
+        &self.held
+    }
+
+    /// Take something in — see `memory::Held::keep`.
+    pub fn keep(&mut self, what: memory::What, who: Option<PersonId>, now: Time) {
+        self.held.keep(what, who, now);
+    }
+
+    /// Bring back up whatever they hold about somebody who is in front of them again.
+    pub fn rehearse(&mut self, about: PersonId, now: Time) {
+        self.held.rehearse(about, now);
     }
 
     /// What this person takes to be usual around here.
@@ -1083,6 +1105,84 @@ mod tests {
         p.born = Time::ORIGIN;
         p.updated = Time::ORIGIN + Duration::from_years(30);
         p
+    }
+
+    #[test]
+    fn a_great_thing_outlasts_a_small_one_without_being_marked_as_great() {
+        use crate::memory::{Held, What};
+        // The whole argument for a hyperbolic curve rather than a half-life. Under exponential
+        // decay both of these vanish on the same timescale and only the moment differs, so
+        // getting "still faintly there decades later" and "gone by spring" out of one rule
+        // needs the long tail. Nothing here is flagged permanent; permanence is a consequence.
+        let mut held = Held::default();
+        let start = Time::ORIGIN + Duration::from_years(20);
+        held.keep(What::Died, None, start);
+        held.keep(What::Moved, None, start);
+
+        let after = |years: u64| start + Duration::from_years(years);
+        let of = |held: &Held, what: What, years: u64| held.holds_of(what, after(years));
+
+        assert!(of(&held, What::Died, 0) > of(&held, What::Moved, 0), "a death lands harder");
+        assert!(
+            of(&held, What::Moved, 30) < 0.06,
+            "a move should be all but gone in thirty years: {:.3}",
+            of(&held, What::Moved, 30)
+        );
+        assert!(
+            of(&held, What::Died, 30) > 0.15,
+            "a death should still be there in thirty years: {:.3}",
+            of(&held, What::Died, 30)
+        );
+        // And still going down rather than parked at a floor.
+        assert!(of(&held, What::Died, 60) < of(&held, What::Died, 30));
+    }
+
+    #[test]
+    fn nearness_keeps_a_thing_sharp_and_distance_lets_it_go() {
+        use crate::memory::{Held, What};
+        // Rehearsal, which is why a grudge against the brother across the square stays live
+        // and one against somebody who moved away softens. Two identical injuries; one of the
+        // two people is still around.
+        let start = Time::ORIGIN + Duration::from_years(20);
+        let mut who: Arena<Person> = Arena::new();
+        let near = who.insert(somebody());
+        let far = who.insert(somebody());
+        let (mut a, mut b) = (Held::default(), Held::default());
+        a.keep(What::Robbed, Some(near), start);
+        b.keep(What::Robbed, Some(far), start);
+
+        // Ten years in which one of them keeps being met.
+        for year in 1..=10 {
+            a.rehearse(near, start + Duration::from_years(year));
+        }
+        let now = start + Duration::from_years(10);
+        let (sharp, faded) = (
+            a.holds_about(near, now),
+            b.holds_about(far, now),
+        );
+        assert!(
+            sharp > faded * 1.3,
+            "seeing somebody should keep it sharper: {sharp:.3} against {faded:.3}"
+        );
+    }
+
+    #[test]
+    fn a_crowded_life_forgets_more_than_a_quiet_one() {
+        use crate::memory::{Held, What, HELD};
+        // The bound is what makes forgetting competitive rather than merely slow.
+        let mut held = Held::default();
+        let start = Time::ORIGIN + Duration::from_years(20);
+        held.keep(What::TakenUp, None, start);
+        for year in 0..(HELD as u64 * 2) {
+            // A different person each time, so these do not merge into one deepened memory.
+            held.keep(What::Moved, None, start + Duration::from_years(year));
+        }
+        assert!(held.len() <= HELD, "held {} of a bound of {HELD}", held.len());
+        let now = start + Duration::from_years(HELD as u64 * 2);
+        assert!(
+            held.holds_of(What::TakenUp, now) > 0.0,
+            "the one thing that mattered should survive a crowd of small ones"
+        );
     }
 
     #[test]

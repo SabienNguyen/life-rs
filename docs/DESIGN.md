@@ -3925,3 +3925,66 @@ accrues only through famine relief, and at 160 founders nobody goes hungry — s
 channel §25 is built on is simply idle here. Exactly the `RELIEF` ablation of §31.2, met again
 by walking into it from the other direction: a mechanism measured in a world that never calls on
 it measures nothing at all, and the number it returns looks like an answer.
+
+## 34. What somebody carries of their own life
+
+The chronicle (§16) is the world's record: complete, ordered, external, and **nobody in the
+world can consult it**. `person::memory` is the other half — what one person has, which is
+partial, fades, and is about *whom*. The second clause is the one that matters: a grudge is a
+remembered wrong against a name, and a reputation earned rather than assigned needs somebody to
+have seen a thing and kept it.
+
+Both are written from the same call. `World::remember` already computed who an event concerned,
+for the chronicle's index; a personal memory filled from anywhere else would drift out of step
+with the record of the same moment.
+
+### 34.1 Why the curve is not an exponential
+
+A half-life is the obvious model and it is wrong for a reason worth stating. Under exponential
+decay **every memory vanishes on the same timescale** — changing the weight shifts *when* it
+goes, never whether there is a tail. "She half remembers her mother's death at seventy" and "he
+had forgotten that slight by spring" cannot come out of one exponential rate. Getting both needs
+two rates, and then something has to decide which memories are special, which is a stored flag
+and precisely what this project spends its time deleting.
+
+    strength = weight / (1 + age / SPAN)
+
+falls fast and then very slowly. A thing that landed at 1.0 is still faintly present decades on;
+a thing that landed at 0.25 is gone within a year or two. **Permanence stops being a flag and
+becomes a consequence of the curve** — §26.1's discipline about positions, applied to time. It
+also happens to be closer to what the forgetting literature measures than an exponential is.
+
+Measured, from one rule and with nothing marked as great: at thirty years a death still reads
+0.15 and a move reads under 0.06, and the death is still falling rather than parked on a floor.
+
+### 34.2 Nearness keeps a grudge sharp
+
+Meeting somebody again brings back up what is held about them. So **distance forgives and
+proximity does not**: the widow who moved away softens, the brother across the square does not.
+One line, and it is the mechanism rather than a special case — retrieval strengthening a trace
+is the same thing that makes a rehearsed fact stick. Ten years of being met leaves an injury a
+third sharper than the same injury by somebody who left.
+
+### 34.3 Forgetting has to compete
+
+A bound of twenty-four things, evicting whichever is *currently faintest* rather than the
+oldest. A crowded life forgets more than a quiet one, which is true and free — and the one thing
+that mattered survives a crowd of small ones, which an oldest-first eviction would lose.
+
+### 34.4 Who remembers what is not symmetric
+
+The mapping is written by hand per happening rather than derived from `subjects()`, because the
+asymmetries are the point rather than an inconvenience:
+
+- **Parents remember a birth; the child does not remember being born.** Which saves the
+  commonest event in the world from also being the emptiest memory in it.
+- **A death reaches everybody who knew them**, weighted by how well — the only event here that
+  touches mere acquaintances.
+- **Both sides remember a patronage**, since being taken up and taking somebody up are each
+  things a life gets organised around.
+- **Only the robbed remember a raid.** A raid is a Tuesday to the raiders and a year to remember
+  for everyone it was done to.
+
+That last asymmetry is not decoration. It is most of what will make a wrong *feel* like one when
+§35 gives this world wrongs: the injury persists on one side of the ledger and not the other,
+without anybody having to declare which side was injured.

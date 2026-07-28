@@ -1672,6 +1672,80 @@ impl World {
     fn remember(&mut self, at: Time, salience: Salience, kind: Happening) {
         let about = kind.subjects();
         self.chronicle.record_about(at, salience, kind, about.as_slice());
+        self.let_them_remember(at, kind);
+    }
+
+    /// And the people it happened to carry it themselves.
+    ///
+    /// The chronicle is the world's record: complete, ordered, external, and nobody in the
+    /// world can consult it. This is the other half — what one person has of their own life,
+    /// which is partial and fades. The two are written from the same call because they are
+    /// the same events seen from different sides, and because a personal memory that had to
+    /// be filled separately would drift out of step with the record of the same moment.
+    ///
+    /// Who remembers what is not symmetric. A man robbed remembers being robbed; the raiders
+    /// remember nothing, since a raid is a Tuesday to them. A child does not remember being
+    /// born but its parents remember the birth. Those asymmetries are the whole reason this
+    /// is written by hand per happening rather than derived from `subjects()`.
+    fn let_them_remember(&mut self, at: Time, kind: Happening) {
+        use person::memory::What;
+        let mut keep = |world: &mut World, who: PersonId, what: What, about: Option<PersonId>| {
+            if let Some(person) = world.people.get_mut(who) {
+                if person.is_alive() {
+                    person.keep(what, about, at);
+                }
+            }
+        };
+        match kind {
+            // The parents remember the birth. The child does not remember being born, which
+            // is true and saves the commonest memory in the world from being the emptiest.
+            Happening::PersonBorn { child, mother, father } => {
+                keep(self, mother, What::Born, Some(child));
+                keep(self, father, What::Born, Some(child));
+            }
+            // Everybody who knew them, weighted by how well — a death is the heaviest thing
+            // in this model and the only one that reaches people who were merely acquainted.
+            Happening::PersonDies { person, .. } => {
+                let mourners: Vec<PersonId> = self
+                    .bonds
+                    .of(person)
+                    .filter(|(_, tie)| tie.known > 0.35)
+                    .map(|(who, _)| who)
+                    .collect();
+                for who in mourners {
+                    keep(self, who, What::Died, Some(person));
+                }
+            }
+            Happening::PersonPairs { person, with } => {
+                keep(self, person, What::Paired, Some(with));
+                keep(self, with, What::Paired, Some(person));
+            }
+            // Both sides, because being taken up and taking somebody up are both things a
+            // life is organised around — §25 calls the first the largest single fact in one.
+            Happening::PersonMentored { person, by } => {
+                keep(self, person, What::TakenUp, Some(by));
+                keep(self, by, What::TakenUp, Some(person));
+            }
+            Happening::PersonWorksItOut { person, .. } => {
+                keep(self, person, What::WorkedItOut, None);
+            }
+            Happening::PersonMoves { person, .. } => {
+                keep(self, person, What::Moved, None);
+            }
+            // Only the robbed. A raid is a Tuesday to the raiders and a year to remember for
+            // everybody it was done to, and that asymmetry is most of what makes it a wrong.
+            Happening::PlaceTaken { place, .. } => {
+                let robbed: Vec<PersonId> = self
+                    .society
+                    .households_in(place)
+                    .flat_map(|(_, h)| h.members.iter().copied())
+                    .collect();
+                for who in robbed {
+                    keep(self, who, What::Robbed, None);
+                }
+            }
+            _ => {}
+        }
     }
 
     /// Forget enough of the small and old to stay inside the budget.
