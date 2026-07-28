@@ -3633,10 +3633,44 @@ the books.
 affluence across quarters from 0.11 to 0.08. Reputation travelling between people who have
 never met is doing a third of the work of making places differ.
 
+A second batch, once `vitals` had been widened to see what these ones claim — which had to
+come first, because an instrument that cannot see a mechanism's output reports that switching
+it off changed nothing, and that is the same sentence as "inert" meaning something else
+entirely:
+
+| off | living | churn | advances | taken up |
+|---|---|---|---|---|
+| *baseline* | 667 | 9% (82/929) | 12 | 108 |
+| `WORKING_IT_OUT` | 667 | 9% (**82/929**) | **0** | 108 |
+| `MENTOR_CHANCE` | 667 | **3%** (25/909) | 13 | 0 |
+| `PATRONAGE` → 1.0 | 657 | 8% (**135/1,591**) | 15 | 101 |
+
+**Discovery fires and changes nothing.** Switching off §29 entirely — nobody ever works
+anything out — leaves the world *byte for byte identical* on every other line: the same 667
+alive, the same 82 of 929 moves, the same trades to the person. Twelve advances over ninety
+years move the frontier by about twelve per cent, `practised` lags behind that, and ninety years
+is far too short for any of it to reach anybody's life. §29 is not inert — the events happen and
+are real — but at the horizon this project routinely runs, **it is inconsequential**, and every
+claim about it needs the six-century runs rather than a ninety-year one. That is a more precise
+version of §29.7.2's finding and it was free.
+
+**Patronage is where a third of the churn comes from.** Nobody being taken up drops the
+going-back rate from 9% to 3%, and taking away a patron's *lift* while leaving the relation
+raises the number of moves by seventy per cent. A door opened by somebody else is a door into
+somewhere you had no other business being, so both directions make sense — but §25 sold
+patronage as the largest single fact about a life, and it turns out also to be a large fact
+about how much people shuffle between quarters. Nothing had costed that.
+
+**And one that could not be asked here at all.** `RELIEF` — what neighbours give somebody who
+is short — measured as very nearly nothing, because at 120 founders the hungriest quarter is
+short of exactly 0.00 and famine relief had no famine to relieve. That is not a result, it is
+the wrong fixture, and it is the same mistake as the first `READING` row in a different place.
+Asked again at a crowded founding in §31.2.1.
+
 The discipline this suggests: **ablate a mechanism when it is built, not when somebody trips
-over it.** And ablate the thing the mechanism claims, not the constant that implements it —
-zeroing a rate usually removes a term rather than neutralising an effect, and those are
-different experiments.
+over it.** And ablate it against an instrument that can see what it claims, at a fixture where
+it has something to do — zeroing a rate usually removes a term rather than neutralising an
+effect, and measuring a famine mechanism in a world with no famine measures nothing at all.
 
 ### 31.2 What "deliberate" means in the table above
 
