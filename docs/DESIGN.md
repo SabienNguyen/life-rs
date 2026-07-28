@@ -2583,13 +2583,71 @@ the next thing that wants a household's representative will want exactly this �
 status of §26.9's third bullet is that one third of it is built and unused, and the other two
 thirds are untouched.
 
-**Property that outlives its members** is the untouched part, and it is deferred on a
-measurement rather than for want of time. Intergenerational elasticity already runs **0.55
-against a ceiling of 0.50** (§15.1), so inherited wealth pushes an out-of-band number further
-out. Real societies have inherited property and an IGE of 0.3–0.5, so this world being too high
-*without* it says the channels that already exist are too strong. Building it means finding
-which one and loosening it, not adding a field — and doing the second without the first buys a
-documented gap by breaking a documented band.
+**Property that outlives its members is now built** — see §26.12 — and the argument that
+deferred it turned out to be wrong in a way worth keeping.
+
+### 26.12 An estate, and a prediction that was backwards
+
+`Person::estate` is the one thing in this world that survives a death. `standing` is what
+somebody *can do* — built by working, and it slips when they stop, so it dies with them and
+every generation starts again from what its own hands are worth. An estate is a claim that
+outlives the claimant: a tenth of anything a year leaves over above keeping a household going,
+never decaying, and at death divided among the children.
+
+It measures as real rather than notional — **93% of adults own something**, mean 0.42 against a
+mean standing of 0.59 — and it does something, since what a household can put behind a claim at
+a door is now what its adults can do *and* what they own.
+
+#### The deferral was wrong, and the direction is the interesting part
+
+§26.10 held this back on a measurement: intergenerational elasticity already ran 0.55 against a
+ceiling of 0.50, and inherited wealth obviously pushes an out-of-band number further out.
+Obviously, and wrongly. Measured on the seed the argument was made about:
+
+| | before | with estates |
+|---|---|---|
+| elasticity | 0.655 `<<` | **0.542** `<<` |
+| genes | 0.505 `<<` | 0.468 `<<` |
+| upbringing | 0.397 | 0.217 |
+| luck | 0.401 | 0.499 |
+
+**Inherited property lowered the elasticity it was expected to raise.** Partible division —
+every child takes an equal share — disperses an estate every single generation, so a large one
+becomes several middling ones in thirty years and nothing compounds. Set against a genome, which
+is transmitted whole and undiluted to every child, wealth of that shape is a *decorrelating*
+channel. The intuition that inheritance concentrates advantage is an intuition about
+primogeniture and about capital that earns, and this world has neither.
+
+Which is the finding worth having: **partible inheritance with linear saving cannot make a
+dynasty.** No estate here grows faster than it is divided. That is the same answer §31.3 gives
+about why nobody is a Caesar, arrived at from the other side, and it says what the next piece
+would have to be — an estate that *earns*, so that having something is a reason to get more.
+
+The three-seed band test passes with all of this in, so nothing was bought by breaking anything.
+
+#### The channel that is genuinely too strong, found on the way
+
+The ablation that was meant to clear the way for this found something separate and real.
+Elasticity is high because **temperament decides too much of how well anybody does**:
+conscientiousness is heritable, and `diligence` scaled it at 0.5, so most of an outcome came
+down the genome alone — genes at 0.51 of outcome variance against a ceiling of 0.45. Nothing
+else came close. Taking away a patron's lift moved elasticity by 0.04; removing mentoring
+entirely moved it by nothing.
+
+Dropping the coefficient to 0.15 brings genes to 0.280 and elasticity to 0.276, both inside
+their bands — and pushes upbringing to 0.122 and luck to 0.680, both outside. The variance does
+not vanish, it moves to whatever else explains an outcome, and there is not enough else.
+
+The estate was supposed to be what takes it up, and it cannot, for a reason that only shows up
+when both are tried together: **loosening temperament shrinks the estate channel too.** Less
+spread in what people earn is less spread in what they have left over, which is less spread in
+what they leave. The two levers push the same way rather than opposite ways, which is why the
+sheet at temperament 0.15 *with* estates is worse on every line than at 0.5 with them.
+
+So `TEMPERAMENT_AT_WORK` exists, and is named, and is left at the 0.5 it always was. The
+finding is recorded because it is the strongest lead anybody has on §15's standing excursion,
+and the thing that would use it — a channel that explains outcomes without coming from either
+the genome or the year's work — is not the estate.
 
 ### 26.11 An eighth deed, and why it was reverted
 

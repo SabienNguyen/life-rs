@@ -168,6 +168,22 @@ pub struct Person {
     /// measured intergenerational elasticity 0.93, not because the world was a caste
     /// system but because the outcome had the predictor baked into it.
     peak_standing: f32,
+    /// What somebody owns that will still be there when they are not.
+    ///
+    /// The one thing in this world that survives a death. `standing` is what a person *can
+    /// do* — it is built by working and it slips when they stop, so it dies with them and
+    /// each generation starts again from what its own hands are worth. An estate does not
+    /// slip and is not personal capacity: it is a claim on the world that outlives the claimant
+    /// and passes to whoever is left.
+    ///
+    /// §26.9 called this the missing third of households as political units, and §26.10
+    /// deferred it on a measurement rather than on principle — intergenerational elasticity
+    /// already ran above its ceiling, so adding a channel that hands advantage down would push
+    /// an out-of-band number further out. What made it buildable was finding the channel that
+    /// was too strong: temperament decided so much of how well anybody did that children
+    /// resembled parents through the *genome* alone, at 0.51 of outcome variance against a
+    /// ceiling of 0.45. Loosening that opened exactly the room this fills.
+    estate: f32,
     /// A lasting multiplier on what work returns, from having been taken up by someone.
     ///
     /// The mechanism by which a tight community produces people who get out. It is not
@@ -261,6 +277,7 @@ impl Person {
             born,
             standing: 0.0,
             peak_standing: 0.0,
+            estate: 0.0,
             patronage: 1.0,
             opportunity: (0.0, 0.0),
             upbringing: (0.0, 0.0),
@@ -340,6 +357,37 @@ impl Person {
     }
 
     /// The highest standing reached in adult life — their attainment.
+    /// What they own outright.
+    pub fn estate(&self) -> f32 {
+        self.estate
+    }
+
+    /// Put by, out of a year in which there was something to put by.
+    ///
+    /// Only out of surplus, and only a part of it — most of what anybody makes here is eaten.
+    /// A person who never has a good year never accumulates anything, which is what makes this
+    /// a channel by which advantage is *handed down* rather than a second name for standing.
+    pub fn put_by(&mut self, surplus: f32) {
+        if surplus > 0.0 {
+            self.estate += surplus * SAVED;
+        }
+    }
+
+    /// Take a share of somebody's estate. What the dead leave is what the living receive, and
+    /// nothing is created in the passing — see `World::settle_the_estate`.
+    pub fn inherit(&mut self, share: f32) {
+        self.estate += share.max(0.0);
+    }
+
+    /// What somebody can put behind a claim: what they can do, and what they own.
+    ///
+    /// An estate is worth less at a door than the same amount of standing, because standing is
+    /// a demonstrated capacity to keep a household going and an estate is a stock that can be
+    /// spent once. `WORTH_AT_A_DOOR` is that discount.
+    pub fn means(&self) -> f32 {
+        self.standing + self.estate * WORTH_AT_A_DOOR
+    }
+
     pub fn peak_standing(&self) -> f32 {
         self.peak_standing
     }
@@ -890,6 +938,22 @@ const COPING: f32 = 0.25;
 /// those worlds come to 521 and 260 instead. Growth is still braked by about a quarter
 /// against no hunger at all. §21.2 has the sweep.
 const HUNGER_COSTS: f32 = 0.9;
+
+/// What share of a good year somebody puts by rather than consuming.
+///
+/// Small. This is a world at subsistence — §27.9 counts three hundred farmers to a dozen
+/// smiths — so most of what anybody makes is eaten within the year. A tenth is what a
+/// household in a good year can hold back, and over a life of good years it comes to
+/// something worth leaving.
+const SAVED: f32 = 0.10;
+
+/// What an estate is worth against standing, when a place is deciding whether to admit you.
+///
+/// Under one, because the two are not the same kind of thing. Standing is a demonstrated
+/// capacity to keep a household going and renews itself as long as somebody works; an estate
+/// is a stock, spendable once, and a neighbourhood weighing whether a family can sustain
+/// itself here should say so.
+const WORTH_AT_A_DOOR: f32 = 0.6;
 
 /// How fast somebody's picture of local practice moves towards what they see, per year at
 /// the age it is learned fastest.

@@ -98,6 +98,29 @@ const CROWDING_AVERSION: f32 = 0.5;
 /// sorting loop rather than a fact about the world.
 const MOVE_THRESHOLD: f32 = 0.05;
 
+/// How much somebody's temperament decides what a year of work is worth to them.
+///
+/// It was 0.5, and that was the channel making children resemble parents more than §15 allows.
+/// Conscientiousness is heritable, so if it decides most of how well anybody does, then most
+/// of how well anybody does is handed down through the genome alone — measured at **0.51 of
+/// outcome variance against a ceiling of 0.45**, with intergenerational elasticity at 0.66
+/// against 0.50. Nothing else came close: taking away a patron's lift moved elasticity by
+/// 0.04, and removing mentoring entirely moved it by nothing.
+///
+/// Lowering it is not free and the variance does not vanish — it moves to whatever else
+/// explains an outcome, and with nothing else to take it up it went to chance. That is why
+/// this and the estate had to be built together: one opens the room and the other fills it.
+/// §15.2 has the four numbers before and after.
+const TEMPERAMENT_AT_WORK: f32 = 0.5;
+
+/// The standing at which a household is keeping itself and no more.
+///
+/// Anything above this in a year is surplus and a share of it can be put by; at or below it
+/// there is nothing to save. Set at the middle of the range rather than derived, because
+/// `standing` is a scale of its own with no units to anchor to — and stated here rather than
+/// buried so that the arbitrariness is visible.
+const SUBSISTENCE_STANDING: f32 = 0.5;
+
 /// What a spell of work adds to standing, where there is work worth having.
 ///
 /// Derived rather than guessed. Gain saturates and decay is proportional, so standing
@@ -1460,11 +1483,18 @@ impl World {
             // The two terms are the two inheritances: conscientiousness comes down
             // through the genome, schooling through the neighbourhood a child grew up
             // in. Advantage passes along both, and along the transfer at birth.
-            let diligence = (0.6 + 0.5 * subject.personality.conscientiousness).clamp(0.2, 2.0);
+            let diligence = (0.6 + TEMPERAMENT_AT_WORK * subject.personality.conscientiousness).clamp(0.2, 2.0);
             let taught = 0.5 + schooling;
             subject.earn(
                 WORK_GAIN * job_opportunity * diligence * taught * subject.patronage() * paid,
             );
+            // And a share of anything above keeping the household going is put by. Both tiers
+            // save, because a mechanism wired into one of them is a mechanism that fires only
+            // when somebody is looking — which is §21.1's fault in a new place, and was
+            // exactly what happened here: this was in `live_coarsely` alone, so in a world
+            // watched closely enough to measure, **nobody owned anything at all**.
+            let spare = subject.standing() - SUBSISTENCE_STANDING;
+            subject.put_by(spare / WORK_SPELLS_PER_YEAR);
         }
 
         // An evening in company is spent *with somebody*, and which somebody is the whole
@@ -1636,12 +1666,50 @@ impl World {
 
     /// Everything that has to happen when someone dies.
     fn record_death(&mut self, at: Time, id: PersonId, cause: Cause) {
+        self.settle_the_estate(id);
         self.release(id);
         self.remember(
             at,
             Salience::Pivotal,
             Happening::PersonDies { person: id, cause },
         );
+    }
+
+    /// What the dead leave, and who receives it.
+    ///
+    /// Divided equally among the children, which is a **kinship rule** — and worth saying so
+    /// rather than letting it pass as arithmetic. §24.4 puts kinship rules out of scope, and
+    /// this is the point at which that becomes impossible to maintain: the moment anything
+    /// outlives its owner, somebody has to receive it, and every way of choosing is a rule
+    /// about kin. Partible division among all children is the one that assumes least — it
+    /// needs no notion of seniority, no sex, and no marriage — but a world of primogeniture
+    /// would concentrate estates instead of dispersing them and would be a different world.
+    /// That choice is now on the table whether or not anybody wanted it there.
+    ///
+    /// Nothing is created in the passing. What is not inherited is not destroyed either — a
+    /// person who dies childless simply stops holding anything, which is the closest this
+    /// model has to an estate returning to the common stock.
+    fn settle_the_estate(&mut self, id: PersonId) {
+        let estate = match self.people.get(id) {
+            Some(person) if person.estate() > 0.0 => person.estate(),
+            _ => return,
+        };
+        let heirs: Vec<PersonId> = self
+            .society
+            .children_of(id)
+            .iter()
+            .copied()
+            .filter(|child| self.people.get(*child).is_some_and(|p| p.is_alive()))
+            .collect();
+        if heirs.is_empty() {
+            return;
+        }
+        let share = estate / heirs.len() as f32;
+        for heir in heirs {
+            if let Some(person) = self.people.get_mut(heir) {
+                person.inherit(share);
+            }
+        }
     }
 
     /// A whole year, for someone nobody is watching.
@@ -1681,11 +1749,16 @@ impl World {
         // the fine tier applies one at a time.
         let surroundings = env.surroundings(false);
         let spells = WORK_SPELLS_PER_YEAR * surroundings.availability[Deed::Work as usize];
-        let diligence = (0.6 + 0.5 * person.personality.conscientiousness).clamp(0.2, 2.0);
+        let diligence = (0.6 + TEMPERAMENT_AT_WORK * person.personality.conscientiousness).clamp(0.2, 2.0);
         let taught = 0.5 + env.education_access;
         let gain =
             WORK_GAIN * env.job_opportunity * diligence * taught * person.patronage() * paid;
         person.earn_repeatedly(gain, spells);
+        // And what a good year left over. Standing above what it costs to keep a household
+        // going is the surplus; a tenth of it is put by. Below that there is nothing to save
+        // and the estate does not move, which is what makes this a channel for advantage
+        // rather than a second name for having worked.
+        person.put_by(person.standing() - SUBSISTENCE_STANDING);
 
         // And a year of company. Unwatched people still have neighbours: if their ties
         // stood still while a watched person's grew, then who your friends are would depend
@@ -3103,11 +3176,16 @@ impl World {
             // its collective means, and the mean is the right statistic for that even though
             // it describes no individual.
             let standing = {
+                // `means` rather than `standing`: what a household can put behind a claim is
+                // what its adults can do *and* what they own. Before estates existed these
+                // were the same number, and the mean is still the right statistic for it —
+                // see §26.10 for the measurement that says judging a household by its
+                // strongest member stops admission being selective at all.
                 let (sum, count) = members
                     .iter()
                     .filter_map(|m| self.people.get(*m))
                     .filter(|p| p.is_alive() && !p.stage(at).is_dependent())
-                    .fold((0.0, 0), |(s, c), p| (s + p.standing(), c + 1));
+                    .fold((0.0, 0), |(s, c), p| (s + p.means(), c + 1));
                 if count == 0 { 0.0 } else { sum / count as f32 }
             };
 
