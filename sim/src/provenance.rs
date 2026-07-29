@@ -364,13 +364,15 @@ mod tests {
         // The failure this guards against is silent: a save that omits something the world
         // depends on reopens a *different* world and nothing complains. Both of these are
         // in the file because both change what happens.
+        // Everything recorded, not only what is pivotal. Filtered to the pivotal the two
+        // runs came to the same *number* of births and deaths on one seed — which is a
+        // coincidence and was read as the budget not mattering. What the budget changes is
+        // whether anybody deliberates, and that is a claim about deeds.
         let mut coarse = World::genesis(WorldSeed::from_u128(0xd1), 40);
-        coarse.record_only(Salience::Pivotal);
         coarse.set_detail_budget(0);
         coarse.run_for(Duration::from_years(30));
 
         let mut fine = World::genesis(WorldSeed::from_u128(0xd1), 40);
-        fine.record_only(Salience::Pivotal);
         fine.run_for(Duration::from_years(30));
 
         assert_ne!(

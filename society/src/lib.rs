@@ -35,6 +35,29 @@ pub struct Household {
 }
 
 impl Household {
+    /// Whoever speaks for this household, or nobody if it holds no grown adult.
+    ///
+    /// **A reading, never a fact.** Nobody is appointed and nothing is stored, so the
+    /// household cannot come to have a head who has died, or two, or none while an adult
+    /// stands in it — the three ways a stored one rots. It is the same discipline §26 applies
+    /// to a village's elders and for the same reason.
+    ///
+    /// Succession is then not a mechanism at all. When the head dies the reading simply
+    /// returns somebody else, on the next question anybody asks, without an event or a rule
+    /// about who inherits what. A household whose standing halves the year its earner dies
+    /// did not have a succession crisis written for it; it had one because that is what the
+    /// arithmetic says when you ask again.
+    ///
+    /// Standing first and age only to break a tie: what a household can put behind a claim is
+    /// what its strongest member can, and seniority decides between equals.
+    pub fn head(&self, of: impl Fn(PersonId) -> Option<(f32, f64)>) -> Option<PersonId> {
+        self.members
+            .iter()
+            .filter_map(|id| of(*id).map(|(standing, age)| (*id, standing, age)))
+            .max_by(|a, b| a.1.total_cmp(&b.1).then(a.2.total_cmp(&b.2)))
+            .map(|(id, _, _)| id)
+    }
+
     pub fn contains(&self, person: PersonId) -> bool {
         self.members.contains(&person)
     }
@@ -285,6 +308,53 @@ mod tests {
     use super::*;
     use person::Person;
     use sim_core::{Domain, WorldSeed};
+
+    #[test]
+    fn a_household_has_a_head_and_it_is_read_rather_than_held() {
+        // §26.9 asked for households to be political units. A head is the first part of
+        // that, and it is a *reading* for the same reason a village's elders are: a stored
+        // one can be dead, or absent while an adult stands in the room, or two at once, and
+        // none of those can happen to a question that is answered afresh.
+        //
+        // Succession then needs no rule at all, which is the whole argument. Nothing here
+        // schedules an inheritance or records one — the head dies, somebody asks again, and
+        // the answer is somebody else.
+        let (_people, ids) = population(3);
+        let mut society = Society::default();
+        let home = society.found_household(Time::ORIGIN, 0.5);
+        for id in &ids {
+            society.move_in(*id, home);
+        }
+
+        // Whoever has most to put behind a claim, whatever their age.
+        let standing = |id: PersonId, alive: &[PersonId]| {
+            alive.contains(&id).then(|| {
+                let rank = ids.iter().position(|other| *other == id).unwrap_or(0);
+                // Descending, so the first is the strongest.
+                (1.0 - rank as f32 * 0.25, 40.0 - rank as f64)
+            })
+        };
+
+        let household = society.household(home).expect("a household");
+        let alive = ids.clone();
+        assert_eq!(
+            household.head(|id| standing(id, &alive)),
+            Some(ids[0]),
+            "the strongest member speaks for it"
+        );
+
+        // The head dies. Nobody hands anything over and nothing is written down.
+        let after = ids[1..].to_vec();
+        assert_eq!(
+            household.head(|id| standing(id, &after)),
+            Some(ids[1]),
+            "and when they are gone the next question returns somebody else"
+        );
+
+        // A household with no grown adult left in it speaks for nobody, rather than
+        // speaking for a corpse.
+        assert_eq!(household.head(|_| None), None, "an empty house has no head");
+    }
 
     /// A population of real people, so the handles under test are real handles.
     fn population(n: usize) -> (Arena<Person>, Vec<PersonId>) {

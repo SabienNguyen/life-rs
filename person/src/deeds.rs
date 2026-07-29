@@ -41,6 +41,13 @@ impl Deed {
 
     pub const COUNT: usize = Deed::ALL.len();
 
+    /// The deeds somebody has a real choice about.
+    ///
+    /// Eating, drinking and sleeping are not choices — everybody does them, and doing more
+    /// of them distinguishes nobody from anybody. These four are where a temperament shows
+    /// up as a life, and so they are what a social position can be read off.
+    pub const CHOSEN: [Deed; 4] = [Deed::Wash, Deed::Socialize, Deed::Work, Deed::Wander];
+
     pub const fn label(self) -> &'static str {
         match self {
             Deed::Eat => "eating",
@@ -102,7 +109,12 @@ impl Deed {
     }
 
     /// How much this appeals to a given temperament, independent of need.
-    fn appeal(self, personality: &Personality, values: &Values) -> f32 {
+    ///
+    /// Public so that a tier which does not deliberate can still ask how much somebody
+    /// wants a thing — see `sim::World::live_coarsely`, which needs to know how sociable an
+    /// unwatched person is without scoring four thousand decisions to find out. Writing a
+    /// second expression for the same question is how the two tiers drift apart.
+    pub fn appeal(self, personality: &Personality, values: &Values) -> f32 {
         let raw = match self {
             Deed::Socialize => 1.0 + 0.30 * personality.extraversion + 0.20 * values.benevolence,
             Deed::Work => {
@@ -197,6 +209,9 @@ pub struct Mind<'a> {
     pub values: &'a Values,
     pub needs: &'a Needs,
     pub age_years: f64,
+    /// What *this person* takes to be usual here, which is not the same as what is usual
+    /// here — see `Person::learn_norms`.
+    pub norms: &'a [f32; Deed::COUNT],
 }
 
 /// Where a decision is being made.
@@ -250,9 +265,17 @@ impl Choice {
 
 /// Price every option for this person, here, now.
 pub fn score_all(mind: &Mind<'_>, situation: &Situation) -> [f32; Deed::COUNT] {
-    let discount = situation.env.discount_rate();
     let conformity = mind.personality.conformity(mind.age_years);
     let mut scores = [0.0; Deed::COUNT];
+
+    // What a payoff is worth at each remove. Four of the seven deeds pay off the moment
+    // they are done, so their discount is exactly one and calling `exp` on nought to find
+    // that out is pure waste — and Wash and Socialize pay off at the same remove as each
+    // other, so between them there are two distinct answers rather than seven. `expf` was
+    // the most expensive function in the whole simulation at a tenth of all instructions;
+    // this is five sevenths of one of its two callers, for no change in any result.
+    let rate = situation.env.discount_rate();
+    let (mut known_delay, mut known_discount) = (f32::NAN, 1.0f32);
 
     for deed in Deed::ALL {
         let i = deed as usize;
@@ -276,10 +299,21 @@ pub fn score_all(mind: &Mind<'_>, situation: &Situation) -> [f32; Deed::COUNT] {
 
         // Channels 2 and 3: what it returns, discounted by how far off the return is.
         let delay = deed.payoff_delay_days();
-        let payoff_term = situation.env.payoff[i] * (-discount * delay).exp();
+        let discount = if delay == 0.0 {
+            1.0
+        } else if delay == known_delay {
+            known_discount
+        } else {
+            known_delay = delay;
+            known_discount = (-rate * delay).exp();
+            known_discount
+        };
+        let payoff_term = situation.env.payoff[i] * discount;
 
-        // Channel 4: local practice pulls, in proportion to how much this person yields.
-        let norm_term = (1.0 + conformity * (situation.env.norms[i] - 0.5)).max(0.05);
+        // Channel 4: practice pulls, in proportion to how much this person yields — and it
+        // is *their* picture of local practice, not the place's own record of it. Somebody
+        // who moved last year is pulled by where they came from.
+        let norm_term = (1.0 + conformity * (mind.norms[i] - 0.5)).max(0.05);
 
         scores[i] = need_term
             * deed.appeal(mind.personality, mind.values)
@@ -315,16 +349,20 @@ pub fn choose(mind: &Mind<'_>, situation: &Situation, rng: &mut Rng) -> Choice {
     // desperate a person is. Comparing each against the best makes the temperature mean
     // the same thing in every situation — and dividing by the best also keeps the
     // exponent negative, which is the overflow guard.
-    let weights: Vec<f32> = scores
-        .iter()
-        .map(|s| {
-            if *s <= 0.0 {
-                0.0
-            } else {
-                ((s / best - 1.0) / temperature).exp()
-            }
-        })
-        .collect();
+    // A fixed array, not a `Vec`. There are seven deeds and there always will be, so
+    // collecting them was a heap allocation and a free on every decision anybody made —
+    // twenty-six million of each in a sixty-year world.
+    let mut weights = [0.0f32; Deed::COUNT];
+    for (i, s) in scores.iter().enumerate() {
+        weights[i] = if *s <= 0.0 {
+            0.0
+        } else if *s >= best {
+            // The best option's exponent is exactly nought, so its weight is exactly one.
+            1.0
+        } else {
+            ((s / best - 1.0) / temperature).exp()
+        };
+    }
 
     let total: f32 = weights.iter().sum();
     let mut target = rng.unit_f32() * total;
@@ -375,6 +413,10 @@ mod tests {
                 values: &self.values,
                 needs: &self.needs,
                 age_years: 30.0,
+                // Somebody with no opinion about what is usual, so these tests keep
+                // measuring what they were written to measure. The ones about the norm
+                // channel set it explicitly.
+                norms: &[0.5; Deed::COUNT],
             }
         }
     }
@@ -469,18 +511,29 @@ mod tests {
     }
 
     #[test]
-    fn local_practice_pulls_on_the_conforming() {
+    fn what_somebody_takes_to_be_usual_pulls_on_the_conforming() {
+        // The pull comes from the *person's* picture of local practice, not the place's own
+        // record of it. Two people standing in the same room, one who has watched these
+        // neighbours all their life and one who arrived from somewhere that did the
+        // opposite, do not face the same decision — which is the whole of §17.2's second
+        // gap, and is why the two norm vectors here belong to the minds rather than to the
+        // situation they share.
         let mut f = Fixture::average();
         f.needs.set(Need::Purpose, 0.5);
+        let here = Situation::plain(DayPhase::Morning);
 
-        let mut common = Situation::plain(DayPhase::Morning);
-        common.env.norms[Deed::Work as usize] = 1.0;
-        let mut unheard_of = Situation::plain(DayPhase::Morning);
-        unheard_of.env.norms[Deed::Work as usize] = 0.0;
+        let mut steeped = f.mind();
+        let common = [1.0; Deed::COUNT];
+        steeped.norms = &common;
+
+        let mut newcomer = f.mind();
+        let unheard_of = [0.0; Deed::COUNT];
+        newcomer.norms = &unheard_of;
 
         assert!(
-            score_all(&f.mind(), &common)[Deed::Work as usize]
-                > score_all(&f.mind(), &unheard_of)[Deed::Work as usize]
+            score_all(&steeped, &here)[Deed::Work as usize]
+                > score_all(&newcomer, &here)[Deed::Work as usize],
+            "somebody who has seen everyone here work should be readier to"
         );
     }
 
@@ -565,3 +618,4 @@ mod tests {
         assert!(energy > 0.0, "and should be tiring");
     }
 }
+

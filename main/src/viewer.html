@@ -182,6 +182,27 @@
   }
   .map-frame svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 
+  /* ---- peoples and countries --------------------------------------------- */
+  .nations { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+  .nation {
+    background: var(--raised); border: 1px solid var(--line); border-radius: 3px;
+    padding: 13px 14px; display: flex; flex-direction: column; gap: 7px;
+  }
+  .n-name { font-family: var(--display); font-size: 17px; }
+  .n-folk { font-size: 11.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+  .n-places { font-size: 11.5px; color: var(--muted); }
+  .folk { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 14px; }
+  .folk-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-bottom: 7px; }
+  .folk-name { font-family: var(--display); font-size: 16px; }
+  .folk-from { font-size: 11.5px; color: var(--muted); }
+  .ways { display: flex; flex-wrap: wrap; gap: 5px; }
+  .way {
+    font-size: 11px; padding: 2px 7px; border-radius: 2px;
+    border: 1px solid var(--line); color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .way.much { border-color: var(--ink); color: var(--ink); }
+
   /* ---- quarters ---------------------------------------------------------- */
   .quarters { display: grid; grid-template-columns: repeat(auto-fit, minmax(196px, 1fr)); gap: 12px; }
   .quarter {
@@ -326,6 +347,18 @@
       </div>
       <figcaption class="note" id="map-caption"></figcaption>
     </figure>
+  </section>
+
+  <section class="panel" id="nations-panel" hidden>
+    <div class="panel-head">
+      <h2>Peoples and countries</h2>
+      <p class="note">Nobody wrote either down. A people is a way of doing things that
+        carried through a generation; a country is the inhabited places that share one and
+        can walk to each other. Names come from what a people does more or less of than
+        everybody else, and from the ground their largest place stands on.</p>
+    </div>
+    <div class="nations" id="nations"></div>
+    <div id="folk"></div>
   </section>
 
   <section class="panel">
@@ -578,6 +611,49 @@ const METERS = [
   ["bridging", "bridging"], ["opportunity", "work"],
 ];
 
+// A people's ways are only interesting where they depart from the unremarkable middle, so
+// only the departures are shown, strongest first.
+function tellingWays(ways) {
+  return ways
+    .map((amount, i) => ({ name: (WORLD.wayNames || [])[i] || `way ${i}`, off: amount - 0.5 }))
+    .filter(w => Math.abs(w.off) > 0.06)
+    .sort((a, b) => Math.abs(b.off) - Math.abs(a.off));
+}
+
+function drawNations() {
+  const countries = WORLD.countries || [];
+  const peoples = WORLD.peoples || [];
+  if (!countries.length && !peoples.length) return;
+  $("nations-panel").hidden = false;
+
+  $("nations").innerHTML = countries.map(c => `
+    <div class="nation">
+      <span>
+        <span class="n-name">${c.name}</span><br />
+        <span class="n-folk">the ${c.people} · ${c.souls} living</span>
+      </span>
+      <span class="n-places">${c.places.length} place${c.places.length === 1 ? "" : "s"}: ${c.places.join(", ")}</span>
+    </div>`).join("");
+
+  $("folk").innerHTML = peoples.map(p => {
+    const said = tellingWays(p.ways);
+    return `
+      <div class="folk">
+        <div class="folk-line">
+          <span class="folk-name">the ${p.name}</span>
+          <span class="folk-from">${p.souls} living · ${
+            p.from ? `descended from the ${p.from} in year ${p.arose}` : "here from the founding"
+          }</span>
+        </div>
+        <div class="ways">${
+          said.length
+            ? said.map(w => `<span class="way ${w.off > 0 ? "much" : ""}">${w.off > 0 ? "much" : "little"} ${w.name}</span>`).join("")
+            : `<span class="way">nothing that marks them out</span>`
+        }</div>
+      </div>`;
+  }).join("");
+}
+
 function drawQuarters() {
   $("quarters").innerHTML = WORLD.places.map((p, i) => `
     <button type="button" class="quarter" data-i="${i}" aria-pressed="${placeFilter === i}"
@@ -774,7 +850,7 @@ function drawEvents() {
 }
 
 /* ---- go ----------------------------------------------------------------- */
-drawLegend(); drawPlot(); drawPlanet(); drawMap(); drawQuarters(); drawRegister(); drawBalance(); drawEvents();
+drawLegend(); drawPlot(); drawPlanet(); drawMap(); drawNations(); drawQuarters(); drawRegister(); drawBalance(); drawEvents();
 const opener = matching()[0];
 if (opener) select(opener.i);
 window.addEventListener("resize", drawPlot);

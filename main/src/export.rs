@@ -6,6 +6,7 @@
 
 use observer::Balance;
 use person::PersonId;
+use society::PlaceId;
 use sim::{Happening, World};
 use sim_core::Salience;
 
@@ -17,6 +18,11 @@ pub struct YearSample {
     pub living: usize,
     /// Affluence of each place, in arena order.
     pub affluence: Vec<f32>,
+    /// The best any place practises, against bare subsistence.
+    pub practised: f32,
+    /// How far past an ordinary tradition anybody has worked out it is possible to get.
+    /// One for a world nobody has had an idea in, which is most of them.
+    pub knowledge: f32,
 }
 
 pub fn snapshot(world: &World, series: &[YearSample], balance: &Balance) -> String {
@@ -30,7 +36,13 @@ pub fn snapshot(world: &World, series: &[YearSample], balance: &Balance) -> Stri
         "factorNames",
         r#"["openness","conscientiousness","extraversion","agreeableness","neuroticism"]"#,
     );
+    // What the `ways` on a people are, in order, so the viewer does not have to hardcode
+    // the deed list to label them.
+    let ways: Vec<String> = person::Deed::ALL.iter().map(|d| quoted(d.label())).collect();
+    push(&mut out, "wayNames", &format!("[{}]", ways.join(", ")));
     push(&mut out, "planet", &planet(world));
+    push(&mut out, "countries", &countries(world));
+    push(&mut out, "peoples", &peoples(world));
     push(&mut out, "places", &places(world));
     push(&mut out, "people", &people(world));
     push(&mut out, "events", &events(world));
@@ -103,12 +115,19 @@ fn planet(world: &World) -> String {
     )
 }
 
-/// How wide the little map of the founding planet is, in pixels.
+/// How wide the map of the founding planet is, in pixels.
 ///
-/// Small on purpose. This is not the deep-time globe — it is one still frame whose only
-/// job is to show *where the towns are*, and a hundred and sixty pixels across is enough
-/// to recognise a continent at a glance without adding fifty kilobytes to the page.
-const MAP_WIDE: usize = 160;
+/// It was a hundred and sixty, which is enough to recognise a continent at a glance and
+/// was the whole job when the only reader was a thumbnail with the towns marked. The atlas
+/// reads it differently: it wraps the same pixels onto a globe and then magnifies a corner
+/// of them until a single cell fills a hand's breadth of screen, so what was once "enough
+/// to recognise" has to survive being looked at closely.
+///
+/// Three hundred and twenty is a quarter-degree of longitude at the equator — still coarser
+/// than the level-three grid underneath it, so no detail is being invented — and costs
+/// about fifty kilobytes in the page, which compresses to almost nothing because a map is
+/// mostly runs of the same biome.
+const MAP_WIDE: usize = 320;
 const MAP_TALL: usize = MAP_WIDE / 2;
 
 /// The planet's biomes, one character a pixel, row-major from the north pole.
@@ -136,6 +155,85 @@ fn biome_map(surface: &sim::Surface) -> String {
         }
     }
     out
+}
+
+/// The countries, largest first, each naming the places in it.
+///
+/// Places are given by name rather than index, because the roster a country is expressed in
+/// is `culture`'s own numbering and includes places that have since emptied — so an index
+/// here would not line up with the `places` array and would be a trap for the viewer.
+fn countries(world: &World) -> String {
+    let entries: Vec<String> = world
+        .countries()
+        .iter()
+        .map(|country| {
+            let souls: u32 = country
+                .places
+                .iter()
+                .filter_map(|at| world.souls_at(*at))
+                .sum();
+            let within: Vec<String> = country
+                .places
+                .iter()
+                .filter_map(|at| world.place_named(*at))
+                .map(quoted)
+                .collect();
+            format!(
+                "{{{}}}",
+                [
+                    field("name", &quoted(&country.name)),
+                    field(
+                        "people",
+                        &quoted(
+                            world
+                                .peoples()
+                                .get(country.culture)
+                                .map(|p| p.name.as_str())
+                                .unwrap_or("")
+                        )
+                    ),
+                    field("souls", &format!("{souls}")),
+                    format!("\"places\": [{}]", within.join(", ")),
+                ]
+                .join(", ")
+            )
+        })
+        .collect();
+    format!("[{}]", entries.join(", "))
+}
+
+/// Every people who still have anybody practising them, with their descent.
+///
+/// `from` is a name rather than an index for the same reason, and because a people's parent
+/// may itself be extinct — the line of descent is the interesting part and it has to survive
+/// the death of everybody on it.
+fn peoples(world: &World) -> String {
+    let all = world.peoples();
+    let entries: Vec<String> = all
+        .iter()
+        .filter(|people| people.living())
+        .map(|people| {
+            let ways: Vec<String> = people.ways.iter().map(|w| num(*w)).collect();
+            format!(
+                "{{{}}}",
+                [
+                    field("name", &quoted(&people.name)),
+                    field("souls", &format!("{}", people.souls)),
+                    field(
+                        "from",
+                        &match people.parent.and_then(|of| all.get(of)) {
+                            Some(parent) => quoted(&parent.name),
+                            None => "null".to_string(),
+                        }
+                    ),
+                    field("arose", &format!("{}", people.arose)),
+                    format!("\"ways\": [{}]", ways.join(", ")),
+                ]
+                .join(", ")
+            )
+        })
+        .collect();
+    format!("[{}]", entries.join(", "))
 }
 
 fn places(world: &World) -> String {
@@ -167,6 +265,23 @@ fn places(world: &World) -> String {
                     field("households", &format!("{households}")),
                     field("residents", &format!("{residents}")),
                     field("capacity", &format!("{}", place.capacity)),
+                    // How far short of feeding itself the place fell, per head. Zero for
+                    // a place that manages, which is the usual case and the interesting
+                    // exception.
+                    field("want", &num(place.want)),
+                    // What a head gets out of the ground here this year, and what the place
+                    // has been like for a generation. The second is what decides where
+                    // anybody moves — see §30.5 — so it belongs in a view of the place.
+                    field("prosperity", &num(place.prosperity)),
+                    field("fortune", &num(place.fortune)),
+                    // What the place owns that outlives the year — the only capital in this
+                    // world, and the only thing in it that compounds.
+                    field("tools", &num(world.holdings_of(id).tools)),
+                    // What its people actually know how to do, and how far anybody has ever
+                    // worked out that it is possible to get. One is bare subsistence and one
+                    // is an age nobody has left.
+                    field("practised", &num(world.technique_of(id).level())),
+                    field("knowledge", &num(world.technique_of(id).reach_of_knowledge())),
                     // The ground, so the viewer can say why a quarter is what it is
                     // rather than only that it is.
                     field(
@@ -221,6 +336,85 @@ fn places(world: &World) -> String {
     format!("[{}]", entries.join(","))
 }
 
+/// How many of somebody's ties the page carries.
+///
+/// `bonds::CLOSE_TIES` is twenty and that is what a person keeps, but most of the tail is
+/// somebody they have met twice. Twelve is enough to show a life's shape and keeps a world of
+/// six hundred people under a megabyte of edges.
+const TIES_SHOWN: usize = 12;
+
+/// What one person holds about the people they know, strongest first.
+///
+/// Ordered by how well they know them rather than by warmth, because the question the page
+/// asks is *who is in this life* — and the person somebody most despises is in it as surely as
+/// the person they are fondest of.
+fn ties(world: &World, who: PersonId, index: &impl Fn(PersonId) -> String) -> String {
+    let mut held: Vec<(PersonId, bonds::Tie)> = world
+        .bonds
+        .of(who)
+        .filter(|(_, tie)| tie.holds())
+        .filter(|(other, _)| world.people.contains(*other))
+        .collect();
+    held.sort_by(|a, b| b.1.known.total_cmp(&a.1.known));
+    held.truncate(TIES_SHOWN);
+    let entries: Vec<String> = held
+        .into_iter()
+        .map(|(other, tie)| {
+            format!(
+                "[{},{},{},{},{}]",
+                index(other),
+                num(tie.warmth),
+                num(tie.regard),
+                num(tie.known),
+                num(tie.debt.round())
+            )
+        })
+        .collect();
+    format!("[{}]", entries.join(","))
+}
+
+/// What somebody still carries of their own life — see `person::memory`.
+///
+/// The strength is what is *left* of it now, not what it was when it landed, so a page shows
+/// a fifty-year-old death faintly and last spring's slight hard. That is the whole of §34's
+/// curve, made visible for the first time.
+fn holds(world: &World, who: PersonId, index: &impl Fn(PersonId) -> String) -> String {
+    let now = world.now();
+    let Some(person) = world.people.get(who) else {
+        return "[]".to_string();
+    };
+    let mut kept: Vec<(&'static str, String, f32)> = person
+        .held()
+        .iter()
+        .map(|memory| {
+            let what = match memory.what {
+                person::memory::What::Born => "a birth",
+                person::memory::What::Died => "a death",
+                person::memory::What::Paired => "setting up house",
+                person::memory::What::TakenUp => "being taken up",
+                person::memory::What::Carried => "being carried",
+                person::memory::What::Robbed => "being robbed",
+                person::memory::What::WorkedItOut => "working it out",
+                person::memory::What::Moved => "moving",
+                person::memory::What::Wronged => "a wrong done to them",
+                person::memory::What::DidWrong => "a wrong they did",
+            };
+            let about = memory
+                .who
+                .filter(|other| world.people.contains(*other))
+                .map(&index)
+                .unwrap_or_else(|| "null".to_string());
+            (what, about, memory.strength(now))
+        })
+        .collect();
+    kept.sort_by(|a, b| b.2.total_cmp(&a.2));
+    let entries: Vec<String> = kept
+        .into_iter()
+        .map(|(what, about, strength)| format!("[{},{about},{}]", quoted(what), num(strength)))
+        .collect();
+    format!("[{}]", entries.join(","))
+}
+
 fn people(world: &World) -> String {
     let index = |id: PersonId| {
         world
@@ -239,11 +433,33 @@ fn people(world: &World) -> String {
             .unwrap_or_else(|| "null".to_string())
     };
 
+    // Everybody's position, read once per place rather than once per person: a position is
+    // a rank against the neighbours, so asking for one person's costs the whole town's.
+    let mut positions: std::collections::BTreeMap<PersonId, (bonds::Role, String)> =
+        Default::default();
+    for place in world.places.ids() {
+        let ways = world
+            .people_of(place)
+            .map(|people| people.ways)
+            .unwrap_or([0.5; culture::WAYS]);
+        for (who, _, role) in world.society_of(place) {
+            positions.insert(who, (role, culture::naming::name_a_role(&ways, role.stem())));
+        }
+    }
+
     let entries: Vec<String> = world
         .people
         .iter()
         .map(|(id, p)| {
             let now = world.now();
+            // Whether they are anything for a living. A child is not, and the dead still are:
+            // reading "trade: —" under a life whose record says she gave up cooking for
+            // farming twice is the view contradicting itself.
+            let working = if p.is_alive() {
+                !p.stage(now).is_dependent()
+            } else {
+                p.has_matured()
+            };
             let age = match p.death() {
                 Some((when, _)) => p.age(when).years(),
                 None => p.age(now).years(),
@@ -283,9 +499,98 @@ fn people(world: &World) -> String {
                         }
                     ),
                     field("outlook", &quoted(p.personality.outlook().label())),
-                    field("country", &quoted(&p.country.to_string())),
+                    field(
+                        "country",
+                        &quoted(
+                            &world
+                                .country_of(id)
+                                .unwrap_or_else(|| "nowhere in particular".to_string()),
+                        ),
+                    ),
                     field("standing", &num(p.peak_standing())),
+                    field(
+                        "title",
+                        &match positions.get(&id) {
+                            Some((_, word)) => quoted(word),
+                            None => "null".to_string(),
+                        }
+                    ),
+                    field(
+                        "role",
+                        &match positions.get(&id) {
+                            Some((role, _)) => quoted(role.label()),
+                            None => "null".to_string(),
+                        }
+                    ),
+                    field(
+                        "allies",
+                        &format!(
+                            "{}",
+                            world.bonds.of(id).filter(|(_, t)| t.allied()).count()
+                        )
+                    ),
+                    field(
+                        "owed",
+                        &num(world.bonds.of(id).map(|(_, t)| t.debt).sum::<f32>())
+                    ),
+                    field("repute", &num(world.repute_of(id))),
+                    // How wrong this person is about how they are seen, and in which
+                    // direction. §17.2.2 put a belief on every tie that can diverge from the
+                    // truth, and until it is displayed there is no way to know whether it
+                    // ever does — which is the argument §30.6 makes about the whole view.
+                    //
+                    // Averaged over the ties they hold: what they believe the other makes of
+                    // them, less what the other actually does. Positive is somebody who
+                    // thinks better of their welcome than they should.
+                    field("misreads", &num(misreading(world, id))),
+                    // A child is not anything for a living. `Person` carries a trade from
+                    // birth because everybody starts a farmer, but nobody is one until they
+                    // are old enough to be counted as a hand.
+                    // The dead keep the trade and lose the word for it: `trade_of` names it in
+                    // the local people's own speech, and that needs a place, which somebody
+                    // who has died no longer has. What they did is still known.
+                    field(
+                        "trade",
+                        &if working {
+                            quoted(p.trade().label())
+                        } else {
+                            "null".to_string()
+                        }
+                    ),
+                    field(
+                        "craft",
+                        &match working.then(|| world.trade_of(id)).flatten() {
+                            Some((_, word)) => quoted(&word),
+                            None => "null".to_string(),
+                        }
+                    ),
                     field("mentored", if p.is_mentored() { "true" } else { "false" }),
+                    // **Who this person is to everybody they know**, and what they hold about
+                    // them. The atlas has always been able to say somebody had 39 allies and
+                    // never who any of them were, which made the one part of this world that
+                    // is genuinely a graph the one part you could not walk.
+                    //
+                    // Written as bare arrays rather than objects — `[who, warmth, regard,
+                    // known, debt]` — because there are up to twenty of these per person and
+                    // the field names would be four fifths of the bytes. Strongest first and
+                    // capped, so a page stays a page.
+                    field("ties", &ties(world, id, &index)),
+                    // And what they carry of their own life (§34), which is not the chronicle:
+                    // partial, fading, and about *whom*. `[what, who, strength]`.
+                    field("holds", &holds(world, id, &index)),
+                    // What they are after (§36). A reading, not a field — so this is what
+                    // their life adds up to at the moment the world was written out, and the
+                    // same person read a decade later may well want something else.
+                    field(
+                        "wants",
+                        &match world
+                            .what_they_have_come_to(id)
+                            .and_then(|come_to| person::dreams::of(p, &come_to, world.now()))
+                        {
+                            Some((dream, _)) => quoted(dream.label()),
+                            None => "null".to_string(),
+                        }
+                    ),
                     field("upbringing", &num(p.absorbed_upbringing())),
                     field("place", &place_index(id)),
                     field("parents", &parents),
@@ -307,28 +612,98 @@ fn people(world: &World) -> String {
     format!("[{}]", entries.join(","))
 }
 
+/// How far somebody's idea of how they are seen is from how they are seen.
+///
+/// The one thing in the social model that can be wrong, and a number nobody could look at
+/// until now. Positive means they think themselves more welcome than they are; negative means
+/// they do not know who is glad of them.
+///
+/// Only over ties that hold, since a belief about somebody you have never met is not a
+/// mistake, it is an absence.
+fn misreading(world: &World, who: PersonId) -> f32 {
+    let mut total = 0.0;
+    let mut held = 0;
+    for (other, tie) in world.bonds.of(who) {
+        if !tie.holds() {
+            continue;
+        }
+        total += tie.welcome - world.bonds.tie(other, who).warmth;
+        held += 1;
+    }
+    if held == 0 { 0.0 } else { total / held as f32 }
+}
+
 fn events(world: &World) -> String {
     let calendar = world.planets.iter().next().map(|(_, p)| p.calendar);
+    // Which slot in `people` each identifier belongs to, so an event can say who it is about
+    // and a reader can ask for one life. A biography is the chronicle filtered by participant
+    // — that is what the chronicle is *for* — and until now nothing displayed it.
+    let slot: std::collections::HashMap<PersonId, usize> =
+        world.people.ids().enumerate().map(|(at, id)| (id, at)).collect();
+    let acre: std::collections::HashMap<PlaceId, usize> =
+        world.places.ids().enumerate().map(|(at, id)| (id, at)).collect();
     let entries: Vec<String> = world
         .chronicle
         .at_least(Salience::Pivotal)
         .map(|record| {
             let year = calendar.map(|c| c.date_at(record.at).year).unwrap_or(0);
-            let kind = match record.kind {
-                Happening::WorldBegins { .. } => "world",
-                Happening::PersonBorn { .. } => "birth",
-                Happening::PersonDies { .. } => "death",
-                Happening::PersonPairs { .. } => "pairing",
-                Happening::PersonMoves { .. } => "move",
-                Happening::PersonMentored { .. } => "patron",
-                Happening::PlaceChanges { .. } => "place",
-                _ => "other",
+            // What kind of thing it was, and everybody it concerns — one question, because
+            // both are read off the same shape. A birth is about three people and being
+            // taken up is about two, so each of those lives carries the event.
+            //
+            // Deliberately not `subjects()`: that is the chronicle's own index, and its
+            // handles are erased to bare bits, where a place and a person of the same age
+            // and slot are the same number. Filing by it would post somebody's move into
+            // a stranger's life. Matching here keeps the handles typed.
+            //
+            // The same for the places an event names, so a settlement has a history for the
+            // same reason a person has a life. Only what the happening actually says: a move
+            // names where it went, a change of character names the place it happened to.
+            // Where somebody was standing when they were born is not in the record and is
+            // not guessed at here.
+            let (kind, folk, ground): (&str, Vec<PersonId>, Vec<PlaceId>) = match record.kind {
+                Happening::WorldBegins { .. } => ("world", vec![], vec![]),
+                Happening::PersonBorn {
+                    child,
+                    mother,
+                    father,
+                } => ("birth", vec![child, mother, father], vec![]),
+                Happening::PersonDies { person, .. } => ("death", vec![person], vec![]),
+                Happening::PersonPairs { person, with } => ("pairing", vec![person, with], vec![]),
+                Happening::PersonMoves { person, to } => ("move", vec![person], vec![to]),
+                Happening::PersonMentored { person, by } => ("patron", vec![person, by], vec![]),
+                Happening::PlaceChanges { place, .. } => ("place", vec![], vec![place]),
+                Happening::PlaceTaken { place, by } => ("taken", vec![], vec![place, by]),
+                // The rarest thing in the chronicle and the only one that changes what is
+                // *possible* rather than what happened.
+                Happening::PersonWorksItOut { person, .. } => ("advance", vec![person], vec![]),
+                Happening::PersonRetrains { person, .. } => ("trade", vec![person], vec![]),
+                // Both people, because a robbery belongs in the robbed one's life as much
+                // as in the robber's — and only their own life ever shows it to them.
+                Happening::PersonActsOn {
+                    person, toward, ..
+                } => ("act", vec![person, toward], vec![]),
+                Happening::PersonArrives { person } => ("other", vec![person], vec![]),
+                Happening::PersonDoes { person, .. } => ("other", vec![person], vec![]),
+                _ => ("other", vec![], vec![]),
             };
+            let who: Vec<String> = folk
+                .iter()
+                .filter_map(|id| slot.get(id))
+                .map(|at| at.to_string())
+                .collect();
+            let here: Vec<String> = ground
+                .iter()
+                .filter_map(|id| acre.get(id))
+                .map(|at: &usize| at.to_string())
+                .collect();
             format!(
                 "{{{}}}",
                 [
                     field("year", &format!("{year}")),
                     field("kind", &quoted(kind)),
+                    field("who", &format!("[{}]", who.join(","))),
+                    field("here", &format!("[{}]", here.join(","))),
                     field("text", &quoted(&plain(&render::line(world, record)))),
                 ]
                 .join(",")
@@ -348,6 +723,8 @@ fn samples(series: &[YearSample]) -> String {
                 [
                     field("year", &format!("{}", s.year)),
                     field("living", &format!("{}", s.living)),
+                    field("practised", &num(s.practised)),
+                    field("knowledge", &num(s.knowledge)),
                     field("affluence", &format!("[{}]", affluence.join(","))),
                 ]
                 .join(",")
@@ -506,6 +883,56 @@ mod tests {
             "a rounded-away negative must not read as \"-\""
         );
         assert_eq!(num(0.1234), "0.123");
+    }
+
+    #[test]
+    fn the_peoples_and_countries_go_out_with_the_world() {
+        let world = a_world();
+        let json = snapshot(&world, &[], &observer::measure(&world));
+        assert!(json.contains("\"countries\":"), "no countries in the export");
+        assert!(json.contains("\"peoples\":"), "no peoples in the export");
+        // The ways need their labels alongside them or the array is seven bare numbers.
+        assert!(json.contains("\"wayNames\":"), "no way names in the export");
+        for deed in person::Deed::ALL {
+            assert!(json.contains(deed.label()), "no label for {}", deed.label());
+        }
+
+        // Every country names a people that is actually in the export, and places that
+        // are actually in the world — indices would not survive the roster keeping
+        // emptied places, so these are names and they have to resolve.
+        for country in world.countries() {
+            assert!(json.contains(&country.name), "a country missing from the export");
+            for at in &country.places {
+                let named = world.place_named(*at).expect("a country holds a real place");
+                assert!(
+                    world.places.iter().any(|(_, p)| p.name == named),
+                    "country names a place {named} that is not in this world",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn nobody_in_the_export_is_from_a_country_that_is_not_in_it() {
+        // The property the deleted enum could never have had: a person's country is one of
+        // the countries this world actually has, because it was looked up from where they
+        // live rather than carried around.
+        let world = a_world();
+        let json = snapshot(&world, &[], &observer::measure(&world));
+        let named: Vec<String> = world.countries().into_iter().map(|c| c.name).collect();
+
+        let mut checked = 0;
+        for (id, person) in world.people.iter() {
+            if !person.is_alive() {
+                continue;
+            }
+            if let Some(from) = world.country_of(id) {
+                assert!(named.contains(&from), "somebody is from {from}, which does not exist");
+                assert!(json.contains(&from));
+                checked += 1;
+            }
+        }
+        assert!(checked > 0, "nobody in this world is from anywhere");
     }
 
     #[test]

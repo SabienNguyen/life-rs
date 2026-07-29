@@ -16,3 +16,9 @@ cosmos = { path = "../cosmos" }
 climate = { path = "../climate" }
 biome = { path = "../biome" }
 settlement = { path = "../settlement" }
+culture = { path = "../culture" }
+bonds = { path = "../bonds" }
+
+[dev-dependencies]
+bonds = { path = "../bonds" }
+economy = { path = "../economy" }

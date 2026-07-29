@@ -13,6 +13,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "bonds"
+version = "0.1.0"
+dependencies = [
+ "genetics",
+ "person",
+ "planet",
+ "sim-core",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -31,6 +41,14 @@ dependencies = [
 name = "cosmos"
 version = "0.1.0"
 dependencies = [
+ "sim-core",
+]
+
+[[package]]
+name = "culture"
+version = "0.1.0"
+dependencies = [
+ "person",
  "sim-core",
 ]
 
@@ -55,6 +73,7 @@ name = "economy"
 version = "0.1.0"
 dependencies = [
  "society",
+ "work",
 ]
 
 [[package]]
@@ -128,9 +147,12 @@ name = "main"
 version = "0.1.0"
 dependencies = [
  "biome",
+ "bonds",
  "climate",
  "cosmos",
+ "culture",
  "ecology",
+ "economy",
  "evolution",
  "geo",
  "life",
@@ -139,6 +161,7 @@ dependencies = [
  "planet",
  "sim",
  "sim-core",
+ "society",
 ]
 
 [[package]]
@@ -171,6 +194,7 @@ dependencies = [
  "planet",
  "rand",
  "sim-core",
+ "work",
 ]
 
 [[package]]
@@ -253,8 +277,10 @@ name = "sim"
 version = "0.1.0"
 dependencies = [
  "biome",
+ "bonds",
  "climate",
  "cosmos",
+ "culture",
  "economy",
  "genetics",
  "geo",
@@ -305,6 +331,10 @@ name = "wasi"
 version = "0.11.1+wasi-snapshot-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ccf3ec651a847eb01de73ccad15eb7d99f80485de043efb2f370cd654f4ea44b"
+
+[[package]]
+name = "work"
+version = "0.1.0"
 
 [[package]]
 name = "zerocopy"

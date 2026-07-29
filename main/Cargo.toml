@@ -16,3 +16,7 @@ life = { path = "../life" }
 observer = { path = "../observer" }
 planet = { path = "../planet" }
 person = { path = "../person" }
+society = { path = "../society" }
+culture = { path = "../culture" }
+bonds = { path = "../bonds" }
+economy = { path = "../economy" }

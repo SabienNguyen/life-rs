@@ -18,7 +18,6 @@
 //! is forget silently — every record dropped is counted, so the chronicle can say how many
 //! ordinary days it no longer holds rather than implying there were none.
 
-use std::collections::BTreeMap;
 
 use crate::time::Time;
 
@@ -58,12 +57,57 @@ pub type Subject = u64;
 /// How many salience levels there are, for the forgetting tally.
 const LEVELS: usize = 5;
 
+/// Hashing for subject identifiers, which are dense integers rather than arbitrary keys.
+///
+/// The index was a `BTreeMap` and it is on the hottest path there is: every recorded event
+/// files itself under everyone it concerns, twenty-six million times in a sixty-year world,
+/// and each one was a logarithmic descent through pointer-chased nodes. A hash map is the
+/// right structure — nothing here ever iterates the index in order, only looks up by key,
+/// mutates every entry, or counts them.
+///
+/// The hasher is written out rather than taken from `std` because the default is
+/// SipHash-1-3, which is built to resist adversaries choosing keys to collide. Nobody is
+/// attacking a chronicle. These keys are arena indices, so one multiply and a shift spreads
+/// them perfectly well, and it is deterministic across runs and machines — which `std`'s
+/// randomly-seeded default is not, and this simulation's whole contract is that the same
+/// seed gives the same world.
+#[derive(Default, Clone, Copy)]
+pub struct SubjectHasher(u64);
+
+impl std::hash::Hasher for SubjectHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for byte in bytes {
+            self.0 = (self.0 ^ *byte as u64).wrapping_mul(0x0100_0000_01b3);
+        }
+    }
+
+    fn write_u64(&mut self, value: u64) {
+        // Fibonacci hashing: multiply by 2^64 / φ and let the high bits fall where they may.
+        self.0 = value.wrapping_mul(0x9e37_79b9_7f4a_7c15);
+        self.0 ^= self.0 >> 32;
+    }
+}
+
+#[derive(Default, Clone, Copy)]
+pub struct BySubject;
+
+impl std::hash::BuildHasher for BySubject {
+    type Hasher = SubjectHasher;
+    fn build_hasher(&self) -> SubjectHasher {
+        SubjectHasher(0)
+    }
+}
+
 /// A log of records, indexed by who they are about, which forgets the small and old.
 pub struct Chronicle<K> {
     records: Vec<Record<K>>,
     /// Which records each subject appears in. Indices into `records`, so compaction has
     /// to rebuild it — which is why compaction is a deliberate act and not a side effect.
-    index: BTreeMap<Subject, Vec<u32>>,
+    index: std::collections::HashMap<Subject, Vec<u32>, BySubject>,
     floor: Salience,
     /// How many records have been dropped, by how much they mattered.
     forgotten: [u64; LEVELS],
@@ -73,7 +117,7 @@ impl<K> Chronicle<K> {
     pub fn new() -> Self {
         Chronicle {
             records: Vec::new(),
-            index: BTreeMap::new(),
+            index: std::collections::HashMap::default(),
             floor: Salience::Routine,
             forgotten: [0; LEVELS],
         }

@@ -1,8 +1,10 @@
 [workspace]
 members = [
     "biome",
+    "bonds",
     "climate",
     "cosmos",
+    "culture",
     "ecology",
     "economy",
     "evolution",
@@ -17,6 +19,7 @@ members = [
     "settlement",
     "sim",
     "society",
+    "work",
     "sim-core",
 ]
 resolver = "3"
@@ -24,3 +27,24 @@ resolver = "3"
 [workspace.dependencies]
 rand = "0.8.5"
 faker_rand = "0.1.1"
+# Optimised tests. The suite is not a compile-time-bound workload: it founds whole
+# planets, solves climates and lives out centuries, so it is bound by how fast the
+# simulation runs. Unoptimised, that is a twenty-minute suite; the extra seconds of
+# compilation are bought back many times over on the first test that runs a world.
+#
+# Level 2 rather than 3: nearly all of the win, noticeably less compile time.
+[profile.dev]
+opt-level = 2
+
+# Dependencies at full optimisation regardless — they change almost never, so the
+# compile cost is paid once and the arithmetic in `libm` and `rand` is hot.
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+debug = 1
+# Cross-crate inlining matters here more than usual: the hot path runs through
+# `sim` into `person` into `life` on every decision, and every one of those is a
+# crate boundary that thin LTO can inline across.
+lto = "thin"
+codegen-units = 1

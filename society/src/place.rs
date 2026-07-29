@@ -276,6 +276,12 @@ pub struct Census {
     /// come back round. Computed by `economy` and handed in, because a neighbourhood
     /// should not need to know what a Cobb–Douglas is.
     pub prosperity: f32,
+    /// How far short of feeding its people the place fell, per head. Zero when it managed.
+    ///
+    /// Kept apart from `prosperity` rather than folded into it, because prosperity cannot
+    /// carry it: prosperity is `per_head().max(0)`, so famine and bare sufficiency are the
+    /// same number to it. This is the one that can be negative news.
+    pub want: f32,
 }
 
 impl Default for Census {
@@ -293,6 +299,7 @@ impl Default for Census {
             arrivals: 0,
             deeds: [0; Deed::COUNT],
             prosperity: 0.5,
+            want: 0.0,
         }
     }
 }
@@ -311,6 +318,25 @@ pub struct Place {
     /// conception, a household deciding where to live — happen between reckonings and must
     /// not each rebuild a region's economy to ask one question.
     pub prosperity: f32,
+    /// How well the place has done in living memory, 0 to 1 — `prosperity` smoothed.
+    ///
+    /// A year's harvest is not a reason to move house. `prosperity` responds to the very
+    /// households that read it, and instantly: one more arrives, output per head drops, and
+    /// if that is what people are choosing on then they leave again, which raises it, which
+    /// brings them back. Wired raw into `sim`'s `appeal` it produced 30,697 moves in a
+    /// ninety-year world with 68% of them going straight back — the trade cobweb of §30.5.1
+    /// exactly, in migration, and for the same reason: a signal that answers the action
+    /// taken on it.
+    ///
+    /// A reputation does not. What draws somebody to a place is how it has done for as long
+    /// as anyone has been paying attention, and `REMEMBERED` is how long that is.
+    pub fortune: f32,
+    /// How far short of feeding its people this place fell at the last reckoning, per head.
+    ///
+    /// Zero for a place that manages, which is most of them most of the time. Kept on the
+    /// place for the same reason `prosperity` is: the things that read it happen between
+    /// reckonings and must not each rebuild a region's economy to ask one question.
+    pub want: f32,
     /// The ground under it, if it stands on any.
     ///
     /// `None` is a place that is not on a map — every world before the join, and every
@@ -338,6 +364,27 @@ const BUILD_RATE: f32 = 0.06;
 /// current occupancy.
 const ADJUSTMENT: f32 = 0.15;
 
+/// Over how many years a place's fortune is remembered.
+///
+/// The same argument as `ADJUSTMENT` one field along: what draws somebody to a town is what
+/// it has been like, not what its harvest did last year. A generation, so that what somebody
+/// goes on is how the place has been for as long as they have been alive to notice.
+///
+/// Swept, because it trades two failures against each other — too short and the signal
+/// answers the move made on it, too long and a quarter that has genuinely gone downhill
+/// keeps drawing people for a century:
+///
+/// | remembered | biggest quarter | quarters empty | moves | straight back |
+/// |---|---|---|---|---|
+/// | raw | 0.89 | 0.55 | 30,697 | 68% |
+/// | 12 | 0.58 | 0.40 | 2,727 | 14% |
+/// | 25 | 0.47 | 0.30 | 1,602 | 9% |
+/// | 40 | 0.71 | 0.45 | 1,223 | 7% |
+///
+/// Not monotone, which is the tell that it is a trade and not a knob: at forty the memory
+/// outlives the fact and the concentration comes back.
+const REMEMBERED: f32 = 25.0;
+
 impl Place {
     pub fn new(name: impl Into<String>, capacity: u32) -> Place {
         Place {
@@ -348,6 +395,10 @@ impl Place {
             // census defaults there: nought is a claim, and a place nobody has looked at
             // should make none.
             prosperity: 0.5,
+            fortune: 0.5,
+            // Nobody is hungry until a reckoning has looked at the ground and the
+            // headcount together and found otherwise.
+            want: 0.0,
             terrain: None,
         }
     }
@@ -374,6 +425,10 @@ impl Place {
     /// low turnover builds; norms are literally what people did.
     pub fn observe(&mut self, census: &Census) {
         self.prosperity = census.prosperity;
+        // What the place is remembered as being like, which is what anybody deciding where
+        // to live is actually going on.
+        self.fortune += (census.prosperity - self.fortune) / REMEMBERED;
+        self.want = census.want;
         self.build_for(census.households);
         let occupancy = (census.households as f32 / self.capacity as f32).clamp(0.0, 1.5);
 
@@ -599,8 +654,10 @@ mod tests {
             arrivals,
             deeds: [0; Deed::COUNT],
             // An unremarkable economy, so every test written before there was one keeps
-            // meaning what it meant.
+            // meaning what it meant — and one that feeds its people, which is the same
+            // claim about the other half of the ledger.
             prosperity: 0.5,
+            want: 0.0,
         }
     }
 

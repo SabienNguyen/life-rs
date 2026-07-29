@@ -392,10 +392,22 @@ impl fmt::Display for Balance {
             "  mobility       {}",
             band(self.mobility, &targets::MOBILITY)
         )?;
-        write!(
+        writeln!(
             f,
             "  upbringing gap {}",
             band(self.upbringing_gap, &targets::UPBRINGING_GAP)
+        )?;
+        // Said because this sheet is how anybody actually reads these numbers, and one world
+        // is not enough of them. Measured over three seeds at 160 founders and 120 years,
+        // four of the seven rows leave their band on *some* seed and each of those four sits
+        // comfortably inside it on another — a few hundred lives is a small sample and its
+        // statistics wander. `balance_tests` averages over three worlds for that reason, and
+        // a single "within target" here should not be read as one.
+        write!(
+            f,
+            "  — one world of {} lives. Four of these rows change band between seeds; \n\
+             \x20   the design's claim is the average over several, not this sheet.",
+            self.sample
         )
     }
 }

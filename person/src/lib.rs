@@ -7,7 +7,10 @@
 //! Nothing here is updated on a tick. Needs and health are brought forward from the last
 //! time anyone looked, which is what lets a large population sit dormant for free.
 
+pub mod acts;
 pub mod deeds;
+pub mod dreams;
+pub mod memory;
 pub mod psyche;
 
 use faker_rand::en_us::names::FullName;
@@ -15,7 +18,6 @@ use genetics::{Ancestry, Architecture, FounderPool, Genome};
 use life::{Age, Health, LifeStage, Mortality, Need, Needs};
 use planet::PlanetId;
 use sim_core::{Duration, Id, Rng, Time};
-use std::fmt;
 
 pub use deeds::{Choice, Deed, Mind, Situation, Surroundings};
 pub use psyche::{Origins, Outlook, Personality, Values};
@@ -87,46 +89,6 @@ pub enum Weight {
     Overweight,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Country {
-    Usa,
-    Gbr,
-    Deu,
-    Can,
-    Fra,
-    Chn,
-    Jpn,
-    Vnm,
-}
-
-impl Country {
-    pub const ALL: [Country; 8] = [
-        Country::Can,
-        Country::Chn,
-        Country::Deu,
-        Country::Fra,
-        Country::Gbr,
-        Country::Jpn,
-        Country::Usa,
-        Country::Vnm,
-    ];
-}
-
-impl fmt::Display for Country {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let name = match self {
-            Country::Can => "Canada",
-            Country::Chn => "China",
-            Country::Deu => "Germany",
-            Country::Fra => "France",
-            Country::Gbr => "United Kingdoms",
-            Country::Jpn => "Japan",
-            Country::Usa => "United States",
-            Country::Vnm => "Vietnam",
-        };
-        f.write_str(name)
-    }
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PhysicalAttrs {
@@ -161,6 +123,14 @@ pub enum Cause {
     Illness,
     OldAge,
     Misadventure,
+    /// Somebody killed them.
+    ///
+    /// Worth its own entry rather than folding into misadventure. A world in which a murder
+    /// and a fall down a bank read the same in the record is a world where the question
+    /// "how many people here die at each other's hands" cannot be asked — and the answer to
+    /// that question is the only thing that says whether `acts::Toward::Kill` is a mechanism
+    /// or a decoration.
+    Violence,
 }
 
 impl Cause {
@@ -170,6 +140,7 @@ impl Cause {
             Cause::Illness => "illness",
             Cause::OldAge => "old age",
             Cause::Misadventure => "misadventure",
+            Cause::Violence => "violence",
         }
     }
 }
@@ -178,7 +149,6 @@ impl Cause {
 pub struct Person {
     pub name: String,
     pub sex: Sex,
-    pub country: Country,
     pub physical: PhysicalAttrs,
     /// The totals. Kept alongside `origins` because behaviour reads them constantly.
     pub personality: Personality,
@@ -210,6 +180,22 @@ pub struct Person {
     /// measured intergenerational elasticity 0.93, not because the world was a caste
     /// system but because the outcome had the predictor baked into it.
     peak_standing: f32,
+    /// What somebody owns that will still be there when they are not.
+    ///
+    /// The one thing in this world that survives a death. `standing` is what a person *can
+    /// do* — it is built by working and it slips when they stop, so it dies with them and
+    /// each generation starts again from what its own hands are worth. An estate does not
+    /// slip and is not personal capacity: it is a claim on the world that outlives the claimant
+    /// and passes to whoever is left.
+    ///
+    /// §26.9 called this the missing third of households as political units, and §26.10
+    /// deferred it on a measurement rather than on principle — intergenerational elasticity
+    /// already ran above its ceiling, so adding a channel that hands advantage down would push
+    /// an out-of-band number further out. What made it buildable was finding the channel that
+    /// was too strong: temperament decided so much of how well anybody did that children
+    /// resembled parents through the *genome* alone, at 0.51 of outcome variance against a
+    /// ceiling of 0.45. Loosening that opened exactly the room this fills.
+    estate: f32,
     /// A lasting multiplier on what work returns, from having been taken up by someone.
     ///
     /// The mechanism by which a tight community produces people who get out. It is not
@@ -223,7 +209,39 @@ pub struct Person {
     opportunity: (f32, f32),
     /// Childhood exposure, accumulating until maturity: weighted sum and total weight.
     upbringing: (f32, f32),
+    /// What they carry of their own life — see `memory`.
+    ///
+    /// Not part of a person's identity: two people are the same person or not regardless of
+    /// what either happens to remember, so `Held` is skipped when `Person` is compared.
+    held: memory::Held,
+    /// What this person takes to be normal, learned by watching — their own estimate of
+    /// §14.2's fourth channel rather than the channel itself.
+    ///
+    /// The ambient version read `norms` straight off the place, as though everyone in it
+    /// were equally steeped in local practice and a newcomer were as steeped as somebody
+    /// born there. Carrying it per person earns three things that cannot be had otherwise:
+    /// migrants who bring the old country's habits and only partly assimilate, adolescence
+    /// as the age when they are picked up fastest, and cultural change that is *transmitted*
+    /// between people rather than imposed by editing a field.
+    norms: [f32; Deed::COUNT],
     matured: bool,
+
+    /// What they do for a living.
+    ///
+    /// Nobody is born to one and nobody is assigned one. It is taken up because it was worth
+    /// taking up where they live — see §27 — and it is the only thing about a person here
+    /// that answers to the state of the economy rather than to their temperament or their
+    /// family. Everybody starts a farmer, which is what everybody was before there was
+    /// anything else to be.
+    trade: work::Trade,
+    /// How many spells of each deed this life has held.
+    ///
+    /// What somebody *does* is the oldest thing a society reads a position off — the one
+    /// who works, the one who wanders, the one who is always talking to somebody. None of
+    /// that is assigned here and none of it is an occupation: it is the tally of what four
+    /// thousand decisions a year actually came to, and temperament is what makes two people
+    /// with the same options spend their lives differently.
+    doings: [u32; Deed::COUNT],
 
     needs: Needs,
     health: Health,
@@ -244,7 +262,6 @@ impl Person {
         architecture: &Architecture,
         name: impl Into<String>,
         sex: Sex,
-        country: Country,
         genome: Genome,
         ancestry: Ancestry,
         parents: Option<(PersonId, PersonId)>,
@@ -260,7 +277,6 @@ impl Person {
         Person {
             name: name.into(),
             sex,
-            country,
             physical: PhysicalAttrs::new(
                 pick(
                     rng,
@@ -278,10 +294,16 @@ impl Person {
             born,
             standing: 0.0,
             peak_standing: 0.0,
+            estate: 0.0,
             patronage: 1.0,
             opportunity: (0.0, 0.0),
             upbringing: (0.0, 0.0),
+            held: memory::Held::default(),
+            // No opinion about what is normal until they have seen some of it.
+            norms: [0.5; Deed::COUNT],
             matured: false,
+            trade: work::Trade::Farmer,
+            doings: [0; Deed::COUNT],
             needs: Needs::rested(),
             health: Health::hale(),
             intent: None,
@@ -304,6 +326,41 @@ impl Person {
         self.patronage
     }
 
+    /// What they do for a living.
+    pub fn trade(&self) -> work::Trade {
+        self.trade
+    }
+
+    /// Take up a trade. Whether it was worth taking up is the caller's business.
+    pub fn take_up(&mut self, trade: work::Trade) {
+        self.trade = trade;
+    }
+
+    /// What this life has been spent on, in spells of each deed.
+    pub fn doings(&self) -> &[u32; Deed::COUNT] {
+        &self.doings
+    }
+
+    /// Note time spent. `times` so that a tier which does not deliberate can book a year of
+    /// something in one call, and so the two tiers keep the same tally of the same life.
+    pub fn spent(&mut self, deed: Deed, times: u32) {
+        self.doings[deed as usize] = self.doings[deed as usize].saturating_add(times);
+    }
+
+    /// The share of this life given to one deed, out of the deeds anybody has a choice
+    /// about.
+    ///
+    /// Eating, drinking and sleeping are not choices — everybody does them and doing more
+    /// of them says nothing about a person. What is left is the four that vary, and a share
+    /// of those is what distinguishes a life spent working from one spent visiting.
+    pub fn share_of_life(&self, deed: Deed) -> f32 {
+        let chosen: u32 = Deed::CHOSEN.iter().map(|d| self.doings[*d as usize]).sum();
+        if chosen == 0 || !Deed::CHOSEN.contains(&deed) {
+            return 0.0;
+        }
+        self.doings[deed as usize] as f32 / chosen as f32
+    }
+
     pub fn is_mentored(&self) -> bool {
         self.patronage > 1.0
     }
@@ -318,6 +375,47 @@ impl Person {
     }
 
     /// The highest standing reached in adult life — their attainment.
+    /// What they own outright.
+    pub fn estate(&self) -> f32 {
+        self.estate
+    }
+
+    /// Put by, out of a year in which there was something to put by.
+    ///
+    /// Only out of surplus, and only a part of it — most of what anybody makes here is eaten.
+    /// A person who never has a good year never accumulates anything, which is what makes this
+    /// a channel by which advantage is *handed down* rather than a second name for standing.
+    pub fn put_by(&mut self, surplus: f32) {
+        if surplus > 0.0 {
+            self.estate += surplus * SAVED;
+        }
+    }
+
+    /// Lose a share of what they own, and say how much was carried off.
+    ///
+    /// Returns what was taken so that a raid can hand it over rather than destroy it — see
+    /// `World::take_what_can_be_taken`. Nothing here creates wealth.
+    pub fn plundered(&mut self, share: f32) -> f32 {
+        let lost = self.estate * share.clamp(0.0, 1.0);
+        self.estate -= lost;
+        lost
+    }
+
+    /// Take a share of somebody's estate. What the dead leave is what the living receive, and
+    /// nothing is created in the passing — see `World::settle_the_estate`.
+    pub fn inherit(&mut self, share: f32) {
+        self.estate += share.max(0.0);
+    }
+
+    /// What somebody can put behind a claim: what they can do, and what they own.
+    ///
+    /// An estate is worth less at a door than the same amount of standing, because standing is
+    /// a demonstrated capacity to keep a household going and an estate is a stock that can be
+    /// spent once. `WORTH_AT_A_DOOR` is that discount.
+    pub fn means(&self) -> f32 {
+        self.standing + self.estate * WORTH_AT_A_DOOR
+    }
+
     pub fn peak_standing(&self) -> f32 {
         self.peak_standing
     }
@@ -365,6 +463,42 @@ impl Person {
         if weight > 0.0 {
             self.upbringing.0 += quality * weight;
             self.upbringing.1 += weight;
+        }
+    }
+
+    /// What they carry of their own life.
+    pub fn held(&self) -> &memory::Held {
+        &self.held
+    }
+
+    /// Take something in — see `memory::Held::keep`.
+    pub fn keep(&mut self, what: memory::What, who: Option<PersonId>, now: Time) {
+        self.held.keep(what, who, now);
+    }
+
+    /// Bring back up whatever they hold about somebody who is in front of them again.
+    pub fn rehearse(&mut self, about: PersonId, now: Time) {
+        self.held.rehearse(about, now);
+    }
+
+    /// What this person takes to be usual around here.
+    pub fn norms(&self) -> &[f32; Deed::COUNT] {
+        &self.norms
+    }
+
+    /// Watch what people here do for `years`, and move towards it.
+    ///
+    /// Unlike `absorb` this never stops: an adult who moves does eventually pick up local
+    /// habits, just slowly enough that where they came from stays legible. That asymmetry
+    /// is the whole point — a rate that fell to nothing at twenty would make every migrant
+    /// a permanent foreigner, and one flat across a life would make nobody a migrant at all.
+    pub fn learn_norms(&mut self, around: &[f32; Deed::COUNT], age_years: f64, years: f32) {
+        if years <= 0.0 {
+            return;
+        }
+        let rate = (NORM_LEARNING * norm_weight(age_years) * years).clamp(0.0, 1.0);
+        for (mine, theirs) in self.norms.iter_mut().zip(around) {
+            *mine += (theirs - *mine) * rate;
         }
     }
 
@@ -544,6 +678,7 @@ impl Person {
                 values: &self.values,
                 needs: &self.needs,
                 age_years: self.age(now).years(),
+                norms: &self.norms,
             },
             situation,
         )
@@ -556,6 +691,7 @@ impl Person {
                 values: &self.values,
                 needs: &self.needs,
                 age_years: self.age(now).years(),
+                norms: &self.norms,
             },
             situation,
             rng,
@@ -629,14 +765,110 @@ impl Person {
     /// The claim a coarse tier makes. Rather than accruing a year of hunger nobody was
     /// simulated to relieve, needs are returned to where a person who looks after
     /// themselves actually sits — which is what the fine simulation shows them doing.
+    ///
+    /// The span matters and passing `Duration::ZERO` here was a serious bug. It made the
+    /// call a no-op: needs were set to coping and then health was asked to respond to them
+    /// over no time at all, so a coarse person's vitality **froze** at whatever it happened
+    /// to be the moment their neighbourhood fell out of the detail budget. It could never
+    /// recover, because `catch_up` also sees no elapsed time once `updated` has been moved
+    /// forward. Anyone demoted below the fertility gate of 0.5 was sterile for life, and
+    /// everybody else carried their frailty for ever.
+    ///
+    /// What it cost: the same world, same seed, differing only in how many people the
+    /// observer could afford to watch, finished at 184 souls with a budget of 150, 384 with
+    /// 400, and 990 with 2000. The level-of-detail machinery was not observation-neutral —
+    /// it decided the population. That is the one property §19 calls the riskiest in the
+    /// design, and it was failing silently.
+    ///
+    /// A year at coping pressure recovers to full, which is not a generous assumption but a
+    /// measured one: finely simulated adults sit at vitality 1.000 — mean, median and tenth
+    /// percentile alike — because a fine person acts on a need long before it does them any
+    /// harm. Coping and being watched have to arrive at the same place, or watching is a
+    /// treatment.
     pub fn get_by(&mut self, now: Time) {
+        let coped = if now > self.updated {
+            now.since(self.updated)
+        } else {
+            Duration::ZERO
+        };
         self.updated = now;
         self.needs = Needs::rested();
         for need in Need::ALL {
             self.needs.set(need, COPING);
         }
-        self.health
-            .respond_to(self.needs.vital_pressure(), Duration::ZERO);
+        self.health.respond_to(self.needs.vital_pressure(), coped);
+    }
+
+    /// A year of not having enough, because the place could not grow it.
+    ///
+    /// The positive check, and the only thing in the model that stops a population. Every
+    /// other limit was on where people are born or how crowded a place feels; none of them
+    /// bounds the total, because a world that is uniformly poorer still has an ordinary
+    /// place to be compared against. What bounds it is that land does not yield to wanting
+    /// more of it — past what the ground carries, another pair of hands makes the shortfall
+    /// worse, and people go hungry no matter what anybody decides.
+    ///
+    /// `want` is how far short of feeding one person for a year the place fell, per head,
+    /// after trade. It raises hunger and thirst above what coping can reach — that is the
+    /// whole of the mechanism, and everything downstream is already built: pressure above
+    /// what the body tolerates costs vitality, lost vitality raises frailty and so the
+    /// hazard of dying, and drops a woman below the fertility gate. Malthus's two checks
+    /// out of one number.
+    ///
+    /// Applied once a year to everybody, watched or not, which is deliberate: a hunger that
+    /// only reached the people somebody was looking at would be exactly the bug this
+    /// project has just spent a long time removing from the other direction.
+    pub fn go_hungry(&mut self, want: f32, now: Time) {
+        if !self.is_alive() || want <= 0.0 {
+            return;
+        }
+        // A ceiling on condition, not a year of the needs cycle run at once.
+        //
+        // Routing chronic hunger through `Needs` and `Health::respond_to` does not work,
+        // and the reason is worth writing down because it is the shape that defeated four
+        // earlier attempts at this. That machinery is built for the fine tier, where needs
+        // swing over hours and health answers per *day*. Raising hunger and thirst by a
+        // want of 0.4 puts vital pressure at 0.30 against a tolerance of 0.45 — so the body
+        // *recovers*, and a place forty per cent short of feeding itself is no worse off
+        // than one with food to spare. Push want a little higher and pressure crosses the
+        // tolerance, where a year at three tenths a day of decline kills everybody outright.
+        // Nothing, and then a massacre, with no useful ground between.
+        //
+        // What is true instead is simply that a body cannot be in better condition than its
+        // food allows. `want` is measured in what one person needs for a year, so it maps
+        // straight onto how far below hale that ceiling sits — and everything downstream
+        // already responds: frailty rises with the square of the deficit, conception scales
+        // with vitality, and `is_fertile` stops at a half.
+        //
+        // That last gate is what actually holds a population, and it should be: Malthus's
+        // preventive check is the one that operates in ordinary times. The positive check
+        // is here too, through frailty, but it is weak for the young because the mortality
+        // schedule's baseline hazard is small — which is also true of real famine, where
+        // the collapse in births outruns the rise in deaths.
+        // A standing ceiling rather than a yearly knock. Applied as a one-off it lasted
+        // about a fortnight — the fine tier's recovery runs at five hundredths a day — so
+        // chronic hunger only bit because the mortality and conception rolls happened to
+        // follow it in the same call. That is not a mechanism, it is a coincidence of
+        // ordering, and it would have broken the moment anything moved.
+        // Total failure is fatal on its own terms, and not as a consequence of whatever
+        // `HUNGER_COSTS` happens to be. A want of one means the shortfall is a whole
+        // person's food for a whole year — the ground grew nothing and no neighbour sold
+        // them anything — and nobody survives that at any coefficient. Below it the ceiling
+        // is the gradual thing the coefficient describes.
+        let ceiling = if want >= 1.0 {
+            0.0
+        } else {
+            (1.0 - want * HUNGER_COSTS).max(0.0)
+        };
+        self.health.feed(ceiling);
+        if self.health.is_dead() {
+            self.die(now, Cause::Deprivation);
+        }
+    }
+
+    /// A place that feeds its people takes the ceiling off again.
+    pub fn eat_well(&mut self) {
+        self.health.feed(1.0);
     }
 
     /// Force a need, for tests and for events that act on a person from outside.
@@ -661,7 +893,6 @@ pub fn found(
         architecture,
         random_name(rng),
         Sex::sample(rng),
-        pick(rng, &Country::ALL),
         genome,
         Ancestry::founder(seed),
         None,
@@ -706,7 +937,6 @@ pub fn born_to(
         architecture,
         name,
         Sex::sample(rng),
-        mother.country,
         genome,
         ancestry,
         Some((mother_id, father_id)),
@@ -732,6 +962,65 @@ fn stature_of(architecture: &Architecture, genome: &Genome) -> Height {
 /// Measured from finely simulated people rather than chosen: their needs oscillate as
 /// they eat and sleep, and this is roughly where that cycle averages out.
 const COPING: f32 = 0.25;
+
+/// How far below hale a year of going short holds a body, per unit of shortfall.
+///
+/// `want` is in units of what one person needs for a year, so a want of a quarter means a
+/// quarter of a diet missing. At this rate that caps vitality at 0.78; the fertility gate at
+/// `is_fertile` closes at a want of about 0.56, and nobody survives a want past 1.0.
+///
+/// Where that gate sits is the whole of the calibration, because it is a **cliff**: below it
+/// hunger only slows births, above it they stop dead. It was 1.4, which put the gate at a
+/// want of 0.36 — reachable by any world founded on ground that was already full. Such a
+/// world did not level off, it fell over: four hundred founders came to 86 souls in a
+/// hundred and fifty years, and 65 on another seed, while the same worlds founded with
+/// eighty grew to 373. Starting crowded was fatal, which is the same "nothing, then a
+/// massacre" shape this mechanism exists to avoid, reintroduced by me one layer up.
+///
+/// At 0.9 the gate needs a want of 0.56 — real famine rather than a lean generation — and
+/// those worlds come to 521 and 260 instead. Growth is still braked by about a quarter
+/// against no hunger at all. §21.2 has the sweep.
+const HUNGER_COSTS: f32 = 0.9;
+
+/// What share of a good year somebody puts by rather than consuming.
+///
+/// Small. This is a world at subsistence — §27.9 counts three hundred farmers to a dozen
+/// smiths — so most of what anybody makes is eaten within the year. A tenth is what a
+/// household in a good year can hold back, and over a life of good years it comes to
+/// something worth leaving.
+const SAVED: f32 = 0.10;
+
+/// What an estate is worth against standing, when a place is deciding whether to admit you.
+///
+/// Under one, because the two are not the same kind of thing. Standing is a demonstrated
+/// capacity to keep a household going and renews itself as long as somebody works; an estate
+/// is a stock, spendable once, and a neighbourhood weighing whether a family can sustain
+/// itself here should say so.
+const WORTH_AT_A_DOOR: f32 = 0.6;
+
+/// How fast somebody's picture of local practice moves towards what they see, per year at
+/// the age it is learned fastest.
+///
+/// A half-life of about three adolescent years, and about fourteen adult ones. Fast enough
+/// that a child raised somewhere holds that place's habits by the time they are grown; slow
+/// enough that somebody who arrives at forty still does not.
+const NORM_LEARNING: f32 = 0.20;
+
+/// How readily somebody takes on local practice at this age, against the fastest.
+///
+/// The same windows as `developmental_weight` and deliberately not the same function: that
+/// one falls to *nothing* at maturity, because where you were raised must stop being
+/// rewritten by where you live. Learning what the neighbours do is not that — it goes on all
+/// your life, just far more slowly, which is what makes partial assimilation a thing that
+/// happens rather than an all-or-nothing switch.
+fn norm_weight(age_years: f64) -> f32 {
+    match age_years {
+        a if a < 5.0 => 1.2,
+        a if a < 13.0 => 1.0,
+        a if a < 20.0 => 1.2,
+        _ => 0.25,
+    }
+}
 
 /// How much a year at this age shapes someone.
 ///
@@ -827,6 +1116,140 @@ mod tests {
         p.born = Time::ORIGIN;
         p.updated = Time::ORIGIN + Duration::from_years(30);
         p
+    }
+
+    #[test]
+    fn a_great_thing_outlasts_a_small_one_without_being_marked_as_great() {
+        use crate::memory::{Held, What};
+        // The whole argument for a hyperbolic curve rather than a half-life. Under exponential
+        // decay both of these vanish on the same timescale and only the moment differs, so
+        // getting "still faintly there decades later" and "gone by spring" out of one rule
+        // needs the long tail. Nothing here is flagged permanent; permanence is a consequence.
+        let mut held = Held::default();
+        let start = Time::ORIGIN + Duration::from_years(20);
+        held.keep(What::Died, None, start);
+        held.keep(What::Moved, None, start);
+
+        let after = |years: u64| start + Duration::from_years(years);
+        let of = |held: &Held, what: What, years: u64| held.holds_of(what, after(years));
+
+        assert!(of(&held, What::Died, 0) > of(&held, What::Moved, 0), "a death lands harder");
+        assert!(
+            of(&held, What::Moved, 30) < 0.06,
+            "a move should be all but gone in thirty years: {:.3}",
+            of(&held, What::Moved, 30)
+        );
+        assert!(
+            of(&held, What::Died, 30) > 0.15,
+            "a death should still be there in thirty years: {:.3}",
+            of(&held, What::Died, 30)
+        );
+        // And still going down rather than parked at a floor.
+        assert!(of(&held, What::Died, 60) < of(&held, What::Died, 30));
+    }
+
+    #[test]
+    fn nearness_keeps_a_thing_sharp_and_distance_lets_it_go() {
+        use crate::memory::{Held, What};
+        // Rehearsal, which is why a grudge against the brother across the square stays live
+        // and one against somebody who moved away softens. Two identical injuries; one of the
+        // two people is still around.
+        let start = Time::ORIGIN + Duration::from_years(20);
+        let mut who: Arena<Person> = Arena::new();
+        let near = who.insert(somebody());
+        let far = who.insert(somebody());
+        let (mut a, mut b) = (Held::default(), Held::default());
+        a.keep(What::Robbed, Some(near), start);
+        b.keep(What::Robbed, Some(far), start);
+
+        // Ten years in which one of them keeps being met.
+        for year in 1..=10 {
+            a.rehearse(near, start + Duration::from_years(year));
+        }
+        let now = start + Duration::from_years(10);
+        let (sharp, faded) = (
+            a.holds_about(near, now),
+            b.holds_about(far, now),
+        );
+        assert!(
+            sharp > faded * 1.3,
+            "seeing somebody should keep it sharper: {sharp:.3} against {faded:.3}"
+        );
+    }
+
+    #[test]
+    fn a_crowded_life_forgets_more_than_a_quiet_one() {
+        use crate::memory::{Held, What, HELD};
+        // The bound is what makes forgetting competitive rather than merely slow.
+        let mut held = Held::default();
+        let start = Time::ORIGIN + Duration::from_years(20);
+        held.keep(What::TakenUp, None, start);
+        for year in 0..(HELD as u64 * 2) {
+            // A different person each time, so these do not merge into one deepened memory.
+            held.keep(What::Moved, None, start + Duration::from_years(year));
+        }
+        assert!(held.len() <= HELD, "held {} of a bound of {HELD}", held.len());
+        let now = start + Duration::from_years(HELD as u64 * 2);
+        assert!(
+            held.holds_of(What::TakenUp, now) > 0.0,
+            "the one thing that mattered should survive a crowd of small ones"
+        );
+    }
+
+    #[test]
+    fn what_is_normal_is_learned_and_not_breathed_in() {
+        // §17.2's second gap. The ambient version read local practice straight off the
+        // place, so a newcomer was as steeped in it as somebody born there and a migrant
+        // assimilated completely the day they arrived. Three things follow from carrying it
+        // per person, and this asserts all three because any one alone could be had by
+        // accident.
+        let here = [0.9; Deed::COUNT];
+        let work = Deed::Work as usize;
+
+        // One: it is learned at all, and a childhood among these people leaves their habits.
+        let mut child = somebody();
+        for year in 0..18 {
+            child.learn_norms(&here, year as f64, 1.0);
+        }
+        assert!(
+            child.norms()[work] > 0.8,
+            "a childhood here should leave its habits: {:.2}",
+            child.norms()[work]
+        );
+
+        // Two: adolescence is when it happens fastest. The same three years, once inside the
+        // window and once in middle age.
+        let (mut young, mut old) = (somebody(), somebody());
+        for _ in 0..3 {
+            young.learn_norms(&here, 15.0, 1.0);
+            old.learn_norms(&here, 45.0, 1.0);
+        }
+        assert!(
+            young.norms()[work] > old.norms()[work] + 0.15,
+            "the young should pick it up faster: {:.2} against {:.2}",
+            young.norms()[work],
+            old.norms()[work]
+        );
+
+        // Three: a migrant brings the old country and only partly assimilates. Twenty years
+        // is most of a working life and it is still not enough to finish the job.
+        let mut migrant = somebody();
+        for year in 0..18 {
+            migrant.learn_norms(&[0.1; Deed::COUNT], year as f64, 1.0);
+        }
+        let brought = migrant.norms()[work];
+        for _ in 0..20 {
+            migrant.learn_norms(&here, 40.0, 1.0);
+        }
+        let now = migrant.norms()[work];
+        assert!(
+            now > brought + 0.1,
+            "twenty years somewhere should move somebody: {brought:.2} to {now:.2}"
+        );
+        assert!(
+            now < 0.8,
+            "and should not finish the job: {now:.2} against the local 0.90"
+        );
     }
 
     #[test]
@@ -1191,5 +1614,84 @@ mod tests {
             outlooks.len() >= 2,
             "a population should not share one outlook"
         );
+    }
+}
+
+#[cfg(test)]
+mod hunger {
+    use super::*;
+
+    fn somebody() -> Person {
+        let mut arena: sim_core::Arena<planet::Planet> = sim_core::Arena::new();
+        let home = arena.insert(planet::Planet::earth());
+        let mut rng =
+            sim_core::WorldSeed::from_u128(0x40).stream(sim_core::Domain::Genetics, 0, 0);
+        found(
+            genetics::standard_architecture(),
+            &FounderPool::uniform(),
+            &mut rng,
+            home,
+            Time::ORIGIN,
+            0.0,
+        )
+    }
+
+    #[test]
+    fn a_body_cannot_be_in_better_condition_than_its_food_allows() {
+        let mut person = somebody();
+        assert_eq!(person.health().vitality, 1.0);
+
+        person.go_hungry(0.25, Time::ORIGIN);
+        assert!(
+            (person.health().vitality - (1.0 - 0.25 * HUNGER_COSTS)).abs() < 1e-6,
+            "a quarter short left them at {}",
+            person.health().vitality,
+        );
+    }
+
+    #[test]
+    fn the_ceiling_holds_against_recovery() {
+        // The bug this shape exists to prevent. Recovery runs at five hundredths a day, so
+        // a ceiling applied once and then forgotten is gone inside a fortnight — chronic
+        // hunger would only bite in the instant it was applied.
+        let mut person = somebody();
+        person.go_hungry(0.3, Time::ORIGIN);
+        let hungry = person.health().vitality;
+
+        person.get_by(Time::ORIGIN + Duration::from_years(1));
+        assert!(
+            person.health().vitality <= hungry + 1e-6,
+            "a year of coping mended somebody nobody was feeding: {hungry} then {}",
+            person.health().vitality,
+        );
+    }
+
+    #[test]
+    fn a_famine_that_ends_lets_people_mend() {
+        let mut person = somebody();
+        person.go_hungry(0.4, Time::ORIGIN);
+        let starved = person.health().vitality;
+
+        person.eat_well();
+        person.get_by(Time::ORIGIN + Duration::from_years(1));
+        assert!(
+            person.health().vitality > starved,
+            "the land fed them again and they stayed at {starved}",
+        );
+    }
+
+    #[test]
+    fn going_short_of_everything_is_fatal() {
+        let mut person = somebody();
+        person.go_hungry(1.0, Time::ORIGIN);
+        assert!(!person.is_alive());
+        assert_eq!(person.death().map(|(_, c)| c), Some(Cause::Deprivation));
+    }
+
+    #[test]
+    fn a_place_that_feeds_its_people_costs_them_nothing() {
+        let mut person = somebody();
+        person.go_hungry(0.0, Time::ORIGIN);
+        assert_eq!(person.health().vitality, 1.0);
     }
 }

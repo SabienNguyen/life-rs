@@ -17,6 +17,8 @@ mod render;
 const VIEWER: &str = include_str!("viewer.html");
 /// The deep-time page, with a placeholder where the planet goes.
 const GLOBE: &str = include_str!("globe.html");
+/// The atlas: a globe you can turn, and four steps down from it to one person.
+const ATLAS: &str = include_str!("atlas.html");
 
 const USAGE: &str = "\
 life-rs — run a world and watch it
@@ -35,6 +37,8 @@ options:
   --detail <n>     how many people to simulate finely (default: 400)
   --json           write the whole world out as JSON
   --html           write a self-contained page you can open in a browser
+  --atlas          write a page with a globe you can turn and click down
+                   through — world, region, settlement, person
   --globe <myr>    run the solid planet for this many megayears instead, and
                    write a page you can scrub through
   --ages <myr>     run a *populated* world for this many megayears: the planet
@@ -57,12 +61,31 @@ struct Options {
     detail: Option<usize>,
     json: bool,
     html: bool,
+    atlas: bool,
     globe: Option<f64>,
     ages: Option<f64>,
     grid: u8,
     save: Option<String>,
     load: Option<String>,
     quiet: bool,
+}
+
+impl Options {
+    /// The least important thing this run has any way of showing anybody.
+    ///
+    /// `--min` is the direct answer where it is given. Otherwise a silent run that wants
+    /// no dossier and writes no file will never surface a routine act however many it
+    /// keeps, so it keeps none — which is the same judgement `--min` makes, read off the
+    /// flags that are already there rather than asked for again.
+    fn floor(&self) -> Salience {
+        let anybody_reading =
+            !self.quiet || self.dossier || self.json || self.html || self.atlas;
+        if anybody_reading {
+            self.min_salience
+        } else {
+            self.min_salience.max(Salience::Notable)
+        }
+    }
 }
 
 impl Default for Options {
@@ -78,6 +101,7 @@ impl Default for Options {
             detail: None,
             json: false,
             html: false,
+            atlas: false,
             globe: None,
             ages: None,
             grid: 4,
@@ -145,7 +169,14 @@ fn main() -> ExitCode {
             // Don't record what won't be shown. A century of one person's every meal is
             // tens of millions of records; asking to see only the pivotal moments should
             // also mean not paying to store the rest.
-            world.record_only(options.min_salience);
+            //
+            // And a run that has been told to be quiet, and asked for no life story and no
+            // file, has no reader for the small stuff at all. Recording it anyway costs a
+            // sixth of the running time and a gigabyte of memory to produce twenty-six
+            // million records that are dropped on the floor when the process exits. The
+            // salience floor already exists to say what a run does not care about; this is
+            // reading what the rest of the flags have already said.
+            world.record_only(options.floor());
             if let Some(budget) = options.detail {
                 world.set_detail_budget(budget);
             }
@@ -157,7 +188,7 @@ fn main() -> ExitCode {
     // The JSON path walks the run a year at a time so the viewer has a series to plot;
     // otherwise it is one jump to the horizon.
     let mut series = Vec::new();
-    if options.json || options.html {
+    if options.json || options.html || options.atlas {
         let years = options.span.as_years().ceil() as u64;
         for year in 0..=years {
             if year > 0 {
@@ -167,11 +198,23 @@ fn main() -> ExitCode {
                 year,
                 living: world.living(),
                 affluence: world.places.iter().map(|(_, p)| p.env.affluence).collect(),
+                practised: world
+                    .places
+                    .ids()
+                    .map(|id| world.technique_of(id).level())
+                    .fold(1.0f32, f32::max),
+                knowledge: world
+                    .places
+                    .ids()
+                    .map(|id| world.technique_of(id).reach_of_knowledge())
+                    .fold(1.0f32, f32::max),
             });
         }
         let balance = observer::measure(&world);
         let data = export::snapshot(&world, &series, &balance);
-        if options.html {
+        if options.atlas {
+            println!("{}", ATLAS.replace("__WORLD_DATA__", &data));
+        } else if options.html {
             // The viewer is a template with one hole in it, filled at run time. Keeping
             // it a template rather than a written-out file means any seed can produce
             // its own page.
@@ -222,6 +265,12 @@ fn main() -> ExitCode {
     if world.places.len() > 1 {
         println!("── neighbourhoods ──");
         for line in render::neighbourhoods(&world) {
+            println!("{line}");
+        }
+        println!();
+
+        println!("── peoples and countries ──");
+        for line in render::peoples(&world) {
             println!("{line}");
         }
         println!();
@@ -496,6 +545,7 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Option<Options>, Str
             "--balance" => options.balance = true,
             "--json" => options.json = true,
             "--html" => options.html = true,
+            "--atlas" => options.atlas = true,
             "--save" => options.save = Some(value()?),
             "--load" => options.load = Some(value()?),
             "--ages" => {
@@ -636,6 +686,24 @@ mod tests {
             "the world is substituted in exactly once"
         );
         assert!(VIEWER.contains("<title>"), "a page needs a name");
+        // The atlas is the same contract: one hole for the world, a name, and nothing
+        // fetched from anywhere. A page that reaches for a font or a script is a page
+        // that shows a broken world to anybody offline.
+        assert_eq!(
+            ATLAS.matches("__WORLD_DATA__").count(),
+            1,
+            "the atlas takes the world in exactly one place"
+        );
+        assert!(ATLAS.contains("<title>"), "the atlas needs a name");
+        assert!(
+            !ATLAS.contains("http://") && !ATLAS.contains("https://"),
+            "the atlas must stand on its own with nothing fetched"
+        );
+        // Every scene the rail can reach has to exist in the markup, or a click lands
+        // on nothing.
+        for scene in ["scene-world", "scene-region", "scene-place", "scene-person"] {
+            assert!(ATLAS.contains(scene), "the atlas is missing {scene}");
+        }
         assert!(
             !VIEWER.contains("http://") && !VIEWER.contains("https://"),
             "the page must be self-contained — no external fetches"
@@ -668,5 +736,85 @@ mod tests {
     fn salience_levels_parse_case_insensitively() {
         assert_eq!(parse_salience("Pivotal").unwrap(), Salience::Pivotal);
         assert_eq!(parse_salience("EPOCHAL").unwrap(), Salience::Epochal);
+    }
+
+    /// The atlas's own script has to close everything it opens.
+    ///
+    /// It is a string compiled into the binary, so nothing type-checks it and nothing runs it:
+    /// a stray brace makes a page that loads, shows an empty frame, and reports a syntax error
+    /// to a console nobody is reading. That happened — a scripted edit duplicated a function
+    /// header, `function ranks(who) {function ranks(who) {`, and **the whole suite went on
+    /// passing at 714 tests** while every atlas generated after it was a page that never ran.
+    /// It was found by trying to take a screenshot.
+    ///
+    /// This is not a parser and does not pretend to be. It walks the script tracking string
+    /// literals, template literals and comments — which is the whole difficulty, since a brace
+    /// inside a string is not a brace — and asserts that the delimiters balance. That is
+    /// enough to catch the class of thing an editing script does to a file it cannot read.
+    #[test]
+    fn the_atlas_closes_everything_it_opens() {
+        let start = ATLAS.find("<script>").expect("the atlas has a script") + "<script>".len();
+        let end = ATLAS.rfind("</script>").expect("which is closed");
+        let script: Vec<char> = ATLAS[start..end].chars().collect();
+
+        #[derive(PartialEq)]
+        enum In {
+            Code,
+            Line,
+            Block,
+            Str(char),
+        }
+        let (mut mode, mut depth, mut parens) = (In::Code, 0i32, 0i32);
+        let mut at = 0;
+        while at < script.len() {
+            let c = script[at];
+            let next = script.get(at + 1).copied().unwrap_or(' ');
+            match mode {
+                In::Code => match (c, next) {
+                    ('/', '/') => {
+                        mode = In::Line;
+                        at += 2;
+                        continue;
+                    }
+                    ('/', '*') => {
+                        mode = In::Block;
+                        at += 2;
+                        continue;
+                    }
+                    ('"' | '\'' | '`', _) => mode = In::Str(c),
+                    ('{', _) => depth += 1,
+                    ('}', _) => depth -= 1,
+                    ('(', _) => parens += 1,
+                    (')', _) => parens -= 1,
+                    _ => {}
+                },
+                In::Line => {
+                    if c == '\n' {
+                        mode = In::Code;
+                    }
+                }
+                In::Block => {
+                    if c == '*' && next == '/' {
+                        mode = In::Code;
+                        at += 2;
+                        continue;
+                    }
+                }
+                In::Str(quote) => {
+                    if c == '\\' {
+                        at += 2;
+                        continue;
+                    }
+                    if c == quote {
+                        mode = In::Code;
+                    }
+                }
+            }
+            assert!(depth >= 0, "the atlas closes a brace it never opened");
+            at += 1;
+        }
+        assert_eq!(depth, 0, "the atlas leaves {depth} brace(s) open");
+        assert_eq!(parens, 0, "the atlas leaves {parens} bracket(s) open");
+        assert!(mode == In::Code, "the atlas ends inside a string or a comment");
     }
 }

@@ -86,11 +86,29 @@ impl LifeStage {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Health {
     pub vitality: f32,
+    /// The best condition this body's food allows it to be in.
+    ///
+    /// One for anybody who has enough, which is the usual case. It has to be a standing
+    /// constraint rather than something applied now and then: recovery runs at five
+    /// hundredths a day, so a ceiling imposed once a year is undone inside a fortnight and
+    /// chronic hunger becomes a pinprick that happens to land on the same day as the
+    /// mortality roll. A body cannot mend past what it is being fed, every day, whether or
+    /// not anybody is looking.
+    pub fed: f32,
 }
 
 impl Health {
     pub fn hale() -> Health {
-        Health { vitality: 1.0 }
+        Health {
+            vitality: 1.0,
+            fed: 1.0,
+        }
+    }
+
+    /// Cap this body at what its food allows, and bring it down to the cap if it is above.
+    pub fn feed(&mut self, ceiling: f32) {
+        self.fed = ceiling.clamp(0.0, 1.0);
+        self.vitality = self.vitality.min(self.fed);
     }
 
     /// Unmet vital needs wear a body down; met ones let it recover, slowly.
@@ -120,7 +138,8 @@ impl Health {
         } else {
             (TOLERABLE - vital_pressure) * RECOVERY_PER_DAY * days
         };
-        self.vitality = (self.vitality + delta).clamp(0.0, 1.0);
+        // Never past what the food allows — see `fed`.
+        self.vitality = (self.vitality + delta).clamp(0.0, self.fed.clamp(0.0, 1.0));
     }
 
     /// How much this condition multiplies the risk of dying.
@@ -318,10 +337,40 @@ mod tests {
     }
 
     #[test]
+    fn a_body_never_mends_past_what_it_is_fed() {
+        // The ceiling has to bind every time health moves, not once when it is set.
+        // Recovery runs at five hundredths a day, so anything weaker is undone in a
+        // fortnight — and chronic hunger becomes a pinprick rather than a condition.
+        let mut starved = Health::hale();
+        starved.feed(0.4);
+        assert_eq!(starved.vitality, 0.4, "feeding a ceiling did not bring them down to it");
+
+        // A year of nothing to complain about, and still no better.
+        starved.respond_to(0.0, Duration::from_days(365));
+        assert!(
+            starved.vitality <= 0.4 + 1e-6,
+            "a year of rest mended somebody nobody was feeding: {}",
+            starved.vitality,
+        );
+
+        // Fed again, they mend — and at the ordinary pace, not instantly.
+        starved.feed(1.0);
+        starved.respond_to(0.0, Duration::from_days(1));
+        assert!(starved.vitality > 0.4);
+        assert!(starved.vitality < 1.0, "one day undid a famine");
+    }
+
+    #[test]
     fn frailty_raises_risk_without_being_linear() {
         let hale = Health::hale();
-        let ailing = Health { vitality: 0.5 };
-        let dying = Health { vitality: 0.1 };
+        let ailing = Health {
+            vitality: 0.5,
+            fed: 1.0,
+        };
+        let dying = Health {
+            vitality: 0.1,
+            fed: 1.0,
+        };
 
         assert_eq!(hale.frailty(), 1.0);
         assert!(ailing.frailty() > hale.frailty());
