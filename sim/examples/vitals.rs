@@ -98,6 +98,8 @@ fn main() {
     // And `WITNESS=0` for §40, separately: whether people do things to each other and whether
     // anybody standing there notices are two claims, and §31.2's table wants a row for each.
     let seen = std::env::var("WITNESS").map(|v| v != "0").unwrap_or(true);
+    // And `CHANGE=0` for §41 — whether a life changes who somebody is.
+    let changing = std::env::var("CHANGE").map(|v| v != "0").unwrap_or(true);
 
     let (mut moves, mut back) = (0usize, 0usize);
     let (mut biggest, mut empty, mut spread, mut short) = (0.0, 0.0, 0.0, 0.0);
@@ -116,6 +118,10 @@ fn main() {
     // changed nothing, which is the same sentence as "it never fires" and means something
     // else entirely.
     let mut witnessed = 0usize;
+    // How far a life has moved people from the temperaments they grew up with (§41). Here
+    // before the mechanism, for §31.2's reason.
+    let (mut weathered, mut weathered_of) = (0.0f32, 0usize);
+    let mut weathered_most = 0.0f32;
     // Per world as well as pooled, so the **noise floor of these numbers is computable from
     // the same run that reports them**. This is the question that has come up over and over:
     // a change moves `spread` by four hundredths and there is no way to know whether that is
@@ -135,6 +141,7 @@ fn main() {
         world.set_detail_budget(100_000);
         world.acts_are_possible = acts;
         world.witnesses_notice = seen;
+        world.people_change = changing;
         world.run_for(Duration::from_years(years));
         living += world.living();
 
@@ -265,6 +272,15 @@ fn main() {
             if !person.is_alive() || !person.has_matured() {
                 continue;
             }
+            // How far this life has carried them from who they finished growing up as.
+            let moved = {
+                let w = person.weathering();
+                (w.openness.abs() + w.extraversion.abs() + w.agreeableness.abs()
+                    + w.neuroticism.abs()) / 4.0
+            };
+            weathered += moved;
+            weathered_of += 1;
+            weathered_most = weathered_most.max(moved);
             if let Some((dream, _)) = world
                 .what_they_have_come_to(id)
                 .and_then(|come_to| person::dreams::of(person, &come_to, world.now()))
@@ -327,6 +343,11 @@ fn main() {
     );
     println!("  withheld   {withheld:>6}   times somebody turned away where that is not done");
     println!("  witnessed  {witnessed:>6}   times somebody who was not part of it saw (§40)");
+    println!(
+        "  weathered  {:>6.3}   how far a life moves a temperament, per trait; worst {:.2} (§41)",
+        weathered / weathered_of.max(1) as f32,
+        weathered_most
+    );
     println!(
         "\n  wants      {}",
         person::dreams::Dream::ALL

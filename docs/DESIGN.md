@@ -4860,3 +4860,78 @@ session as though a failure meant something. §38.2 guessed this from six readin
 it. The band itself is fine — it caught a genuine scale error in §35.9.1 where the cause was found
 and the number came back. What is broken is the sample size, and now the size of the problem is
 known rather than argued about.
+
+## 41. What a life does to somebody
+
+Personality here is fixed at maturity. `origins` splits each of the five factors into genes,
+household and chance, `mature()` seals it, and from twenty onward **nobody in this world is ever
+changed by anything that happens to them**. A man robbed at thirty has precisely the temperament
+at sixty that he would have had otherwise. His memory changes; he does not.
+
+That is the largest single reason a soul here reads as a set of dispositions rather than a life,
+and the material to fix it was already sitting there doing nothing: §34's memory is exactly *what
+happened to somebody*, decaying on a curve, and it drove nothing but a few appetites.
+
+### 41.1 Beside the origins, not inside them
+
+`Person::weathering` is a second `Personality`, kept alongside `origins` rather than folded into
+it, and the two answer different questions:
+
+- `origins.total()` — the person who finished growing up.
+- `personality` — the person now.
+- `weathering` — what the years did, which is the difference.
+
+Folding it in as a fourth channel of `Expression` would have made *"why is she like that"* and
+*"what has happened to her"* the same question. §15's entire apparatus rests on the first being
+answerable about a fixed endowment, and the counterfactual it supports — "the same person raised
+somewhere else" — is meaningless once the endowment moves.
+
+### 41.2 What moves it, and what does not
+
+It reads what somebody carries and **nothing else**: not their standing, not their situation, not
+what anybody thinks of them. That restriction is the design rather than an economy. A person is
+changed by what happened to them, and what happened to them is exactly what a memory is; a version
+keyed on circumstance would make temperament a lagging indicator of wealth.
+
+Five claims, one line each:
+
+| | |
+|---|---|
+| being wronged **hardens** you | neuroticism up, agreeableness down |
+| being carried **softens** you | somebody fed you through a bad year |
+| being taken up **opens** you | §25's largest fact is also somebody deciding you were worth something |
+| burying people **wears** you | the heaviest memory in the model |
+| a wrong you did yourself | costs agreeableness — conscience in a temperament, not only in a restraint |
+
+**Conscientiousness is deliberately untouched.** It is the trait attainment runs on, and letting a
+life move it would turn §15's decomposition into a measure of luck wearing the name of a
+temperament. What a life does to somebody here shows up in how they are with people.
+
+### 41.3 It is not a ratchet
+
+The step is a twelfth of the way to a target each year, and the target is computed from memory
+*as it stands now*. So a bad decade moves somebody and then, as §34's curve lets the memory go,
+carries them back toward who they were. **What the forgetting forgets, this un-learns.** Nothing
+anywhere resets it; the same one line does both.
+
+Measured over twelve worlds: a life moves each trait by **0.095** on average and the most
+weathered person alive by **0.35** — a tenth of a standard deviation for the ordinary life and a
+third for the hardest. That is the right order. Half a standard deviation would have made
+temperament a second name for biography; a hundredth would have been a mechanism that fires and
+does nothing.
+
+### 41.4 What it costs
+
+Twelve worlds, against the same build with `CHANGE=0`, every difference beside its standard error:
+
+| | before | with | |
+|---|---|---|---|
+| living | 2941 | 2997 | — |
+| churn | 12% | 9% | 1.3 σ |
+| biggest | 0.56 | 0.54 | 0.4 σ |
+| empty | 0.33 | 0.35 | 0.4 σ |
+| spread | 0.14 | 0.13 | 0.5 σ |
+
+Nothing over one and a half standard errors. It is the second mechanism in a row to come out free
+at the aggregate — which is what §40.3's arithmetic is *for*: before it, "churn went from 12% to
+9%" would have been three paragraphs of speculation about why, and it is worth nothing at all.

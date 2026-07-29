@@ -789,6 +789,12 @@ pub struct World {
     /// uses cannot tell "switched off" from "never fired", which is §31.2's whole lesson.
     /// Six words of counter can.
     pub acted: [u32; person::acts::Toward::COUNT],
+    /// Whether a life changes who somebody is — see `Person::weather`.
+    ///
+    /// Its own switch, because "people do things to each other", "a society finds out" and
+    /// "people are changed by it" are three separate claims and §31.2's table wants a row for
+    /// each.
+    pub people_change: bool,
     /// Whether anybody standing there notices what is done in front of them — see
     /// `let_them_see`.
     ///
@@ -1135,6 +1141,7 @@ impl World {
             shouldered: std::collections::BTreeMap::new(),
             company: Vec::new(),
             acts_are_possible: true,
+            people_change: true,
             witnesses_notice: true,
             witnessed: 0,
             acted: [0; person::acts::Toward::COUNT],
@@ -1772,6 +1779,14 @@ impl World {
                 // anybody has anything to spare.
                 if settling_up {
                     self.settle_debts(id);
+                }
+                // What the year did to who they are. Before the year's decisions rather than
+                // after, so somebody hardened by last winter meets this spring as the person
+                // that made them.
+                if self.people_change
+                    && let Some(person) = self.people.get_mut(id)
+                {
+                    person.weather(at);
                 }
                 self.roll_fortune(at, id);
                 self.seek_patron(at, id);
