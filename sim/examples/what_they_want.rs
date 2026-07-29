@@ -10,8 +10,11 @@
 //!
 //! - **How many people want anything at all.** Most should not. A world in which everybody is
 //!   driven is one where being driven means nothing.
-//! - **Whether the six are all reachable.** A longing nobody ever has is a longing that is not
-//!   there, whatever the source says.
+//! - **Whether the seven are all reachable.** A longing nobody ever has is a longing that is
+//!   not there, whatever the source says. And — added after §36.6 — whether each is on the
+//!   *same scale* as the others, which is a separate question and the one that matters: a
+//!   longing can be common, win sometimes, and still never clear the floor that lets it change
+//!   a decision.
 //! - **Whether the same person wants different things at different ages** — because the whole
 //!   argument for a reading over a field is that it changes when a life does, and if the
 //!   distribution is the same at thirty and at sixty then nothing has been gained over
@@ -37,6 +40,10 @@ fn main() {
     let mut by_age = [[0usize; Dream::COUNT]; 3];
     let (mut adults, mut wanting) = (0usize, 0usize);
     let mut strongest: Vec<(f32, String, Dream, f64)> = Vec::new();
+    // How strongly each longing is felt across everybody, whether or not it is the one that
+    // wins — the check that they are on a common scale. See below.
+    let (mut reach, mut reached) = ([0.0f64; Dream::COUNT], [0.0f32; Dream::COUNT]);
+    let mut clears = [0usize; Dream::COUNT];
 
     for seed in SEEDS {
         let mut world = World::genesis(WorldSeed::from_u128(seed), 120);
@@ -61,6 +68,19 @@ fn main() {
             } else {
                 2
             };
+            // Every longing's strength for this person, not only the winning one. Counting
+            // wins alone hid §36.6's failure twice over: a longing can win for the people who
+            // have no other longing at all, and so read as present in the table above while
+            // doing nothing anywhere a decision is made. A number is on the same scale as its
+            // siblings or it is not, and only the strengths side by side can say which.
+            let all = dreams::longings(person, &at, now);
+            for (which, strength) in all.iter().enumerate() {
+                reach[which] += *strength as f64;
+                reached[which] = reached[which].max(*strength);
+                if *strength > dreams::WORTH_WANTING {
+                    clears[which] += 1;
+                }
+            }
             if let Some((dream, how_much)) = dreams::of(person, &at, now) {
                 wanting += 1;
                 held[dream as usize] += 1;
@@ -83,6 +103,40 @@ fn main() {
             100.0 * held[dream as usize] as f32 / wanting.max(1) as f32
         );
     }
+
+    // The most useful block here, and the one added last. Seven longings are only comparable
+    // if they are on one scale, and nothing about the code makes them so — each is written by
+    // hand and the arithmetic is different in every one.
+    //
+    // Read all three columns, and print all three for a reason §36.6 paid for. The mean says
+    // whether a longing is felt; the maximum and the floor-clearing share say whether it can
+    // ever *do* anything, which is a different question. An earlier version of this printed the
+    // mean alone, and the mean alone reported §36.6's envy as the second-healthiest longing of
+    // the seven while it had two errors inside it cancelling each other out — an inflated gap
+    // times a shape that could not reach its siblings' range. **A composite cannot validate its
+    // parts**, and one figure of merit per longing is a composite.
+    println!("\n  how strongly each is felt by everybody, won or not — the common-scale check:");
+    for dream in Dream::ALL {
+        println!(
+            "  {:<18} mean {:>6.3}   strongest anybody {:>6.3}   clears the floor for {:>5.1}% of adults",
+            dream.label(),
+            reach[dream as usize] / adults.max(1) as f64,
+            reached[dream as usize],
+            100.0 * clears[dream as usize] as f32 / adults.max(1) as f32
+        );
+    }
+
+    // And the one number that justified dropping winner-take-all (§36.6): how many longings
+    // clear the floor against how many were ever heard. Printed rather than worked out by hand
+    // from the percentages above, because a figure quoted in a document is a figure that goes
+    // stale the next time anybody touches the arithmetic.
+    let clearing: usize = clears.iter().sum();
+    println!(
+        "\n  {clearing} longings clear the floor across {adults} adults, and {wanting} were heard — \
+         {} discarded\n  for the sole reason that the same person wanted something else more \
+         (§36.6, on why all seven get a say)",
+        clearing.saturating_sub(wanting)
+    );
 
     println!("\n  and by age — the claim that a reading changes when a life does:");
     println!(

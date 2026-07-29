@@ -452,6 +452,14 @@ const WHAT_A_WITNESS_MAKES_OF_IT: f32 = 0.06;
 
 /// How much of an obligation has to go unmet before anybody counts it as a slight.
 const WITHHOLDING_NOTICED: f32 = 0.30;
+/// The gap in means at which somebody is half as envious as they could possibly be — §36.6.
+///
+/// **Measured rather than chosen.** Across three worlds of ninety years the gap between an
+/// adult and the best-off person they know has a median of 0.958, so this is one, and the median
+/// person therefore reads a half by construction. That is the only defensible way to pick it:
+/// the alternative is a number that feels right, and `means()` has no natural ceiling to
+/// measure a gap against — it is `standing + estate * WORTH_AT_A_DOOR` and runs to 1.93.
+const A_GAP_WORTH_MINDING: f32 = 1.0;
 /// How many neighbours somebody weighs up before deciding who to spend an evening with.
 ///
 /// Nobody surveys a town. This is what keeps the cost of a social life bounded by Dunbar
@@ -795,6 +803,25 @@ pub struct World {
     /// "people are changed by it" are three separate claims and §31.2's table wants a row for
     /// each.
     pub people_change: bool,
+    /// Whether anybody measures themselves against anybody in particular — see
+    /// `dreams::Dream::WhatTheyHave`.
+    ///
+    /// Its own switch, and this one earns it more than the others do. The person somebody
+    /// envies is by construction the best-off person they know, and robbery already covets
+    /// means — so a world where the envied get robbed far more than anybody else is exactly
+    /// what a world with **no envy at all** would also look like. The two are told apart by
+    /// switching this off and measuring the same rate, which is the only way the difference
+    /// between "envy aims" and "the rich are worth robbing" can be seen at all.
+    pub people_envy: bool,
+    /// Whether only the single strongest longing gets a say in what somebody does, which is
+    /// how it worked until §36.6.
+    ///
+    /// Here so that the *cost* of dropping winner-take-all stays measurable rather than
+    /// remembered. It is not a mechanism anybody argues for — it is the old behaviour, kept
+    /// switchable because the change to it moved giving and shunning by more than the noise
+    /// floor and a number that large should not live only in a document. Set it and the array
+    /// handed to the scorer keeps its maximum and zeroes the rest.
+    pub only_the_strongest_dream: bool,
     /// Whether anybody standing there notices what is done in front of them — see
     /// `let_them_see`.
     ///
@@ -811,6 +838,26 @@ pub struct World {
     /// and kept separately, because it is the one wrong in this world whose weight depends
     /// on where you are standing.
     pub withheld: u32,
+    /// Every evening anybody spent with anybody, and how many of those were spent with the
+    /// one person they envy — see `dreams::Dream::WhatTheyHave`.
+    ///
+    /// Four counters rather than one, because envy's claim is not *that people rob* — they
+    /// already did — but that robbery **lands on a particular person**. A tally of robberies
+    /// cannot tell a world where envy aims from a world where it only agitates, and those are
+    /// different claims about what a society is. What distinguishes them is a rate against a
+    /// rate: how often the envied are robbed, against how often everybody else is. §31.2 says
+    /// to add the line before ablating the mechanism, and this is the line.
+    pub occasions: u64,
+    pub met_the_envied: u64,
+    pub robbed_the_envied: u32,
+    /// And of those evenings, the ones where the envy was strong enough to say anything at
+    /// all — over `dreams::WORTH_WANTING`.
+    ///
+    /// The difference between this and `met_the_envied` is the difference between a mechanism
+    /// that is *weak* and one that never runs, and two rounds of chasing the wrong fix were
+    /// spent because nothing here could tell them apart. A rate whose numerator is zero says
+    /// nothing about the arithmetic above it.
+    pub told_the_envied: u64,
     /// The ground the world stands on, if it stands on any.
     surface: Option<Surface>,
     /// How many people it was founded with. Kept because a world cannot be made again
@@ -1142,10 +1189,16 @@ impl World {
             company: Vec::new(),
             acts_are_possible: true,
             people_change: true,
+            people_envy: true,
+            only_the_strongest_dream: false,
             witnesses_notice: true,
             witnessed: 0,
             acted: [0; person::acts::Toward::COUNT],
             withheld: 0,
+            occasions: 0,
+            met_the_envied: 0,
+            robbed_the_envied: 0,
+            told_the_envied: 0,
             surface: None,
             founded_with: 0,
         }
@@ -2205,9 +2258,39 @@ impl World {
         // What they are after, read afresh — see `person::dreams`. Taken before the borrows
         // below because it walks the society and the ties, and returned as a value so the
         // scoring cannot go looking for anything else.
-        let longing = self
-            .what_they_have_come_to(who)
-            .and_then(|come_to| self.people.get(who).and_then(|p| person::dreams::of(p, &come_to, at)));
+        let mut come_to = self.what_they_have_come_to(who);
+        // Who they measure themselves against is read whether or not the mechanism is on,
+        // because it is also the *denominator* — the rate that says whether envy aims has to
+        // be measured against the same evenings in both worlds, and a switch that took the
+        // observation away with the mechanism would leave nothing to compare. So the reading
+        // is kept and only what anybody does with it is switched off.
+        let envied = come_to.as_ref().and_then(|it| it.envied).map(|envy| envy.of);
+        if !self.people_envy {
+            if let Some(it) = come_to.as_mut() {
+                it.envied = None;
+            }
+        }
+        let envies = self.people_envy.then_some(envied).flatten();
+        let longing = come_to
+            .as_ref()
+            .zip(self.people.get(who))
+            .map(|(come_to, p)| person::dreams::longings(p, come_to, at))
+            .unwrap_or_default();
+        // And the old behaviour, kept switchable — see `only_the_strongest_dream`.
+        let longing = if self.only_the_strongest_dream {
+            let mut only = [0.0; person::dreams::Dream::COUNT];
+            if let Some(at) = longing
+                .iter()
+                .enumerate()
+                .max_by(|a, b| a.1.total_cmp(b.1))
+                .map(|(at, _)| at)
+            {
+                only[at] = longing[at];
+            }
+            only
+        } else {
+            longing
+        };
 
         let (Some(one), Some(two)) = (self.people.get(who), self.people.get(other)) else {
             return;
@@ -2231,7 +2314,8 @@ impl World {
             life_ahead: ahead(one) as f32,
             has_a_trade: one.has_matured(),
             own_ways: person::acts::what_is_expected(one.norms()),
-            dream: longing,
+            envies,
+            dreams: longing,
         };
         let subject = Subject {
             who: other,
@@ -2250,6 +2334,21 @@ impl World {
         let by_their_lights = actor.own_ways;
         let chosen = person::acts::choose(&appetite, AN_OCCASION, rng);
 
+        // Whether this evening was spent with the one person they measure themselves against,
+        // counted whatever comes of it. The denominator has to be every occasion and not
+        // every act, because the question envy answers is *who gets robbed* — and a rate whose
+        // denominator is only the evenings something happened has already thrown away the
+        // evenings nothing did, which is most of them.
+        let facing_the_envied = envied == Some(other);
+        self.occasions += 1;
+        self.met_the_envied += u64::from(facing_the_envied);
+        if facing_the_envied
+            && longing[person::dreams::Dream::WhatTheyHave as usize]
+                > person::dreams::WORTH_WANTING
+        {
+            self.told_the_envied += 1;
+        }
+
         let did = match chosen {
             Some(act) if self.carry_out(who, other, act, at) => Some(act),
             // An act somebody decided on and could not manage is not an act. Giving is the
@@ -2260,6 +2359,9 @@ impl World {
             // was found — and *is* the reason for counting it twice.
             _ => None,
         };
+        if facing_the_envied && did == Some(Toward::Rob) {
+            self.robbed_the_envied += 1;
+        }
 
         // And sometimes doing nothing is the thing that was done. This is the only wrong in
         // the world whose weight is local: the same shrug beside the same poor neighbour is
@@ -3824,6 +3926,53 @@ impl World {
             allies: self.bonds.of(who).filter(|(_, tie)| tie.allied()).count(),
             was_taken_up: person.is_mentored(),
             through_life: (person.age(self.now()).years() / whole_life).clamp(0.0, 1.0) as f32,
+            // Who they measure themselves against. Walked over their own ties rather than over
+            // the settlement, because envy is local — a person is not envious of the richest
+            // man in the world, they are envious of the one they spend evenings with.
+            //
+            // Three things, each a fraction: how far above them the other is, how much of
+            // their life that person occupies, and how little they like them. All three are
+            // needed. The gap alone picks out a rich acquaintance nobody thinks about; the gap
+            // with how well they are known picks out a rich friend, and being pleased for a
+            // friend is not envy. It is the person who is *around* and *doing better* and *not
+            // loved* who is minded.
+            //
+            // They are handed on **unmultiplied**, and only combined here to rank the
+            // candidates. How strongly the longing is then felt is `dreams`' business, because
+            // that is where it has to end up on one scale with the other six — and a number
+            // that arrives pre-combined cannot be put back on their scale. See §36.6; the first
+            // version multiplied here and was a product of sub-unit terms in a file where every
+            // other longing is a fact times a set of weights.
+            //
+            // The gap goes through `A_GAP_WORTH_MINDING` and that is not decoration either. It
+            // was the raw difference in means, on the stated grounds that all three factors
+            // were fractions. **`means()` is not a fraction** — it is
+            // `standing + estate * WORTH_AT_A_DOOR` and reaches 1.93 in a measured world, so
+            // the median gap to the best-off person somebody knows is 0.958 and 46% of gaps
+            // exceed one. The gap swamped the other two and was then clamped flat at the top:
+            // the seventh appearance of the one bug this project makes, two quantities not on a
+            // common scale used as though they were. A test written to check something else
+            // found it, and only because it asserted on each factor rather than the product.
+            envied: self
+                .bonds
+                .of(who)
+                .filter(|(_, tie)| tie.holds())
+                .filter_map(|(other, tie)| {
+                    let them = self.people.get(other).filter(|p| p.is_alive())?;
+                    let above = (them.means() - person.means()).max(0.0);
+                    Some(person::dreams::Envy {
+                        of: other,
+                        above: above / (above + A_GAP_WORTH_MINDING),
+                        known: tie.known.clamp(0.0, 1.0),
+                        coolness: 1.0 - tie.warmth.clamp(0.0, 1.0),
+                    })
+                })
+                .filter(|envy| envy.above > 0.0)
+                // Ranked by the three together, which is what picks the person out; how
+                // strongly it is then felt is `dreams`' business and not this one's.
+                .max_by(|a, b| {
+                    (a.above * a.known * a.coolness).total_cmp(&(b.above * b.known * b.coolness))
+                }),
         })
     }
 
@@ -4553,6 +4702,89 @@ mod tests {
             by_violence,
             world.acted[Toward::Kill as usize] as usize,
             "somebody was killed without dying, or died without being killed"
+        );
+    }
+
+    #[test]
+    fn envy_is_aimed_at_a_named_person_who_is_known_and_better_off() {
+        // §36.6's longing is the only one grown from somebody else's life, and the whole of its
+        // value is that it names a person rather than a rank. That is what this pins: not how
+        // strongly anybody feels it — which is measured in `what_they_want` and is not a claim
+        // a test should hold — but that whoever it points at is somebody the envier actually
+        // knows, is genuinely better off, and is not somebody they are fond of.
+        //
+        // Worth a test because all three could be lost by an edit that still compiles and
+        // still produces a plausible number. A reading that quietly began pointing at the
+        // richest person in the world would look identical from the outside, and would have
+        // thrown away the reason envy was built.
+        let mut world = World::genesis(WorldSeed::from_u128(0x221), 120);
+        world.record_only(Salience::Pivotal);
+        world.set_detail_budget(100_000);
+        world.run_for(Duration::from_years(70));
+
+        let mut checked = 0usize;
+        for (who, person) in world.people.iter() {
+            if !person.is_alive() || !person.has_matured() {
+                continue;
+            }
+            let Some(envy) = world
+                .what_they_have_come_to(who)
+                .and_then(|come_to| come_to.envied)
+            else {
+                continue;
+            };
+            let envied = envy.of;
+            checked += 1;
+            assert_ne!(envied, who, "nobody envies themselves");
+            let tie = world.bonds.tie(who, envied);
+            assert!(
+                tie.holds(),
+                "envy points at somebody who is not in their life at all: known {:.3}",
+                tie.known
+            );
+            let them = world.people.get(envied).expect("the envied person exists");
+            assert!(
+                them.is_alive(),
+                "{} envies somebody who is dead",
+                person.name
+            );
+            assert!(
+                them.means() > person.means(),
+                "{} envies {}, who has less: {:.3} against {:.3}",
+                person.name,
+                them.name,
+                them.means(),
+                person.means()
+            );
+            // Every piece a fraction, asserted separately. The first version of this checked
+            // the three *multiplied together* and passed for the wrong reason: the gap ran to
+            // 1.88 and the product hid it, because the other two shrank it back under one.
+            // A composite in range says nothing about its parts.
+            for (what, value) in [
+                ("above", envy.above),
+                ("known", envy.known),
+                ("coolness", envy.coolness),
+            ] {
+                assert!(
+                    (0.0..=1.0).contains(&value),
+                    "{what} has to be a fraction, not {value} — `means()` has no ceiling and \
+                     a gap taken raw is not on the scale the other two are"
+                );
+            }
+            assert!(envy.above > 0.0, "envy with no gap in it is not envy");
+            // And the fondness discount, which is what makes this envy rather than an income
+            // comparison: a tie warm enough to be an ally cannot be the one that is minded
+            // most, because `1 - warmth` would have to beat every cooler tie on the gap alone.
+            assert!(
+                tie.warmth < 1.0,
+                "a tie at full warmth should have been discounted to nothing"
+            );
+        }
+        // The reading has to happen to somebody, or the assertions above are vacuous — the
+        // §31.2 failure in test form.
+        assert!(
+            checked > 20,
+            "only {checked} adults measure themselves against anybody; the reading is not firing"
         );
     }
 

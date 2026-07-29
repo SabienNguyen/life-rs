@@ -15,39 +15,59 @@
 //! Where the world stands, measured rather than remembered — **twelve** seeds (`SEEDS=12`),
 //! 120 founders, 90 years:
 //!
-//!     living     2941
-//!     churn        12%   729 of 5885 moves went straight back. Over 10% is pathological (§30.4)
-//!     biggest    0.56    share of households in one quarter. 1.00 is the collapse (§30.5)
-//!     empty      0.33    quarters with nobody in them
-//!     spread     0.14    how far apart the inhabited quarters are. §14.4 needs this above 0
+//!     living     2960
+//!     churn        11%   585 of 5380 moves went straight back. Over 10% is pathological (§30.4)
+//!     biggest    0.54    share of households in one quarter. 1.00 is the collapse (§30.5)
+//!     empty      0.35    quarters with nobody in them
+//!     spread     0.12    how far apart the inhabited quarters are. §14.4 needs this above 0
 //!     short      0.00    the hungriest quarter's shortfall. Should be small; near zero at
 //!                        this size is expected, since §21's ceiling wants a crowded world
-//!     advances     58    things anybody ever worked out (§29)
-//!     taken up    501    people a patron ever opened a door for (§25)
+//!     advances     66    things anybody ever worked out (§29)
+//!     taken up    489    people a patron ever opened a door for (§25)
 //!     acts             what people did to each other on purpose (§35)
 //!     withheld         times somebody turned away from a neighbour visibly worse off, in a
 //!                        place whose ways say you do not
 //!     witnessed        times somebody who was not part of it saw (§40)
+//!     envy aims        robberies per thousand evenings with the one person somebody measures
+//!                        themselves against, against the rate with everybody else — and how
+//!                        many of those evenings the envy was strong enough to say anything on.
+//!                        Two rates and a count, because a *tally* of robberies cannot tell a
+//!                        world where envy aims from one where it only agitates (§36.6)
 //!     wants            what their lives so far add up to wanting (§36)
 //!     killed           deaths by another person's hand, counted off the death records rather
 //!                        than off the act tally, so the two can disagree and be seen to
 //!
 //! **And then the spread between worlds, for the four numbers that need it.** That block is
-//! the most important thing this prints. Twelve worlds of one unchanged build:
+//! the most important thing this prints, and the numbers in it are deliberately **not** quoted
+//! here. One world in twelve can put every household in a single quarter while another has
+//! quarters that do not differ at all, with nothing changed — so a mechanism that moves
+//! `biggest` by five hundredths has moved it by a fraction of one standard deviation, and three
+//! sections of the design document rest on differences that size. **An instrument that does not
+//! report its own precision is not an instrument, it is a number** (§40.3).
 //!
-//!     biggest   sd 0.122  se 0.035
-//!     empty     sd 0.094  se 0.027
-//!     spread    sd 0.048  se 0.014
-//!     churn     sd 0.065  se 0.019
+//! And the precision has to come from the same run as the effect, which is why there is nothing
+//! to quote. Three builds within noise of each other gave `empty` a standard deviation of 0.094,
+//! then 0.149, then 0.185, and `biggest` 0.122, 0.100, 0.145. Twelve worlds pin an sd to about a
+//! fifth of itself at best, so a noise floor carried over from a previous run is a threshold
+//! that may be half or twice what it says (§40.3.2). Read the block this prints; do not
+//! remember it.
 //!
-//! One world in twelve puts every household in a single quarter and another has quarters that
-//! do not differ at all — with nothing changed. So a mechanism that moves `biggest` by five
-//! hundredths has moved it by *one seventh of a standard deviation*, and three sections of the
-//! design document rest on differences that size. **An instrument that does not report its own
-//! precision is not an instrument, it is a number** (§40.3).
+//! `ACTS=0` switches §35's vocabulary off, `WITNESS=0` §40's, `CHANGE=0` §41's and `ENVY=0`
+//! §36.6's, on the same instrument, for the comparison.
 //!
-//! `ACTS=0` switches §35's vocabulary off and `WITNESS=0` switches §40's off, on the same
-//! instrument, for the comparison.
+//! `ENVY=0` is the one worth studying, because it is the only switch here that has to leave a
+//! **reading** in place while removing a **mechanism**. Who somebody envies is also the
+//! denominator of the rate that judges envy, so a switch that took the reading away with the
+//! mechanism would compare two different denominators and report whatever it liked. §36.6 has
+//! the account; the short version is that the aim rate came out fourteen times higher at the
+//! envied, came out *identically* fourteen times higher with the mechanism switched off, and
+//! stayed that way through two wrong diagnoses before a test found the arithmetic error that
+//! two cancelling bugs had been hiding.
+//!
+//! `ONE_DREAM=1` is not an ablation of a mechanism but of a *representation*: it restores the
+//! winner-take-all channel §36.6 replaced, so that what the replacement cost stays measurable
+//! instead of remembered. It moves what people do to each other well outside the noise floor and
+//! moves the shape of the world not at all, which is worth seeing once.
 //!
 //! Under a minute at three seeds, five at twelve, against eight minutes for the suite that
 //! would otherwise tell you.
@@ -100,6 +120,14 @@ fn main() {
     let seen = std::env::var("WITNESS").map(|v| v != "0").unwrap_or(true);
     // And `CHANGE=0` for §41 — whether a life changes who somebody is.
     let changing = std::env::var("CHANGE").map(|v| v != "0").unwrap_or(true);
+    // And `ENVY=0` for §36.6. The reading of who somebody envies survives the switch even
+    // though the mechanism does not, so that the `envy aims` line below is measured over the
+    // same evenings in both worlds. Without that it would compare two different denominators
+    // and report whatever it liked.
+    let envying = std::env::var("ENVY").map(|v| v != "0").unwrap_or(true);
+    // And `ONE_DREAM=1` puts back the winner-take-all channel §36.6 replaced, so that what the
+    // replacement cost stays a thing anybody can re-measure.
+    let one_dream = std::env::var("ONE_DREAM").map(|v| v == "1").unwrap_or(false);
 
     let (mut moves, mut back) = (0usize, 0usize);
     let (mut biggest, mut empty, mut spread, mut short) = (0.0, 0.0, 0.0, 0.0);
@@ -118,6 +146,15 @@ fn main() {
     // changed nothing, which is the same sentence as "it never fires" and means something
     // else entirely.
     let mut witnessed = 0usize;
+    // Whether envy aims (§36.6). Not a count but two rates: robberies per thousand evenings
+    // spent with the one person somebody measures themselves against, against robberies per
+    // thousand evenings spent with anybody else. A count of robberies cannot tell those
+    // worlds apart, which is the §31.2 mistake in its purest form — the mechanism does not
+    // claim more robbery, it claims robbery *lands somewhere*. And beside them the count of
+    // evenings the envy was strong enough to say anything at all, which is the number that
+    // turned out to settle it.
+    let (mut occasions, mut met_envied, mut robbed_envied) = (0u64, 0u64, 0usize);
+    let mut told_envied = 0u64;
     // How far a life has moved people from the temperaments they grew up with (§41). Here
     // before the mechanism, for §31.2's reason.
     let (mut weathered, mut weathered_of) = (0.0f32, 0usize);
@@ -142,6 +179,8 @@ fn main() {
         world.acts_are_possible = acts;
         world.witnesses_notice = seen;
         world.people_change = changing;
+        world.people_envy = envying;
+        world.only_the_strongest_dream = one_dream;
         world.run_for(Duration::from_years(years));
         living += world.living();
 
@@ -233,6 +272,10 @@ fn main() {
         }
         withheld += world.withheld as usize;
         witnessed += world.witnessed as usize;
+        occasions += world.occasions;
+        met_envied += world.met_the_envied;
+        told_envied += world.told_the_envied;
+        robbed_envied += world.robbed_the_envied as usize;
         // Killings are counted a second way, off the death records, because they are the one
         // act whose consequence is somebody being gone — and a tally that says five murders
         // in a world where nobody died of violence is a bug in one of the two.
@@ -343,6 +386,23 @@ fn main() {
     );
     println!("  withheld   {withheld:>6}   times somebody turned away where that is not done");
     println!("  witnessed  {witnessed:>6}   times somebody who was not part of it saw (§40)");
+    {
+        let per_thousand =
+            |robs: usize, evenings: u64| 1000.0 * robs as f32 / evenings.max(1) as f32;
+        println!(
+            "  envy aims  {:>6.2}   robberies per thousand evenings with the one they envy, \
+             against {:.2} with anybody else",
+            per_thousand(robbed_envied, met_envied),
+            per_thousand(
+                acted[person::acts::Toward::Rob as usize] - robbed_envied,
+                occasions - met_envied
+            ),
+        );
+        println!(
+            "             {told_envied:>6}   of those {met_envied} evenings had the envy strong enough to say \
+             anything, of {occasions} in all (§36.6)"
+        );
+    }
     println!(
         "  weathered  {:>6.3}   how far a life moves a temperament, per trait; worst {:.2} (§41)",
         weathered / weathered_of.max(1) as f32,
