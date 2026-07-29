@@ -395,6 +395,30 @@ impl Bonds {
         tie.regard = (tie.regard - 0.9 * badly * (tie.regard + 1.0) * 0.5).clamp(-1.0, 1.0);
     }
 
+    /// Somebody saw something, and thinks a little differently of whoever did it.
+    ///
+    /// `how` is signed: negative for a wrong, positive for a kindness. It moves **regard** and
+    /// not warmth, and that distinction is the whole mechanism. Warmth is how you feel about
+    /// somebody and it comes from spending time with them; regard is what you *rate* them at,
+    /// and it is the one number here that travels between people who talk (`hearsay`). So a
+    /// single witness is enough for a town to come to think poorly of a thief, along a route
+    /// that already existed and had nothing but unpaid debts to carry.
+    ///
+    /// It also makes somebody known: you cannot have seen a person and not know of them.
+    pub fn saw(&mut self, witness: PersonId, actor: PersonId, how: f32) {
+        if witness == actor || how == 0.0 {
+            return;
+        }
+        // Only enough knowing to keep the opinion alive — `year` drops any tie under
+        // `holds()`, so a regard hung on a stranger would be swept away the same winter. It
+        // was ten times this, and that is a bigger lever than the opinion itself: knowing
+        // somebody puts them in the list your evenings are drawn from, which changes who you
+        // meet, which changes everything downstream of who you meet.
+        let tie = self.edit(witness, actor);
+        tie.known = (tie.known + 0.03 * (HEARD_OF - tie.known).max(0.0)).clamp(0.0, 1.0);
+        tie.regard = (tie.regard + how * (1.0 - tie.regard * how.signum())).clamp(-1.0, 1.0);
+    }
+
     /// One person turns their back on another.
     ///
     /// The two sides of a shunning, which are not the same thing. The shunner's warmth and

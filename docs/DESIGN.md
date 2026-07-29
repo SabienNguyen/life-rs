@@ -4710,3 +4710,153 @@ direction carries `welcome` — the one number that genuinely diverges, and whic
 exactly that — and that the other four are symmetric in practice for a reason that is structural
 rather than accidental. **A comment that argues for a property the code does not have is worse
 than no comment**, because it stops the next person measuring.
+
+## 40. Somebody was standing there
+
+§35 built a vocabulary of things people do to each other and gave it **no witnesses at all**,
+and said so: *"A killing has no witness, so nobody but the killer ever knows who did it. Giving a
+wrong a witness is the next thing this vocabulary needs, and it needs a way to say something
+first."*
+
+Half of that was wrong. Telling still needs a language and this does not add one. But the thing
+underneath language does not need words: **somebody was standing there**.
+
+A witness sees an act and what they think of whoever did it moves. That is `regard` — and regard
+is the one number on a tie that *travels*, through `hearsay`, which has existed since §17 and had
+nothing but unpaid debts to carry. So one person seeing a robbery is enough for a town to come to
+think poorly of a thief, by a route that was already built.
+
+Who is standing there is whoever is to hand that evening, capped at three. The uncapped version
+averaged **nine witnesses an act**, because the list it draws from is everybody you know here plus
+a dozen faces out of the crowd — which is a settlement, not a doorway.
+
+### 40.1 How public an act is, is a property of the act
+
+`Toward::in_the_open` runs from shunning at 0.9 to killing at 0.04. Shunning is at the top because
+it is not private by definition — it is refusing somebody in front of the people you both live
+among, and a shunning nobody saw is two people drifting apart. Killing is at the bottom for the
+same reason it is possible at all: it is done by somebody with nothing left to lose, and being
+seen is the thing they would still lose.
+
+### 40.2 Being seen to be good is worth nothing, which was measured rather than assumed
+
+Giving and teaching started at 0.55 — a kindness done among people is seen, obviously. It is. And
+people give and teach **four times as often** as they shun or rob, so witnessed decency swamped
+witnessed wrongdoing: regard drifted upward against its 2%-a-year decay, saturated near the
+ceiling for everybody routinely seen being kind, and the differences between people — which is
+the only thing a rank can read — went flat.
+
+Measured, that halved how far apart the quarters of a world end up. They are zero now: **a
+reputation is made of exceptions, and nearly all the exceptions are bad ones.**
+
+Sightings went 20,988 → 5,936 (capping the witnesses) → **923** (only wrongs are news). Under one
+sighting per person per lifetime, which is the right order for a thing that is supposed to be an
+event.
+
+### 40.3 And then the measurement turned out to be the story
+
+With the mechanism down to 923 sightings in eight worlds, the aggregates still read `spread` 0.10
+against a control's 0.14, and `empty` 0.43 against 0.33. Which cannot be true. Nine hundred small
+nudges to regard, spread over two thousand people and ninety years, do not move a settlement
+pattern by a third.
+
+So `vitals` now reports **its own noise floor**, from the same run that reports the numbers.
+Twelve worlds, one unchanged build:
+
+```
+biggest   sd 0.159  se 0.046   worlds: 0.53 0.46 1.00 0.50 0.62 0.44 0.55 0.51 0.41 0.73 0.52 0.72
+empty     sd 0.172  se 0.050   worlds: 0.60 0.20 0.80 0.40 0.40 0.40 0.20 0.40 0.20 0.40 0.60 0.40
+spread    sd 0.057  se 0.016   worlds: 0.12 0.13 0.00 0.12 0.10 0.11 0.16 0.09 0.17 0.17 0.03 0.01
+```
+
+**One world in twelve puts every household in a single quarter.** Another has quarters that do
+not differ at all. At eight worlds the standard error on `spread` is 0.020, so the witness
+mechanism's apparent cost of 0.04 is **1.4 σ**, and `empty`'s 0.10 is 1.2 σ. Neither is a finding.
+Neither ever was.
+
+This is the third time this session the same thing has happened — §35.8 for `biggest` and `empty`
+at three seeds, §38.2 for §15's shared-environment band, and now for the same statistics at
+*eight*. The pattern is worth naming: **every one of these numbers has been used to accept or
+reject a mechanism, and none of them had ever had its noise floor measured.** Widening the sample
+was treated as the fix twice; it is not the fix, it is a way of making the error smaller than
+whatever you are looking for, and that requires knowing how big the error is.
+
+An instrument that does not report its own precision is not an instrument. It is a number.
+
+### 40.3.1 And one thing that was not noise
+
+The suite still failed, on the guard that asserts on **each** world rather than the mean: seed
+0x221, 49 of 49 households in one quarter. Run against the guard's own fixture with the mechanism
+switched off, that seed reads **0.73** — a hair under the 0.75 bar before any of this existed.
+Witnesses tipped it to 1.00.
+
+The lever turned out not to be the opinion at all. `saw` raised `known` toward `HEARD_OF` by a
+tenth of the gap, on the reasonable grounds that a regard hung on a stranger gets swept away by
+`year` — and **making somebody known puts them in the list your evenings are drawn from**, which
+changes who you meet, which changes everything downstream of who you meet. At three hundredths
+instead of a tenth, and the opinion itself halved, seed 0x221 goes back to 0.73 and the eight-world
+means land on 0.54 / 0.33 / 0.14 against a control's 0.55 / 0.33 / 0.14.
+
+The mechanism still fires 948 times. What was removed was not its effect; it was a side channel
+nobody had counted, doing more than the thing it was attached to.
+
+### 40.4 What that says about the rest of this document
+
+Not everything, but not nothing. Differences of 0.15 and up in `biggest` are three standard
+errors at eight worlds and stand: §37's "settle where the roots are" really did drive
+concentration from 0.55 to 0.71. Differences under about 0.10 do not, and several judgements in
+§35 to §38 rest on differences that size.
+
+The per-seed guards are unaffected and remain the sharper tool — `a_world_does_not_end_up_in_one_quarter`
+asserts on **each** world rather than the mean, and a single world at 0.80 is a fact about that
+world whatever the spread between worlds is. That is why the reverts in §37 were right even where
+the means that prompted them were not significant: the guard that actually failed was a per-seed
+one.
+
+### 40.4.1 And with the noise floor known, what witnesses actually cost
+
+Twelve worlds, `WITNESS=0` against on, every difference beside its own standard error:
+
+| | off | on | difference |
+|---|---|---|---|
+| living | 2966 | 2941 | — |
+| churn | 10% | 12% | **0.7 σ** |
+| biggest | 0.56 | 0.56 | — |
+| empty | 0.35 | 0.33 | **0.4 σ** |
+| spread | 0.13 | 0.14 | **0.4 σ** |
+
+**Nothing.** Not "a small cost worth paying" — nothing distinguishable, on any line, and now with
+the arithmetic to say so rather than a shrug. The mechanism fires 948 times in twelve worlds and
+the world it fires in is the same world.
+
+Getting there took two corrections that the noise floor could *not* have excused, and it is worth
+separating them. Capping witnesses at three and making kindness unremarkable were both real: the
+first cut sightings from 20,988 to 5,936 and the second to 923, and a mechanism firing twenty
+times per act is wrong whatever the aggregates say. But the third correction — halving what a
+witness makes of it and cutting the tie it creates by a factor of three — was prompted by
+`a_world_does_not_end_up_in_one_quarter` failing on seed 0x221, and **that seed reads 0.73
+against a 0.75 bar with the mechanism switched off**. It was a hair from failing on its own.
+
+The correction was still right, and for a reason the failure did not name: the dominant lever was
+never the opinion, it was the *tie*. Seeing somebody made you know them, and knowing somebody puts
+them in the list your evenings are drawn from — which changes who you meet, which changes
+everything downstream of who you meet. Cutting that to a third put seed 0x221 back to exactly the
+0.73 it reads without any of this.
+
+### 40.5 §15's band, quantified at last
+
+The same treatment, over eight worlds:
+
+| seed | 0x11 | 0x21 | 0x221 | 0x31 | 0x41 | 0x5ee | 0x77 | 0x8a |
+|---|---|---|---|---|---|---|---|---|
+| shared environment | 0.35 | 0.17 | 0.20 | 0.30 | 0.19 | 0.15 | 0.17 | 0.32 |
+
+Mean **0.231**, σ ≈ 0.075. The floor is 0.20, so at the three seeds the test actually uses the
+standard error is **0.043** and the margin is 0.7 of one — which puts the chance of failing on an
+unchanged build at roughly **one run in four**.
+
+That is not a test. It is a coin that comes up heads three times in four, and it has been read all
+session as though a failure meant something. §38.2 guessed this from six readings; this measures
+it. The band itself is fine — it caught a genuine scale error in §35.9.1 where the cause was found
+and the number came back. What is broken is the sample size, and now the size of the problem is
+known rather than argued about.

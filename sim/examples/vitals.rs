@@ -12,32 +12,44 @@
 //!
 //!     cargo run --release --example vitals
 //!
-//! Where the world stands, measured rather than remembered — **eight** seeds (`SEEDS=8`), 120
-//! founders, 90 years:
+//! Where the world stands, measured rather than remembered — **twelve** seeds (`SEEDS=12`),
+//! 120 founders, 90 years:
 //!
-//!     living     2064
-//!     churn         8%   302 of 3595 moves went straight back. Over 10% is pathological (§30.4)
-//!     biggest    0.55    share of households in one quarter. 1.00 is the collapse (§30.5)
-//!     empty      0.40    quarters with nobody in them
-//!     spread     0.12    how far apart the inhabited quarters are. §14.4 needs this above 0
+//!     living     2941
+//!     churn        12%   729 of 5885 moves went straight back. Over 10% is pathological (§30.4)
+//!     biggest    0.56    share of households in one quarter. 1.00 is the collapse (§30.5)
+//!     empty      0.33    quarters with nobody in them
+//!     spread     0.14    how far apart the inhabited quarters are. §14.4 needs this above 0
 //!     short      0.00    the hungriest quarter's shortfall. Should be small; near zero at
 //!                        this size is expected, since §21's ceiling wants a crowded world
-//!     advances     35    things anybody ever worked out (§29)
-//!     taken up    337    people a patron ever opened a door for (§25)
-//!     trades           farm 985  hew 48  smith 16  cook 147  keep 36 — thin but not empty
-//!     acts             gave to 819  taught 161  shunned 285  robbed 88  killed 6 — what
-//!                        people did to each other on purpose (§35)
-//!     withheld   4510    times somebody turned away from a neighbour visibly worse off, in a
+//!     advances     58    things anybody ever worked out (§29)
+//!     taken up    501    people a patron ever opened a door for (§25)
+//!     acts             what people did to each other on purpose (§35)
+//!     withheld         times somebody turned away from a neighbour visibly worse off, in a
 //!                        place whose ways say you do not
-//!     killed        6    deaths by another person's hand, counted off the death records
-//!                        rather than off the act tally, so the two can disagree and be seen to
-//!     assimilation 0.102, and 0.113 for somebody who has moved against 0.067 for somebody
-//!                        who has not — §17.2.1's claim, in a running world
+//!     witnessed        times somebody who was not part of it saw (§40)
+//!     wants            what their lives so far add up to wanting (§36)
+//!     killed           deaths by another person's hand, counted off the death records rather
+//!                        than off the act tally, so the two can disagree and be seen to
 //!
-//! `ACTS=0` switches §35's vocabulary off, on the same instrument, for the comparison — which
-//! reads 1997 living, 9% churn, 0.55 biggest, 0.35 empty, and every act at zero.
+//! **And then the spread between worlds, for the four numbers that need it.** That block is
+//! the most important thing this prints. Twelve worlds of one unchanged build:
 //!
-//! Under a minute at three seeds, three at eight, against eight minutes for the suite that
+//!     biggest   sd 0.122  se 0.035
+//!     empty     sd 0.094  se 0.027
+//!     spread    sd 0.048  se 0.014
+//!     churn     sd 0.065  se 0.019
+//!
+//! One world in twelve puts every household in a single quarter and another has quarters that
+//! do not differ at all — with nothing changed. So a mechanism that moves `biggest` by five
+//! hundredths has moved it by *one seventh of a standard deviation*, and three sections of the
+//! design document rest on differences that size. **An instrument that does not report its own
+//! precision is not an instrument, it is a number** (§40.3).
+//!
+//! `ACTS=0` switches §35's vocabulary off and `WITNESS=0` switches §40's off, on the same
+//! instrument, for the comparison.
+//!
+//! Under a minute at three seeds, five at twelve, against eight minutes for the suite that
 //! would otherwise tell you.
 //!
 //! **Add a line here before ablating the mechanism it belongs to.** §31.2 switches mechanisms
@@ -83,6 +95,9 @@ fn main() {
     // running them restarted — and an ablation nobody can run without editing the source is
     // an ablation nobody runs.
     let acts = std::env::var("ACTS").map(|v| v != "0").unwrap_or(true);
+    // And `WITNESS=0` for §40, separately: whether people do things to each other and whether
+    // anybody standing there notices are two claims, and §31.2's table wants a row for each.
+    let seen = std::env::var("WITNESS").map(|v| v != "0").unwrap_or(true);
 
     let (mut moves, mut back) = (0usize, 0usize);
     let (mut biggest, mut empty, mut spread, mut short) = (0.0, 0.0, 0.0, 0.0);
@@ -95,6 +110,19 @@ fn main() {
     let (mut stayed_apart, mut stayed_counted) = (0.0f32, 0usize);
     let mut acted = [0usize; person::acts::Toward::COUNT];
     let (mut withheld, mut killed) = (0usize, 0usize);
+    // How many acts anybody who was not part of them ever saw (§40). Counted *before* the
+    // mechanism, which is §31.2's rule and the one this project keeps having to relearn: an
+    // instrument that cannot see what a mechanism claims reports an ablation of it as having
+    // changed nothing, which is the same sentence as "it never fires" and means something
+    // else entirely.
+    let mut witnessed = 0usize;
+    // Per world as well as pooled, so the **noise floor of these numbers is computable from
+    // the same run that reports them**. This is the question that has come up over and over:
+    // a change moves `spread` by four hundredths and there is no way to know whether that is
+    // the change or the fact that any change at all reshuffles which quarter fills up.
+    // Printing the spread between worlds answers it without a second run.
+    let mut per_seed: Vec<(u128, f32, f32, f32)> = Vec::new();
+    let mut churn_each: Vec<f32> = Vec::new();
     // What people are after (§36). Here for §31.2's reason and no other: dreams act only
     // through acts, so an ablation of the vocabulary switches them off too — and an
     // instrument that could not see them would report that as having cost nothing.
@@ -106,6 +134,7 @@ fn main() {
         world.record_only(Salience::Pivotal);
         world.set_detail_budget(100_000);
         world.acts_are_possible = acts;
+        world.witnesses_notice = seen;
         world.run_for(Duration::from_years(years));
         living += world.living();
 
@@ -119,10 +148,14 @@ fn main() {
                 movers.insert(person.to_bits());
             }
         }
+        let (mut moves_here, mut back_here) = (0usize, 0usize);
         for steps in path.values() {
-            moves += steps.len();
-            back += (2..steps.len()).filter(|i| steps[*i] == steps[i - 2]).count();
+            moves_here += steps.len();
+            back_here += (2..steps.len()).filter(|i| steps[*i] == steps[i - 2]).count();
         }
+        moves += moves_here;
+        back += back_here;
+        churn_each.push(back_here as f32 / moves_here.max(1) as f32);
 
         // Where everybody ended up, and whether the quarters still differ.
         let counts: Vec<usize> = world
@@ -131,8 +164,11 @@ fn main() {
             .map(|id| world.society.households_in(id).count())
             .collect();
         let total: usize = counts.iter().sum();
-        biggest += *counts.iter().max().unwrap_or(&0) as f32 / total.max(1) as f32;
-        empty += counts.iter().filter(|c| **c == 0).count() as f32 / counts.len().max(1) as f32;
+        let biggest_here = *counts.iter().max().unwrap_or(&0) as f32 / total.max(1) as f32;
+        let empty_here = counts.iter().filter(|c| **c == 0).count() as f32 / counts.len().max(1) as f32;
+        biggest += biggest_here;
+        empty += empty_here;
+        per_seed.push((seed, biggest_here, empty_here, 0.0));
 
         let lived_in: Vec<f32> = world
             .places
@@ -141,9 +177,13 @@ fn main() {
             .filter_map(|id| world.places.get(id).map(|p| p.env.affluence))
             .collect();
         let mean = lived_in.iter().sum::<f32>() / lived_in.len().max(1) as f32;
-        spread += (lived_in.iter().map(|a| (a - mean).powi(2)).sum::<f32>()
+        let spread_here = (lived_in.iter().map(|a| (a - mean).powi(2)).sum::<f32>()
             / lived_in.len().max(1) as f32)
             .sqrt();
+        spread += spread_here;
+        if let Some(last) = per_seed.last_mut() {
+            last.3 = spread_here;
+        }
 
         // What anybody ever worked out — §29's only output, and a thing no other line here
         // can see. An instrument you ablate against has to be able to see what the mechanism
@@ -185,6 +225,7 @@ fn main() {
             acted[at] += *count as usize;
         }
         withheld += world.withheld as usize;
+        witnessed += world.witnessed as usize;
         // Killings are counted a second way, off the death records, because they are the one
         // act whose consequence is somebody being gone — and a tally that says five murders
         // in a world where nobody died of violence is a bug in one of the two.
@@ -285,6 +326,7 @@ fn main() {
             .join("  ")
     );
     println!("  withheld   {withheld:>6}   times somebody turned away where that is not done");
+    println!("  witnessed  {witnessed:>6}   times somebody who was not part of it saw (§40)");
     println!(
         "\n  wants      {}",
         person::dreams::Dream::ALL
@@ -313,5 +355,32 @@ fn main() {
         moved_apart / moved_counted.max(1) as f32,
         stayed_apart / stayed_counted.max(1) as f32
     );
+    // And how much of the above is the world rather than the measurement.
+    if per_seed.len() > 1 {
+        let sigma = |pick: fn(&(u128, f32, f32, f32)) -> f32| {
+            let n = per_seed.len() as f32;
+            let mean = per_seed.iter().map(pick).sum::<f32>() / n;
+            let var = per_seed.iter().map(|row| (pick(row) - mean).powi(2)).sum::<f32>() / n;
+            (var.sqrt(), var.sqrt() / n.sqrt())
+        };
+        println!("\n  how much of that is the measurement — spread between worlds, and the");
+        println!("  standard error on the mean above:");
+        for (name, pick) in [
+            ("biggest", (|r: &(u128, f32, f32, f32)| r.1) as fn(&(u128, f32, f32, f32)) -> f32),
+            ("empty", |r: &(u128, f32, f32, f32)| r.2),
+            ("spread", |r: &(u128, f32, f32, f32)| r.3),
+        ] {
+            let (sd, se) = sigma(pick);
+            println!("    {name:<9} sd {sd:.3}  se {se:.3}   worlds: {}",
+                per_seed.iter().map(|r| format!("{:.2}", pick(r))).collect::<Vec<_>>().join(" "));
+        }
+        // Churn separately, because it is a ratio per world rather than a mean of one.
+        let n = churn_each.len() as f32;
+        let mean = churn_each.iter().sum::<f32>() / n;
+        let sd = (churn_each.iter().map(|c| (c - mean).powi(2)).sum::<f32>() / n).sqrt();
+        println!("    {:<9} sd {sd:.3}  se {:.3}   worlds: {}", "churn", sd / n.sqrt(),
+            churn_each.iter().map(|c| format!("{:.2}", c)).collect::<Vec<_>>().join(" "));
+    }
+
     println!("\n  (§15's bands need `cargo test -p observer` — they cost six minutes.)");
 }

@@ -128,6 +128,34 @@ impl Toward {
         }
     }
 
+    /// How likely this is to be **seen by somebody who is not part of it**.
+    ///
+    /// §35 left this world with no witnesses at all and said so: a killing is known only to
+    /// the killer, because nothing here can tell anybody anything. That is still true of
+    /// *telling* — there is no language in this model and this does not add one. What it adds
+    /// is the far older thing underneath language: somebody was standing there.
+    ///
+    /// Shunning is at the top because it is not a private act by definition — it is refusing
+    /// somebody in front of the people you both live among, and a shunning nobody saw is just
+    /// two people drifting apart. Killing is at the bottom for the same reason it is possible
+    /// at all: it is done by somebody with nothing left to lose, and being seen is the thing
+    /// they would still lose.
+    /// **Giving and teaching are zero, and that is a finding rather than an omission.** They
+    /// were 0.55, on the reasonable grounds that a kindness done among people is seen. It is —
+    /// and people give and teach four times as often as they shun or rob, so witnessed decency
+    /// swamped witnessed wrongdoing, regard drifted up against its 2%-a-year decay until the
+    /// differences between people went flat, and how far apart the quarters of a world end up
+    /// **halved** (§40.2). A reputation is made of exceptions, and nearly all the exceptions
+    /// are bad ones.
+    pub const fn in_the_open(self) -> f32 {
+        match self {
+            Toward::Shun => 0.9,
+            Toward::Rob => 0.25,
+            Toward::Kill => 0.04,
+            Toward::Give | Toward::Teach => 0.0,
+        }
+    }
+
     /// How much of a wrong this is, anywhere, to anyone.
     ///
     /// Shunning is on the list and is the interesting entry: it is a small wrong that is

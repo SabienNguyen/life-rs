@@ -428,6 +428,28 @@ const SHUNNING: f32 = 0.5;
 /// raid empties a place; a robbery takes what a man can carry.
 const BY_HAND: f32 = 0.30;
 
+/// How likely any one person standing there is to actually notice, before the act's own
+/// openness is applied.
+///
+/// Well under one. Being in the same company as somebody is not watching them, and a village
+/// where every neighbour clocks every transaction is a panopticon rather than a village.
+const SOMEBODY_NOTICES: f32 = 0.35;
+
+/// And how many can see one thing.
+///
+/// The first version had no cap and averaged **nine witnesses per act** — because the list it
+/// draws from is everybody you know here plus a dozen faces out of the crowd, which is a
+/// settlement rather than a doorway. Two or three is what a thing done in front of people is
+/// actually done in front of.
+const HOW_MANY_SEE: usize = 3;
+
+/// How far seeing something moves what a witness thinks of whoever did it.
+///
+/// Small, because regard is the number that *travels* and a quantity that could be rewritten
+/// by one sighting would be noise rather than a reputation — the same argument `HEARSAY` makes
+/// for itself, at the same order of magnitude.
+const WHAT_A_WITNESS_MAKES_OF_IT: f32 = 0.06;
+
 /// How much of an obligation has to go unmet before anybody counts it as a slight.
 const WITHHOLDING_NOTICED: f32 = 0.30;
 /// How many neighbours somebody weighs up before deciding who to spend an evening with.
@@ -767,6 +789,15 @@ pub struct World {
     /// uses cannot tell "switched off" from "never fired", which is §31.2's whole lesson.
     /// Six words of counter can.
     pub acted: [u32; person::acts::Toward::COUNT],
+    /// Whether anybody standing there notices what is done in front of them — see
+    /// `let_them_see`.
+    ///
+    /// Its own switch rather than sharing `acts_are_possible`, because they are separate
+    /// claims: one is whether people do things to each other, the other is whether a society
+    /// finds out. §31.2's table wants a row for each.
+    pub witnesses_notice: bool,
+    /// How many acts anybody who was not part of them ever saw — see `let_them_see`.
+    pub witnessed: u32,
     /// And how many times somebody stood beside a person going short, in a place whose ways
     /// say you do not do that, and did nothing.
     ///
@@ -1104,6 +1135,8 @@ impl World {
             shouldered: std::collections::BTreeMap::new(),
             company: Vec::new(),
             acts_are_possible: true,
+            witnesses_notice: true,
+            witnessed: 0,
             acted: [0; person::acts::Toward::COUNT],
             withheld: 0,
             surface: None,
@@ -2340,6 +2373,9 @@ impl World {
                 self.record_death(at, other, Cause::Violence);
             }
         }
+        // And whoever else was standing there.
+        self.let_them_see(who, other, act, at);
+
         let weight = match act {
             // A life turns on being robbed and ends on the other one.
             Toward::Rob | Toward::Kill => Salience::Pivotal,
@@ -2356,6 +2392,61 @@ impl World {
             },
         );
         true
+    }
+
+    /// Whoever else was there, and what it does to what they think.
+    ///
+    /// §35 built a vocabulary of things people do to each other and gave it **no witnesses at
+    /// all**, and said so plainly: a killing is known only to the killer, because nothing in
+    /// this world can tell anybody anything. The telling is still missing and this does not add
+    /// it — there is no language here and inventing one is a different project. What this adds
+    /// is the older thing underneath language: *somebody was standing there*.
+    ///
+    /// A witness needs no words. They see it, and what they think of the person who did it
+    /// moves — which is `regard`, and regard is the one number on a tie that **travels**
+    /// (`hearsay`). So one person seeing a robbery is enough for a town to come to think
+    /// poorly of a thief, by a route that was already built and had, until now, only debt to
+    /// carry. It is also the first thing in this world that gives *kindness* a reputation:
+    /// being seen to give raises regard exactly as being seen to rob lowers it.
+    ///
+    /// Who is standing there is whoever is to hand this evening — the same list the evening's
+    /// company was chosen from, which is the people you know here plus a few faces out of the
+    /// crowd. Not everybody in the settlement: a village is not a room.
+    fn let_them_see(&mut self, who: PersonId, other: PersonId, act: person::acts::Toward, at: Time) {
+        let public = act.in_the_open();
+        if !self.witnesses_notice || public <= 0.0 {
+            return;
+        }
+        let mut rng = self.moment_stream(Domain::Behavior, who.to_bits() ^ 0x_5ee_2, at);
+        // Taken from the scratch list rather than the whole place. It is already the right
+        // set — who this person is among tonight — and it is already in hand.
+        let around: Vec<PersonId> = self
+            .company
+            .iter()
+            .copied()
+            .filter(|face| *face != who && *face != other)
+            .collect();
+        if around.is_empty() {
+            return;
+        }
+        let mut seen_by = 0;
+        for face in around {
+            if seen_by >= HOW_MANY_SEE {
+                break;
+            }
+            if !rng.chance((public * SOMEBODY_NOTICES) as f64) {
+                continue;
+            }
+            seen_by += 1;
+            if !self.people.get(face).is_some_and(|p| p.is_alive() && p.has_matured()) {
+                continue;
+            }
+            self.witnessed = self.witnessed.saturating_add(1);
+            // What they make of it. Only wrongs reach here at all — see `Toward::in_the_open`,
+            // where being seen to do the ordinary decent thing is worth nothing because it is
+            // not news, and swamped everything else when it was worth something.
+            self.bonds.saw(face, who, -act.harm() * WHAT_A_WITNESS_MAKES_OF_IT);
+        }
     }
 
     /// Somebody went short beside somebody who could have helped, and nothing happened.
