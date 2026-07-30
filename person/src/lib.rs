@@ -532,7 +532,7 @@ impl Person {
         // whose bad year fades is carried back toward where they started as the memory goes.
         // That second half matters as much as the first: **this is not a ratchet.** What
         // §34's curve forgets, this un-learns.
-        let mut toward = |target: f32, now: &mut f32, since: &mut f32| {
+        let toward = |target: f32, now: &mut f32, since: &mut f32| {
             let moved = (target.clamp(-1.0, 1.0) - *since) * WEATHERING;
             *since += moved;
             *now += moved;

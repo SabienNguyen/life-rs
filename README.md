@@ -551,3 +551,8 @@ interact with anything else.
   - Planet keeps track of time of day/clock
 
 </details>
+
+## License
+
+MIT — see [LICENSE](LICENSE). Use it for anything, including commercially; keep the
+copyright notice.
