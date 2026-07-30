@@ -24,6 +24,13 @@ members = [
 ]
 resolver = "3"
 
+# Inherited by every member below, so that adding a crate cannot silently add an
+# unlicensed one. See LICENSE.
+[workspace.package]
+license = "MIT"
+edition = "2024"
+version = "0.1.0"
+
 [workspace.dependencies]
 rand = "0.8.5"
 faker_rand = "0.1.1"
