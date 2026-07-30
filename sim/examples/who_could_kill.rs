@@ -94,6 +94,7 @@ fn main() {
             })
             .count();
         let ahead = ((whole_life - person.age(now).years()) / whole_life).clamp(0.0, 1.0) as f32;
+        let come_to = world.what_they_have_come_to(holder);
         let actor = person::acts::Actor {
             values: &person.values,
             personality: &person.personality,
@@ -105,9 +106,11 @@ fn main() {
             life_ahead: ahead,
             has_a_trade: person.has_matured(),
             own_ways: person::acts::what_is_expected(person.norms()),
-            dream: world
-                .what_they_have_come_to(holder)
-                .and_then(|come_to| person::dreams::of(person, &come_to, now)),
+            envies: come_to.as_ref().and_then(|it| it.envied).map(|envy| envy.of),
+            dreams: come_to
+                .as_ref()
+                .map(|come_to| person::dreams::longings(person, come_to, now))
+                .unwrap_or_default(),
         };
         for (about, tie) in world.bonds.of(holder) {
             let Some(them) = world.people.get(about).filter(|p| p.is_alive()) else {

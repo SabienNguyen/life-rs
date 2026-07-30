@@ -4294,7 +4294,7 @@ do to whoever is in front of them tonight. None of that is a want with a shape �
 robbed at twenty and spends the next forty years making sure it cannot happen again is not
 expressible in any of it.
 
-`person::dreams` is that. Six longings, each grown from something that happened:
+`person::dreams` is that. Seven longings, each grown from something that happened:
 
 | | where it comes from |
 |---|---|
@@ -4304,6 +4304,7 @@ expressible in any of it.
 | **to be looked to** | having been taken up (§25), and having somewhere to stand |
 | **to make something** | having already worked one thing out (§29) |
 | **never again** | having been robbed |
+| **what they have** | somebody you know being better off than you — see §36.6 |
 
 ### 36.1 A dream is a reading, not a field
 
@@ -4426,10 +4427,202 @@ to matter. Wiring it should be its own change with its own ablation.
 **Trades.** `to make something` ought to push somebody toward the trades where things get made,
 and does not.
 
-**Comparison to particular people.** Every longing here is grown from what happened to *you*.
-Nobody yet wants what they saw somebody else have — which is where envy lives, and is the more
-interesting half of wanting. It needs people to compare themselves to named others rather than to
-a rank, and the tie graph already holds everything that would take.
+### 36.6 Envy, and the two errors that cancelled
+
+§36.5 carried this as an admission of what was missing: *"Nobody yet wants what they saw somebody
+else have — which is where envy lives, and is the more interesting half of wanting."* The other six
+longings are all grown from something that happened to **you**. Envy is the only one grown from
+somebody else's life, and it is the one that needs a **name** rather than a rank — "I am in the
+bottom third" is a statistic and "Bould Maesk has what I do not" is a grudge, and only the second
+one makes anybody do anything.
+
+The tie graph already held what that takes, so `Standing` gained one reading — the person somebody
+measures themselves against, walked over **their own ties** rather than over the settlement, because
+envy is local: nobody is envious of the richest man in the world, they are envious of the one they
+spend evenings with. Three things decide who it is:
+
+    pub struct Envy {
+        pub of: PersonId,
+        pub above: f32,      // how far above them that person is
+        pub known: f32,      // how much of their life that person takes up
+        pub coolness: f32,   // and how little they like them
+    }
+
+All three are load-bearing. The gap alone picks out a rich acquaintance nobody thinks about; the gap
+and how well they are known picks out a rich friend, and being pleased for a friend is not envy. It
+is the person who is *around* and *doing better* and *not loved* who is minded.
+
+And in §35's robbery, one term beside the grudge — beside the grudge and not beside the greed,
+because that is what it is: a grievance about somebody having what you have not, which they did
+nothing to you to acquire.
+
+    let envied = if actor.envies == Some(at.who) { 1.2 * actor.dreaming_of(WhatTheyHave) } else { 0.0 };
+    let spite = grudge.min(1.0) + hate + 0.6 * dreaming_of(ToRise) + envied;
+
+#### The instrument, built first
+
+Envy's claim is not *that people rob*. They already did. It is that robbery **lands on a
+particular person**, and a tally of robberies cannot tell a world where envy aims from a world
+where it only agitates. So `vitals` got the line before the mechanism got its switch (§31.2), and
+it is a rate against a rate: robberies per thousand evenings spent with the one person somebody
+envies, against robberies per thousand evenings spent with everybody else.
+
+First reading, twelve worlds: **0.96 against 0.07.** Fourteen times. Thirty-nine percent of all
+robbery landing on four and a half percent of evenings.
+
+That number is worthless, and knowing *why* is the reason `people_envy` exists as its own switch.
+The person somebody envies is by construction the best-off person they know, and robbery already
+covets means — so a world with no envy in it at all would produce the same fourteen times over. The
+switch therefore has to leave the **reading** in place while removing the **mechanism**: who
+somebody envies is also the denominator, and a switch that took the observation away with the
+mechanism would compare two different denominators and report whatever it liked.
+
+    ENVY=0, twelve worlds: 0.96 against 0.07.
+
+Identical in the third decimal. The whole of the effect was "the rich are worth robbing," which was
+true before any of this was written.
+
+#### Two errors, cancelling
+
+What follows is the part worth keeping, and it is not a story about a mechanism. **There were two
+independent errors, in opposite directions, and every composite number I measured showed their sum
+— which was approximately zero.** Each instrument I reached for reported a product or a mean, and a
+product in range says nothing whatever about its factors.
+
+**Error one: the gap was not on a scale.** The strength of the longing was
+`above * known * coolness`, documented — by me, in a comment — as "three things on the same 0-to-1
+scale, multiplied." Two of them are. `means()` is not: it is `standing + estate * WORTH_AT_A_DOOR`,
+and while `standing` is a fraction, the sum reaches **1.93** in a measured world. So the gap
+between an adult and the best-off person they know has a median of **0.958**, and **46% of gaps
+exceed one**. The gap was swamping the other two factors and then being clamped flat at the top.
+Seventh appearance of the one bug this project makes.
+
+**Error two: the shape was a product where every sibling is a fact times weights.** `to rise` is
+`below * (values) * (1 + taken)`; `a home` is `lacking * (overdue) * (security)`. Envy was three
+sub-unit numbers multiplied and *then* weighted, which cannot reach where its siblings reach.
+
+Multiply an inflated gap by a deflating shape and you get a number that looks perfectly healthy.
+Here is what the common-scale check said with both errors in place:
+
+| longing | mean | strongest anybody | clears the floor for |
+|---|---|---|---|
+| to rise | 0.343 | 0.901 | 30.2% of adults |
+| **what they have** | **0.269** | **0.700** | **5.2%** |
+| to be looked to | 0.168 | 1.297 | 17.2% |
+| away | 0.148 | 0.915 | 2.0% |
+| never again | 0.077 | 0.866 | 2.7% |
+| a home | 0.042 | 0.980 | 5.5% |
+| to make something | 0.006 | 0.805 | 0.5% |
+
+Second-highest mean of the seven, mid-field on the share who feel it strongly. Nothing to see. I
+had guessed error two before running this, and **this table is what talked me out of it** — a
+correct diagnosis, discarded on the authority of a number that was only healthy because a second
+bug was holding it up.
+
+#### What it cost to find that out
+
+Two more rounds, both of them chasing consequences rather than causes.
+
+**The channel.** `Actor` carried `dream: Option<(Dream, f32)>` — the single strongest longing — so
+`dreaming_of` could see only one, and a longing felt faintly by most people and dominating almost
+nobody cannot get through a channel like that. The field became `dreams: [f32; COUNT]`, all seven,
+floor kept per-longing. Envy's chances to speak roughly doubled, 393 evenings to 856. Aim rate
+unchanged. Not the channel.
+
+**The count.** Only then did I add the cheapest measurement available — of the evenings somebody
+spends with the person they envy, how many are ones where the envy is strong enough to say
+anything. Under `ENVY=0` that counter reads **0**, so the switch now proves from its own output
+that it switched something off; the two rounds above had been run against an ablation that could
+not demonstrate it had done anything.
+
+**Then a test found it, and it was not looking for it.** The claim being pinned was that envy names
+a person who is genuinely known, genuinely better off, and not somebody they are fond of — three
+properties an edit could silently lose. Its first version checked the three factors *multiplied
+together* and passed, for exactly the reason everything else had passed. Asserting on each factor
+separately failed on the first world:
+
+    how much there is to mind has to be a fraction, not 1.0335518
+
+Normalising the gap — `above / (above + A_GAP_WORTH_MINDING)`, where the constant is 1.0 because
+the measured median gap is 0.958, so the median person reads a half by construction — then dropped
+envy's ceiling to **0.329 against a floor of 0.5**. Zero percent of adults could ever feel it
+strongly enough to act. Removing error one revealed error two, which had been my first guess.
+
+#### Where it stands
+
+Envy is now `above * (0.6 + 0.7 * known + 0.5 * coolness) * (values)` — the shape `to rise` has, a
+fact times what makes it sting times who they are. The gap multiplies rather than joining the sum
+because envy without a gap is not envy; being near them and not liking them are reasons rather than
+requirements, so they sit in a sum with a floor under it.
+
+| | mean | strongest anybody | clears the floor for |
+|---|---|---|---|
+| **what they have**, corrected | 0.308 | 0.695 | 5.0% of adults |
+
+Within a hundredth of where the two cancelling errors had put it — which is the whole point, and
+the reason none of this was visible for three rounds.
+
+And the mechanism now does something, barely. Twelve worlds:
+
+| | envy on | `ENVY=0` |
+|---|---|---|
+| evenings it could speak on | 856 | 0 |
+| robberies at the envied, per thousand such evenings | 1.13 | 1.09 |
+| robberies anywhere | 208 | 203 |
+
+Five robberies in twelve worlds of ninety years, in the right direction, at the resolution limit of
+the instrument. That is not a hedge — it is what the arithmetic predicts: 856 occasions against
+robbery's base rate of about one in ten thousand evenings, with the appetite raised on those
+occasions, comes to a handful. **The measurement and the arithmetic now agree, which they did not
+at any point before.** Anybody wanting envy to move a society needs a world where the envied are
+met far more often than one evening in twenty, and that is a claim about how settlements are laid
+out rather than about how envy works.
+
+The effect size of a targeted mechanism is the product of its conditions, and envy has three:
+feeling it strongly (5.0% of adults), facing the exact person (5.1% of evenings), and robbery
+already being near its bar. Three plausible conditions multiply to something at the edge of
+detection — §32.2's finding at a third scale, after conquest keyed on adjacent countries in a world
+with no adjacent cross-country pairs.
+
+#### What was kept, and on what evidence
+
+**The longing stays.** It clears the floor for 5.0% of adults — mid-field of the seven, ahead of
+`away`, `never again`, and `to make something` — and reads in the atlas beside them. As a
+description of what people here want it does as much work as its siblings.
+
+**The all-seven channel stays, on its own evidence and not on envy's.** It was built to fix envy
+and did not, which by §37's and §38's discipline is a revert. What saved it is a question the
+floor-clearing column answered by accident: **across 401 adults, 253 longings clear the floor and
+only 216 were ever heard.** Thirty-seven longings somebody felt strongly enough to count were
+discarded because a *different* longing was stronger. That is not modesty about what dreams may do;
+it is a claim that nobody is after two things at once, which is false of every person who has ever
+lived.
+
+The cost is a switch rather than a sentence — `ONE_DREAM=1` restores winner-take-all on the same
+instrument. Across twelve worlds, giving falls from 1665 to 1535, teaching from 862 to 810,
+shunning rises from 523 to 589: all outside the noise floor §40.3 established. The world's shape
+does not move — `biggest` 0.54 either way, `empty` 0.33 to 0.35, `spread` 0.13 to 0.12, `churn` 9%
+to 11%, every one inside its standard error. Visible in what people do to each other, invisible in
+where they end up living, which is what a change to how wanting is *read* should look like.
+
+#### The rule that comes out of it
+
+**A composite cannot validate its parts.** Every instrument that reported this mechanism healthy
+was reporting a product or a mean: `above * known * coolness`, a column of means, a test asserting
+on the three factors multiplied. Each was in range. Each was in range because two errors were
+cancelling inside it, and no amount of care in reading those numbers could have found that — the
+information was not in them.
+
+What found it was asserting on **each factor separately**, in a test written for an unrelated
+reason. So `what_they_want` now prints mean, maximum, *and* floor-clearing share per longing rather
+than one figure of merit, and the envy test asserts on `above`, `known`, and `coolness` one at a
+time with the message naming why. Neither would have caught this in its first form.
+
+And the cheap thing should have come first. **When a mechanism does nothing, count how many times
+it was asked before asking why it answered badly.** The aim rate had a healthy numerator —
+seventy-eight robberies, every one of them there before envy was written. The count that was near
+zero was the one nothing measured: how often the term was consulted at all. Two rounds went to
+interrogating arithmetic that had scarcely run.
 
 ## 37. Leaving, built and taken out again
 
@@ -4710,3 +4903,257 @@ direction carries `welcome` — the one number that genuinely diverges, and whic
 exactly that — and that the other four are symmetric in practice for a reason that is structural
 rather than accidental. **A comment that argues for a property the code does not have is worse
 than no comment**, because it stops the next person measuring.
+
+## 40. Somebody was standing there
+
+§35 built a vocabulary of things people do to each other and gave it **no witnesses at all**,
+and said so: *"A killing has no witness, so nobody but the killer ever knows who did it. Giving a
+wrong a witness is the next thing this vocabulary needs, and it needs a way to say something
+first."*
+
+Half of that was wrong. Telling still needs a language and this does not add one. But the thing
+underneath language does not need words: **somebody was standing there**.
+
+A witness sees an act and what they think of whoever did it moves. That is `regard` — and regard
+is the one number on a tie that *travels*, through `hearsay`, which has existed since §17 and had
+nothing but unpaid debts to carry. So one person seeing a robbery is enough for a town to come to
+think poorly of a thief, by a route that was already built.
+
+Who is standing there is whoever is to hand that evening, capped at three. The uncapped version
+averaged **nine witnesses an act**, because the list it draws from is everybody you know here plus
+a dozen faces out of the crowd — which is a settlement, not a doorway.
+
+### 40.1 How public an act is, is a property of the act
+
+`Toward::in_the_open` runs from shunning at 0.9 to killing at 0.04. Shunning is at the top because
+it is not private by definition — it is refusing somebody in front of the people you both live
+among, and a shunning nobody saw is two people drifting apart. Killing is at the bottom for the
+same reason it is possible at all: it is done by somebody with nothing left to lose, and being
+seen is the thing they would still lose.
+
+### 40.2 Being seen to be good is worth nothing, which was measured rather than assumed
+
+Giving and teaching started at 0.55 — a kindness done among people is seen, obviously. It is. And
+people give and teach **four times as often** as they shun or rob, so witnessed decency swamped
+witnessed wrongdoing: regard drifted upward against its 2%-a-year decay, saturated near the
+ceiling for everybody routinely seen being kind, and the differences between people — which is
+the only thing a rank can read — went flat.
+
+Measured, that halved how far apart the quarters of a world end up. They are zero now: **a
+reputation is made of exceptions, and nearly all the exceptions are bad ones.**
+
+Sightings went 20,988 → 5,936 (capping the witnesses) → **923** (only wrongs are news). Under one
+sighting per person per lifetime, which is the right order for a thing that is supposed to be an
+event.
+
+### 40.3 And then the measurement turned out to be the story
+
+With the mechanism down to 923 sightings in eight worlds, the aggregates still read `spread` 0.10
+against a control's 0.14, and `empty` 0.43 against 0.33. Which cannot be true. Nine hundred small
+nudges to regard, spread over two thousand people and ninety years, do not move a settlement
+pattern by a third.
+
+So `vitals` now reports **its own noise floor**, from the same run that reports the numbers.
+Twelve worlds, one unchanged build:
+
+```
+biggest   sd 0.159  se 0.046   worlds: 0.53 0.46 1.00 0.50 0.62 0.44 0.55 0.51 0.41 0.73 0.52 0.72
+empty     sd 0.172  se 0.050   worlds: 0.60 0.20 0.80 0.40 0.40 0.40 0.20 0.40 0.20 0.40 0.60 0.40
+spread    sd 0.057  se 0.016   worlds: 0.12 0.13 0.00 0.12 0.10 0.11 0.16 0.09 0.17 0.17 0.03 0.01
+```
+
+**One world in twelve puts every household in a single quarter.** Another has quarters that do
+not differ at all. At eight worlds the standard error on `spread` is 0.020, so the witness
+mechanism's apparent cost of 0.04 is **1.4 σ**, and `empty`'s 0.10 is 1.2 σ. Neither is a finding.
+Neither ever was.
+
+This is the third time this session the same thing has happened — §35.8 for `biggest` and `empty`
+at three seeds, §38.2 for §15's shared-environment band, and now for the same statistics at
+*eight*. The pattern is worth naming: **every one of these numbers has been used to accept or
+reject a mechanism, and none of them had ever had its noise floor measured.** Widening the sample
+was treated as the fix twice; it is not the fix, it is a way of making the error smaller than
+whatever you are looking for, and that requires knowing how big the error is.
+
+An instrument that does not report its own precision is not an instrument. It is a number.
+
+### 40.3.1 And one thing that was not noise
+
+The suite still failed, on the guard that asserts on **each** world rather than the mean: seed
+0x221, 49 of 49 households in one quarter. Run against the guard's own fixture with the mechanism
+switched off, that seed reads **0.73** — a hair under the 0.75 bar before any of this existed.
+Witnesses tipped it to 1.00.
+
+The lever turned out not to be the opinion at all. `saw` raised `known` toward `HEARD_OF` by a
+tenth of the gap, on the reasonable grounds that a regard hung on a stranger gets swept away by
+`year` — and **making somebody known puts them in the list your evenings are drawn from**, which
+changes who you meet, which changes everything downstream of who you meet. At three hundredths
+instead of a tenth, and the opinion itself halved, seed 0x221 goes back to 0.73 and the eight-world
+means land on 0.54 / 0.33 / 0.14 against a control's 0.55 / 0.33 / 0.14.
+
+The mechanism still fires 948 times. What was removed was not its effect; it was a side channel
+nobody had counted, doing more than the thing it was attached to.
+
+### 40.3.2 And the noise floor is itself noisy, which is worse
+
+§36.6 ran this instrument three more times over builds within noise of each other, and the noise
+floor moved:
+
+| | after §40 | mid-§36.6 | after §36.6 |
+|---|---|---|---|
+| `biggest` sd | 0.122 | 0.100 | 0.145 |
+| `empty` sd | 0.094 | 0.149 | 0.185 |
+| `spread` sd | 0.048 | 0.057 | 0.055 |
+| `churn` sd | 0.065 | 0.044 | 0.067 |
+
+`empty`'s doubled. That is not a bug and it should not be a surprise: a standard deviation
+estimated from twelve samples has a relative standard error of about `1/sqrt(2(n-1))`, or **21%**,
+so ±40% at two sigma is ordinary. `empty` went further than that, which suggests the underlying
+spread genuinely differs between these builds as well.
+
+Either way the consequence is the same and it sharpens §40.3 rather than softening it. **A noise
+floor is not a property of the instrument that can be written down once.** Quoting "`empty` has an
+sd of 0.094" and then testing a later change against it is using a threshold that may be half what
+it says. The number has to be computed in the same run as the effect it is judging — which is what
+`vitals` does, and always did; what was wrong was its own header, which quoted the figures as if
+they were constants and so undercut the point the block exists to make. The header now refuses to
+quote them.
+
+This is the least comfortable finding in this document, because it applies to the finding above it.
+§40.3 said an instrument must report its precision. It must also report it *now*, and nobody may
+carry the number forward.
+
+### 40.4 What that says about the rest of this document
+
+Not everything, but not nothing. Differences of 0.15 and up in `biggest` are three standard
+errors at eight worlds and stand: §37's "settle where the roots are" really did drive
+concentration from 0.55 to 0.71. Differences under about 0.10 do not, and several judgements in
+§35 to §38 rest on differences that size.
+
+The per-seed guards are unaffected and remain the sharper tool — `a_world_does_not_end_up_in_one_quarter`
+asserts on **each** world rather than the mean, and a single world at 0.80 is a fact about that
+world whatever the spread between worlds is. That is why the reverts in §37 were right even where
+the means that prompted them were not significant: the guard that actually failed was a per-seed
+one.
+
+### 40.4.1 And with the noise floor known, what witnesses actually cost
+
+Twelve worlds, `WITNESS=0` against on, every difference beside its own standard error:
+
+| | off | on | difference |
+|---|---|---|---|
+| living | 2966 | 2941 | — |
+| churn | 10% | 12% | **0.7 σ** |
+| biggest | 0.56 | 0.56 | — |
+| empty | 0.35 | 0.33 | **0.4 σ** |
+| spread | 0.13 | 0.14 | **0.4 σ** |
+
+**Nothing.** Not "a small cost worth paying" — nothing distinguishable, on any line, and now with
+the arithmetic to say so rather than a shrug. The mechanism fires 948 times in twelve worlds and
+the world it fires in is the same world.
+
+Getting there took two corrections that the noise floor could *not* have excused, and it is worth
+separating them. Capping witnesses at three and making kindness unremarkable were both real: the
+first cut sightings from 20,988 to 5,936 and the second to 923, and a mechanism firing twenty
+times per act is wrong whatever the aggregates say. But the third correction — halving what a
+witness makes of it and cutting the tie it creates by a factor of three — was prompted by
+`a_world_does_not_end_up_in_one_quarter` failing on seed 0x221, and **that seed reads 0.73
+against a 0.75 bar with the mechanism switched off**. It was a hair from failing on its own.
+
+The correction was still right, and for a reason the failure did not name: the dominant lever was
+never the opinion, it was the *tie*. Seeing somebody made you know them, and knowing somebody puts
+them in the list your evenings are drawn from — which changes who you meet, which changes
+everything downstream of who you meet. Cutting that to a third put seed 0x221 back to exactly the
+0.73 it reads without any of this.
+
+### 40.5 §15's band, quantified at last
+
+The same treatment, over eight worlds:
+
+| seed | 0x11 | 0x21 | 0x221 | 0x31 | 0x41 | 0x5ee | 0x77 | 0x8a |
+|---|---|---|---|---|---|---|---|---|
+| shared environment | 0.35 | 0.17 | 0.20 | 0.30 | 0.19 | 0.15 | 0.17 | 0.32 |
+
+Mean **0.231**, σ ≈ 0.075. The floor is 0.20, so at the three seeds the test actually uses the
+standard error is **0.043** and the margin is 0.7 of one — which puts the chance of failing on an
+unchanged build at roughly **one run in four**.
+
+That is not a test. It is a coin that comes up heads three times in four, and it has been read all
+session as though a failure meant something. §38.2 guessed this from six readings; this measures
+it. The band itself is fine — it caught a genuine scale error in §35.9.1 where the cause was found
+and the number came back. What is broken is the sample size, and now the size of the problem is
+known rather than argued about.
+
+## 41. What a life does to somebody
+
+Personality here is fixed at maturity. `origins` splits each of the five factors into genes,
+household and chance, `mature()` seals it, and from twenty onward **nobody in this world is ever
+changed by anything that happens to them**. A man robbed at thirty has precisely the temperament
+at sixty that he would have had otherwise. His memory changes; he does not.
+
+That is the largest single reason a soul here reads as a set of dispositions rather than a life,
+and the material to fix it was already sitting there doing nothing: §34's memory is exactly *what
+happened to somebody*, decaying on a curve, and it drove nothing but a few appetites.
+
+### 41.1 Beside the origins, not inside them
+
+`Person::weathering` is a second `Personality`, kept alongside `origins` rather than folded into
+it, and the two answer different questions:
+
+- `origins.total()` — the person who finished growing up.
+- `personality` — the person now.
+- `weathering` — what the years did, which is the difference.
+
+Folding it in as a fourth channel of `Expression` would have made *"why is she like that"* and
+*"what has happened to her"* the same question. §15's entire apparatus rests on the first being
+answerable about a fixed endowment, and the counterfactual it supports — "the same person raised
+somewhere else" — is meaningless once the endowment moves.
+
+### 41.2 What moves it, and what does not
+
+It reads what somebody carries and **nothing else**: not their standing, not their situation, not
+what anybody thinks of them. That restriction is the design rather than an economy. A person is
+changed by what happened to them, and what happened to them is exactly what a memory is; a version
+keyed on circumstance would make temperament a lagging indicator of wealth.
+
+Five claims, one line each:
+
+| | |
+|---|---|
+| being wronged **hardens** you | neuroticism up, agreeableness down |
+| being carried **softens** you | somebody fed you through a bad year |
+| being taken up **opens** you | §25's largest fact is also somebody deciding you were worth something |
+| burying people **wears** you | the heaviest memory in the model |
+| a wrong you did yourself | costs agreeableness — conscience in a temperament, not only in a restraint |
+
+**Conscientiousness is deliberately untouched.** It is the trait attainment runs on, and letting a
+life move it would turn §15's decomposition into a measure of luck wearing the name of a
+temperament. What a life does to somebody here shows up in how they are with people.
+
+### 41.3 It is not a ratchet
+
+The step is a twelfth of the way to a target each year, and the target is computed from memory
+*as it stands now*. So a bad decade moves somebody and then, as §34's curve lets the memory go,
+carries them back toward who they were. **What the forgetting forgets, this un-learns.** Nothing
+anywhere resets it; the same one line does both.
+
+Measured over twelve worlds: a life moves each trait by **0.095** on average and the most
+weathered person alive by **0.35** — a tenth of a standard deviation for the ordinary life and a
+third for the hardest. That is the right order. Half a standard deviation would have made
+temperament a second name for biography; a hundredth would have been a mechanism that fires and
+does nothing.
+
+### 41.4 What it costs
+
+Twelve worlds, against the same build with `CHANGE=0`, every difference beside its standard error:
+
+| | before | with | |
+|---|---|---|---|
+| living | 2941 | 2997 | — |
+| churn | 12% | 9% | 1.3 σ |
+| biggest | 0.56 | 0.54 | 0.4 σ |
+| empty | 0.33 | 0.35 | 0.4 σ |
+| spread | 0.14 | 0.13 | 0.5 σ |
+
+Nothing over one and a half standard errors. It is the second mechanism in a row to come out free
+at the aggregate — which is what §40.3's arithmetic is *for*: before it, "churn went from 12% to
+9%" would have been three paragraphs of speculation about why, and it is worth nothing at all.

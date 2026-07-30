@@ -36,12 +36,12 @@
 //! person in front of you — and touches the daily rhythm nowhere.
 
 use crate::memory::What;
-use crate::{Person, Values};
+use crate::{Person, PersonId, Values};
 use sim_core::Time;
 
 /// What somebody is after.
 ///
-/// Six, and the list is short on purpose: each has to be traceable to something that happened
+/// Seven, and the list is short on purpose: each has to be traceable to something that happened
 /// and has to change a decision that already exists, or it is decoration.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Dream {
@@ -57,16 +57,25 @@ pub enum Dream {
     ToMakeSomething,
     /// That it never happens to them again.
     NeverAgain,
+    /// To have what somebody they know has.
+    ///
+    /// The other six are grown from what happened to *you*. This one is grown from somebody
+    /// else's life, which is where envy lives and is the half of wanting the rest of the list
+    /// could not reach. It needs a **named person** rather than a rank — "I am in the bottom
+    /// third" is a statistic and "Bould Maesk has what I do not" is a grudge — and the tie
+    /// graph has held everything that takes since §17.
+    WhatTheyHave,
 }
 
 impl Dream {
-    pub const ALL: [Dream; 6] = [
+    pub const ALL: [Dream; 7] = [
         Dream::AHome,
         Dream::ToRise,
         Dream::Away,
         Dream::ToBeLookedTo,
         Dream::ToMakeSomething,
         Dream::NeverAgain,
+        Dream::WhatTheyHave,
     ];
 
     pub const COUNT: usize = Dream::ALL.len();
@@ -79,6 +88,7 @@ impl Dream {
             Dream::ToBeLookedTo => "to be looked to",
             Dream::ToMakeSomething => "to make something",
             Dream::NeverAgain => "never again",
+            Dream::WhatTheyHave => "what they have",
         }
     }
 }
@@ -112,23 +122,52 @@ pub struct Standing<'a> {
     pub was_taken_up: bool,
     /// Their age against a whole life, 0 to 1.
     pub through_life: f32,
+    /// Who they measure themselves against, and what there is to mind about it.
+    ///
+    /// **A person, not a rank**, which is the whole point. "I am in the bottom third" is a
+    /// statistic; "Bould Maesk has what I do not" is a grudge, and only the second one makes
+    /// anybody do anything. The comparison a life actually makes is local, and the tie graph
+    /// has been able to say who is local to whom since §17.
+    pub envied: Option<Envy>,
 }
 
-/// How strongly somebody wants each of the six.
+/// The person somebody measures themselves against, in pieces.
+///
+/// Three fields rather than one number, and the reason is the whole of §36.6. `sim` picks *who*
+/// by combining them — which is the right way to rank candidates — but the **strength** of the
+/// longing has to be built here, beside its six siblings, in the shape they all share. When this
+/// arrived pre-multiplied, envy was a product of three sub-unit terms in a file where every
+/// other longing is a fact times a set of weights, and it topped out at a third of what it
+/// takes to want something. A number that has already been combined cannot be put back on its
+/// siblings' scale.
+#[derive(Clone, Copy, Debug)]
+pub struct Envy {
+    /// The one they mind.
+    pub of: PersonId,
+    /// How far above them that person is, 0 to 1 — saturating, so it does not depend on
+    /// `means()` having a ceiling, which it does not.
+    pub above: f32,
+    /// How much of their life that person takes up.
+    pub known: f32,
+    /// And how little they like them.
+    pub coolness: f32,
+}
+
+/// How strongly somebody wants each of the seven.
 ///
 /// Independent quantities, not a distribution — the same shape as `acts::weigh`, and for the
 /// same reason: a longing that had to be traded off against the others would change when a
-/// seventh was added.
+/// seventh was added. A seventh was added, and none of the six moved.
 pub fn longings(who: &Person, at: &Standing, now: Time) -> [f32; Dream::COUNT] {
     let held = who.held();
     let mut want = [0.0_f32; Dream::COUNT];
     let values = at.values;
 
-    // All six have the same shape: **a sum of reasons, times a weight from values.** That is
-    // not a style. The first version scored each as a product of three or four sub-unit terms
-    // and the result was a world in which four of the six longings never occurred to anybody
-    // at all and a fifth accounted for ninety-eight percent of the rest — a constant with a
-    // name, which is exactly what §36.1's instrument was written to catch before any of this
+    // All seven have the same shape: **a sum of reasons, times a weight from values.** That
+    // is not a style. The first version scored each as a product of three or four sub-unit
+    // terms and the result was a world in which four of the then-six longings never occurred
+    // to anybody at all and a fifth accounted for ninety-eight percent of the rest — a
+    // constant with a name, which is exactly what §36.1's instrument was written to catch before any of this
     // was wired to a decision. It is the same error §35.2 records three times over, and
     // knowing about it did not stop me making it a fourth.
 
@@ -206,6 +245,25 @@ pub fn longings(who: &Person, at: &Standing, now: Time) -> [f32; Dream::COUNT] {
             * (0.5 + 0.5 * (1.0 - values.power));
     }
 
+    // What somebody else has. The same shape as `to rise` above and for the same reason: one
+    // fact, times what makes it sting, times who they are. The fact is the gap — envy without
+    // one is not envy — so it multiplies rather than joining a sum, and a person with no gap
+    // scores nothing however much they dislike whoever they are looking at.
+    //
+    // What makes it sting is being *near* them and not being fond of them. Both are reasons
+    // rather than requirements, which is why they sit in a sum with a floor under it: a rich
+    // stranger you have no feeling about is still minded, just less than the cousin next door
+    // who has what you have not.
+    //
+    // The 0.15 floor on the values term is there so that envy is not the exclusive property of
+    // the ambitious. Anybody can mind. The ambitious mind more.
+    if let Some(envy) = at.envied {
+        want[Dream::WhatTheyHave as usize] = envy.above.clamp(0.0, 1.0)
+            * (0.6 + 0.7 * envy.known.clamp(0.0, 1.0) + 0.5 * envy.coolness.clamp(0.0, 1.0))
+            * (0.15 + 0.5 * values.power + 0.45 * values.achievement)
+            * (1.0 - 0.5 * values.benevolence);
+    }
+
     want
 }
 
@@ -227,7 +285,7 @@ pub fn of(who: &Person, at: &Standing, now: Time) -> Option<(Dream, f32)> {
 }
 
 /// How much longing it takes before it is a dream rather than a preference.
-const WORTH_WANTING: f32 = 0.5;
+pub const WORTH_WANTING: f32 = 0.5;
 
 #[cfg(test)]
 mod tests {
@@ -259,6 +317,7 @@ mod tests {
             allies: 6,
             was_taken_up: false,
             through_life: 0.4,
+            envied: None,
         }
     }
 

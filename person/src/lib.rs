@@ -214,6 +214,20 @@ pub struct Person {
     /// Not part of a person's identity: two people are the same person or not regardless of
     /// what either happens to remember, so `Held` is skipped when `Person` is compared.
     held: memory::Held,
+    /// How far a life has moved somebody from the person it started with.
+    ///
+    /// `origins` says where a temperament came from — genes, household, chance — and it is
+    /// sealed at maturity, which until now meant **nobody in this world was ever changed by
+    /// anything that happened to them**. A man robbed at thirty had precisely the temperament
+    /// at sixty that he would have had otherwise. His memory changed; he did not.
+    ///
+    /// Kept *beside* `origins` rather than folded into it, because the two answer different
+    /// questions. `origins.total()` is the person who finished growing up; `personality` is
+    /// the person now; and the difference is this, which is what the years did. Adding it as a
+    /// fourth channel inside `Expression` would make "why is she like that" and "what has
+    /// happened to her" the same question, and §15's whole apparatus rests on the first being
+    /// answerable about a fixed endowment.
+    weathering: Personality,
     /// What this person takes to be normal, learned by watching — their own estimate of
     /// §14.2's fourth channel rather than the channel itself.
     ///
@@ -299,6 +313,7 @@ impl Person {
             opportunity: (0.0, 0.0),
             upbringing: (0.0, 0.0),
             held: memory::Held::default(),
+            weathering: Personality::AVERAGE,
             // No opinion about what is normal until they have seen some of it.
             norms: [0.5; Deed::COUNT],
             matured: false,
@@ -469,6 +484,76 @@ impl Person {
     /// What they carry of their own life.
     pub fn held(&self) -> &memory::Held {
         &self.held
+    }
+
+    /// How far this life has moved them from the person they grew up into.
+    pub fn weathering(&self) -> &Personality {
+        &self.weathering
+    }
+
+    /// A year of having been alive, working on who somebody is.
+    ///
+    /// **The only thing in this model that changes a temperament after maturity.** It reads
+    /// what they carry (§34) and nothing else — not their situation, not their standing, not
+    /// what anybody thinks of them. That restriction is the design: a person is changed by
+    /// *what happened to them*, and what happened to them is exactly what a memory is. A
+    /// version keyed on circumstance would make temperament a lagging indicator of wealth.
+    ///
+    /// Each source is one line and each is a claim:
+    ///
+    /// - **being wronged hardens you** — neuroticism up, agreeableness down;
+    /// - **being carried softens you** — somebody fed you through a bad year and you are
+    ///   readier to think well of people;
+    /// - **being taken up opens you** — the largest single fact about a life here (§25) is
+    ///   also somebody having decided you were worth something;
+    /// - **burying people wears you** — the heaviest memory in the model, and the only one
+    ///   that reaches mere acquaintances;
+    /// - **a wrong you did yourself** costs agreeableness, which is conscience showing up in
+    ///   a temperament rather than only in a restraint (§35.5).
+    ///
+    /// Conscientiousness is deliberately untouched. It is the trait attainment runs on, and
+    /// letting a life move it would make §15's decomposition a measure of luck wearing the
+    /// name of a temperament. What a life does to somebody here shows up in how they are with
+    /// people.
+    pub fn weather(&mut self, now: Time) {
+        if !self.matured {
+            return;
+        }
+        use memory::What;
+        let held = |what| self.held.holds_of(what, now).min(2.0);
+        let hurt = held(What::Wronged) + held(What::Robbed);
+        let carried = held(What::Carried);
+        let opened = held(What::TakenUp);
+        let buried = held(What::Died);
+        let guilt = held(What::DidWrong);
+
+        // Slow, and toward a target that is itself capped at one standard deviation — so a
+        // hard life arrives near that ceiling after a decade of carrying it, and somebody
+        // whose bad year fades is carried back toward where they started as the memory goes.
+        // That second half matters as much as the first: **this is not a ratchet.** What
+        // §34's curve forgets, this un-learns.
+        let mut toward = |target: f32, now: &mut f32, since: &mut f32| {
+            let moved = (target.clamp(-1.0, 1.0) - *since) * WEATHERING;
+            *since += moved;
+            *now += moved;
+        };
+        let (live, since) = (&mut self.personality, &mut self.weathering);
+        toward(0.22 * opened, &mut live.openness, &mut since.openness);
+        toward(
+            0.10 * carried - 0.10 * hurt,
+            &mut live.extraversion,
+            &mut since.extraversion,
+        );
+        toward(
+            0.20 * carried - 0.18 * hurt - 0.15 * guilt,
+            &mut live.agreeableness,
+            &mut since.agreeableness,
+        );
+        toward(
+            0.18 * hurt + 0.12 * buried - 0.10 * carried,
+            &mut live.neuroticism,
+            &mut since.neuroticism,
+        );
     }
 
     /// Take something in — see `memory::Held::keep`.
@@ -1005,6 +1090,15 @@ const WORTH_AT_A_DOOR: f32 = 0.6;
 /// that a child raised somewhere holds that place's habits by the time they are grown; slow
 /// enough that somebody who arrives at forty still does not.
 const NORM_LEARNING: f32 = 0.20;
+
+/// How fast a life works on a temperament, per year.
+///
+/// A twelfth, toward a target that is itself capped at one standard deviation — so somebody
+/// carrying the worst a life can hand them arrives near that ceiling after a decade or so of
+/// carrying it, and somebody whose bad year fades is carried back toward where they started as
+/// the memory goes. The second half matters as much as the first: **this is not a ratchet.**
+/// What §34's curve forgets, this un-learns.
+const WEATHERING: f32 = 1.0 / 12.0;
 
 /// How readily somebody takes on local practice at this age, against the fastest.
 ///

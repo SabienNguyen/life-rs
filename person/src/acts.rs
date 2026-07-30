@@ -128,6 +128,34 @@ impl Toward {
         }
     }
 
+    /// How likely this is to be **seen by somebody who is not part of it**.
+    ///
+    /// §35 left this world with no witnesses at all and said so: a killing is known only to
+    /// the killer, because nothing here can tell anybody anything. That is still true of
+    /// *telling* — there is no language in this model and this does not add one. What it adds
+    /// is the far older thing underneath language: somebody was standing there.
+    ///
+    /// Shunning is at the top because it is not a private act by definition — it is refusing
+    /// somebody in front of the people you both live among, and a shunning nobody saw is just
+    /// two people drifting apart. Killing is at the bottom for the same reason it is possible
+    /// at all: it is done by somebody with nothing left to lose, and being seen is the thing
+    /// they would still lose.
+    /// **Giving and teaching are zero, and that is a finding rather than an omission.** They
+    /// were 0.55, on the reasonable grounds that a kindness done among people is seen. It is —
+    /// and people give and teach four times as often as they shun or rob, so witnessed decency
+    /// swamped witnessed wrongdoing, regard drifted up against its 2%-a-year decay until the
+    /// differences between people went flat, and how far apart the quarters of a world end up
+    /// **halved** (§40.2). A reputation is made of exceptions, and nearly all the exceptions
+    /// are bad ones.
+    pub const fn in_the_open(self) -> f32 {
+        match self {
+            Toward::Shun => 0.9,
+            Toward::Rob => 0.25,
+            Toward::Kill => 0.04,
+            Toward::Give | Toward::Teach => 0.0,
+        }
+    }
+
     /// How much of a wrong this is, anywhere, to anyone.
     ///
     /// Shunning is on the list and is the interesting entry: it is a small wrong that is
@@ -188,21 +216,47 @@ pub struct Actor<'a> {
     pub has_a_trade: bool,
     /// What their own upbringing says is owed to the person in front of them.
     pub own_ways: f32,
-    /// What they are trying to get out of their life, if anything — see `dreams`.
+    /// Who in particular they envy, if anybody — see `dreams::Dream::WhatTheyHave`.
     ///
-    /// Three of the six bear on what somebody does to the person in front of them and three
+    /// A *name*, not a quantity, and that is the whole of why it is here. Wanting to get on is
+    /// already in the list and it is about a rank; this is about the person across the square
+    /// who has what you do not, and it only means anything if the scoring can tell when that
+    /// person is the one in front of you.
+    pub envies: Option<PersonId>,
+    /// What they are trying to get out of their life — all seven, as `dreams::longings` reads
+    /// them.
+    ///
+    /// Four of the seven bear on what somebody does to the person in front of them and three
     /// do not, and the three that do not are left doing nothing here rather than given a
     /// token weight. A dream that wants a house has no opinion about whether to rob a
     /// neighbour, and pretending otherwise would make this field a second personality.
-    pub dream: Option<(Dream, f32)>,
+    ///
+    /// **All seven and not the strongest one**, which it was until §36.6. Winner-take-all
+    /// looks like modesty — only the thing somebody is really after gets a say — and is
+    /// actually a claim that nobody is after two things at once, which is false of every
+    /// person who has ever lived. Measured: across 401 adults, 253 longings clear the floor
+    /// and only 216 were ever heard, so thirty-seven things people wanted strongly enough for
+    /// them to count were discarded for the sole reason that something else was wanted more.
+    ///
+    /// It is not free — it moves giving, teaching and shunning by more than §40.3's noise
+    /// floor — so the old behaviour is kept switchable as `World::only_the_strongest_dream`
+    /// rather than described in a document.
+    pub dreams: [f32; Dream::COUNT],
 }
 
 impl Actor<'_> {
     /// How strongly they want that particular thing, or nothing.
+    ///
+    /// The floor stays, and it is the part of winner-take-all worth keeping: a longing felt
+    /// faintly is a preference, and a world where every faint preference argues in every
+    /// decision is a world where wanting things means nothing. What is dropped is only the
+    /// comparison against the *other* longings, which was never a claim anybody defended.
     fn dreaming_of(&self, dream: Dream) -> f32 {
-        match self.dream {
-            Some((held, how_much)) if held == dream => how_much,
-            _ => 0.0,
+        let how_much = self.dreams[dream as usize];
+        if how_much > crate::dreams::WORTH_WANTING {
+            how_much
+        } else {
+            0.0
         }
     }
 }
@@ -391,7 +445,16 @@ pub fn weigh(actor: &Actor, at: &Subject, now: Time) -> [f32; Toward::COUNT] {
         // Wanting to get on is a reason people take things, and it belongs beside greed
         // rather than instead of it: the difference between them is that greed is who
         // somebody is and this is what their life has made of them.
-        let spite = grudge.min(1.0) + hate + 0.6 * actor.dreaming_of(Dream::ToRise);
+        // And whether this is *the* person. Envy in the abstract is a mood; envy that knows a
+        // name is the reason somebody's barn burns down. It sits beside the grudge rather
+        // than beside the greed, because that is what it is: a grievance about somebody
+        // having what you have not, which they did nothing to you to acquire.
+        let envied = if actor.envies == Some(at.who) {
+            1.2 * actor.dreaming_of(Dream::WhatTheyHave)
+        } else {
+            0.0
+        };
+        let spite = grudge.min(1.0) + hate + 0.6 * actor.dreaming_of(Dream::ToRise) + envied;
         appetite[Toward::Rob as usize] = coveting
             * (need_of_it + greed + spite)
             * TAKING_BY_HAND
@@ -543,7 +606,8 @@ mod tests {
             life_ahead: 0.5,
             has_a_trade: true,
             own_ways: 0.5,
-            dream: None,
+            envies: None,
+            dreams: [0.0; Dream::COUNT],
         }
     }
 
