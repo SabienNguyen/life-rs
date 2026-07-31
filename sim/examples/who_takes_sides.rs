@@ -483,6 +483,51 @@ fn main() {
         );
     }
 
+    // How many people does anybody actually know, against how many there are to know? A
+    // two-step walk of the tie graph can only concentrate if two steps do not already reach
+    // everybody. If a town of a hundred has people holding a hundred ties, the graph is
+    // complete and *every* sampling scheme is a uniform one — which would make §44 marginal
+    // for a reason that has nothing to do with how candidates are drawn.
+    println!("\n  Is there room for structure?\n");
+    for seed in SEEDS {
+        let mut world = World::genesis(WorldSeed::from_u128(seed), 120);
+        world.record_only(Salience::Pivotal);
+        world.set_detail_budget(100_000);
+        world.run_for(Duration::from_years(years));
+        for place in world.places.ids() {
+            let here: Vec<_> = world
+                .people
+                .iter()
+                .filter(|(id, p)| {
+                    p.is_alive() && p.has_matured() && world.society.place_of(*id) == Some(place)
+                })
+                .map(|(id, _)| id)
+                .collect();
+            if here.len() < 20 {
+                continue;
+            }
+            let inside: Vec<usize> = here
+                .iter()
+                .map(|a| here.iter().filter(|b| *b != a && world.bonds.tie(*a, **b).holds()).count())
+                .collect();
+            let allied: Vec<usize> = here
+                .iter()
+                .map(|a| here.iter().filter(|b| world.bonds.tie(*a, **b).allied()).count())
+                .collect();
+            let mean = |v: &[usize]| v.iter().sum::<usize>() as f32 / v.len().max(1) as f32;
+            println!(
+                "  seed {seed:x} {:<14} {:>4} grown; each knows {:>5.1} of the other {:>3} \
+                 ({:>4.0}% of the town) and is allied to {:.1}",
+                world.places.get(place).map(|p| p.name.clone()).unwrap_or_default(),
+                here.len(),
+                mean(&inside),
+                here.len() - 1,
+                100.0 * mean(&inside) / (here.len() - 1).max(1) as f32,
+                mean(&allied)
+            );
+        }
+    }
+
     println!("\n  Is anybody an outcast already?\n");
     println!(
         "  adults disliked by anybody at all  {any:>5} of {}   ({:.1}%)",

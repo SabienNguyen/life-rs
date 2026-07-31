@@ -5033,9 +5033,70 @@ society whose members are all sampled from the same urn has no sub-communities t
 every mechanism built to divide one will be dividing an urn.
 
 That is the next thing worth attacking, and it is structural: not a term in `choose_company` but
-what `to_hand` is drawn from. It would be a large change to the most load-bearing loop in the
-model — §40.3.1 already found that who you *meet* is the strongest lever in this world — and it
-deserves its own section and its own ablation rather than being tacked onto this one.
+what `to_hand` is drawn from — see §44, which tried exactly that and found the reason it could
+not work.
+
+## 44. Everybody already knows everybody
+
+§43 ended on a diagnosis: `spend_an_evening` draws its new faces from a uniform sample of the
+whole town, and a uniform sample is a solvent. The obvious repair is to draw them **through the
+people somebody already knows** — nobody meets a stranger out of the whole town, they meet their
+friend's brother — and it is cheap, because it need not be a walk of the neighbourhood. Two
+random steps of the tie graph will do: one to somebody you know, one to somebody they know.
+
+Half the twelve new faces came that way and half stayed a uniform draw. The crowd half is
+load-bearing rather than a hedge: through-a-friend alone can never introduce anybody to a
+stranger, so a town would freeze into whatever circles its founders fell into.
+
+Ablated on one build, over the biggest quarter of three worlds:
+
+| | camps in the biggest quarter | trade | close kin |
+|---|---|---|---|
+| off | 1 (98%), 1 (93%), 1 (98%) | 0.94x 0.97x 1.02x | 1.14x 1.31x 1.25x |
+| on | 2 (97%), 2 (89%), 1 (96%) | 0.92x 0.93x 0.99x | 1.05x 1.34x 1.19x |
+
+Two seeds of three gain a second camp and the biggest falls from 93% to 89% on one of them.
+Assortativity does not move at all — trade stays at chance and kin stays where it was. A
+mechanism that changes the shape of the graph a little and what friendship *means* not at all.
+
+### 44.1 Why: two steps already reach everybody
+
+The reflex from §43.3 is to ask about the other terms rather than this one, and here it pays off
+immediately. A two-step walk can only concentrate if two steps do not already reach the whole
+town. So: how many people does anybody actually know, against how many there are to know?
+
+    seed 11  Shawhythe    72 grown; each knows 70.8 of the other 71  (100%), allied to 12.3
+    seed 11  Eldhythe     90 grown; each knows 84.6 of the other 89  ( 95%), allied to 10.5
+    seed 21  Norhaven     74 grown; each knows 72.4 of the other 73  ( 99%), allied to 13.9
+    seed 21  Wickstrand   40 grown; each knows 39.0 of the other 39  (100%), allied to  8.4
+    seed 221 Stanquay     55 grown; each knows 53.3 of the other 54  ( 99%), allied to 11.8
+    seed 221 Stowmouth    51 grown; each knows 50.0 of the other 50  (100%), allied to 12.8
+
+**The graph is complete.** Every adult knows between 95% and 100% of the other adults in their
+town. On a complete graph a two-step walk *is* a uniform sample, so §44 was never able to
+concentrate anything — and neither is any other sampling scheme, however it is written.
+
+Which retires §43.5's diagnosis and replaces it with a better one. The solvent is not how
+candidates are drawn. **There is no room for structure, because everybody already knows
+everybody**, and a graph with no absent edges has no sub-communities in it to find. Three
+sections of mechanism — §40's witnesses, §42's reputation, §43's avoidance — were all trying to
+build social structure on a substrate that has none and cannot hold any.
+
+The one place structure survives is the ally graph: 8 to 14 allies out of 40 to 90 townspeople,
+a density of 13% to 17%. That is a real network with real gaps in it, and it is the one every
+faction question should have been asked of. `holds()` is `known > 0.04`, which is loose enough
+that a person carries their entire town at faint strength; `allied()` is `known > 0.3 && warmth
+> 0.25` and is genuinely selective. `CLOSE_TIES` exists and is 20, and is not what `holds()`
+enforces.
+
+So the next change is not to sampling and not to any social mechanism. It is that **knowing
+somebody should be scarce** — a bound on how many ties a person carries at all, rather than a
+threshold so low that everybody carries everyone. That is a change to the substrate every one of
+§40 through §44 is written on top of, which is exactly why it should be made deliberately, with
+its own ablation, and not as the tail of a section about who meets whom.
+
+§44 is reverted. It is correct about how people meet, it moves the graph slightly, it does not
+move what friendship means, and it was built against a diagnosis its own measurement replaced.
 
 ## 37. Leaving, built and taken out again
 
