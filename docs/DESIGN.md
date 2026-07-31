@@ -4908,6 +4908,103 @@ writes to it. Every bug in this section is invisible to a mean and obvious to a 
 The partisanship mechanism that started all this is still not built. It would have been built on
 sand.
 
+## 43. A faction needs a boundary, and a boundary is outnumbered
+
+§42 set out to build partisanship and stopped when it found that the quantity a faction would
+have to divide was written by nothing. That is fixed; `regard` is alive and the world holds
+0.028 of settled disagreement about its people. So the mechanism became buildable, and this is
+what happened to it.
+
+### 43.1 The world's only social boundary is geography
+
+Counting occasions first, the material looked abundant: every pair who know each other has a
+mutual friend, a median of 132 of them, and 24.4% of onlookers are fond of exactly one of any
+two people. But having a side to take is not the same as there being sides. A faction is two
+groups in one place who mostly talk among themselves, so the question is whether the tie graph
+has **communities**.
+
+Label propagation over a whole world finds them — two to four camps, with 98–99% of friendships
+staying inside one. And then the camp sizes give it away: in seed 0x21 the biggest holds 67
+against a biggest quarter of 68. **The camps are the settlements.** People in Ingwick befriend
+people in Ingwick, and that is a map rather than a faction.
+
+Asked of a single town, where geography cannot answer it:
+
+    seed 11: the biggest quarter's 125 adults fall into 1 camp; it holds 123 (98%)
+    seed 21: the biggest quarter's  68 adults fall into 1 camp; it holds  63 (93%)
+    seed 221: the biggest quarter's 91 adults fall into 1 camp; it holds  89 (98%)
+
+100% of friendships inside it, every time. **A town is one undifferentiated bloc.** Nothing in
+this world has ever divided a community from the inside, which is exactly why no partisanship
+mechanism could have taken hold: `hearsay` runs on 1.79 million evenings dragging everybody's
+opinion toward their friends', and against a single bloc that is a consensus engine with nothing
+to push back on it.
+
+### 43.2 Why: attraction has a term and repulsion does not
+
+`choose_company` scores a candidate at
+
+    0.12 + known * drawn + 0.25 * mutual.min(4.0)
+
+where `mutual` counts, through `friends_of_friends`, how many of your allies are allied to them.
+That is triadic closure and it is why groups close into circles. What the same walk does with an
+*enemy* of an ally is `continue`. Every one of them is dropped on the floor.
+
+So the mechanism has attraction and no repulsion, and a community can close into a circle and can
+never split into rivals — because a faction needs a **boundary**, and a boundary is made of
+avoidance rather than of attraction.
+
+Making the walk signed is four lines: allies of an ally count `+1`, people an ally has turned
+against count `-1`, and `mutual` becomes a balance rather than a tally.
+
+### 43.3 It fires constantly and is outnumbered three to one
+
+Measured on one build with the switch either way, over the biggest quarter of three worlds:
+
+    people_take_sides = false:   1 camp (98%),  1 camp (93%),  1 camp (98%)
+    people_take_sides = true:    1 camp (100%), 2 camps (94%), 1 camp (97%)
+
+One seed of three finds a second camp, and the first still holds 94%. Essentially inert.
+
+The reflex by now is to ask how often the term can speak, because three sections running have
+ended in a mechanism that never fired. This time it fires constantly:
+
+    of (me, my ally, someone they know) triples
+      allies of an ally     13.3%   20.4%   15.7%
+      enemies of an ally     3.8%    4.5%    3.8%
+      people with even one   164/167   110/114   115/120
+
+**Everybody has enemies-of-allies.** The term is not rare; it is *outnumbered*, about three and a
+half to one, by the positive half of the very sum it sits in. `mutual` stays positive for almost
+every candidate because people have more friends than enemies — which is a fact about how much
+the people in this world like each other, and not something a coefficient should be used to
+argue with.
+
+So the mechanism is reverted. It is correct, it fires on every adult in the world, it does not
+produce what it was built for, and turning up its weight until it did would be choosing the
+answer. §37 and §38 were reverted on the same standard while being similarly defensible.
+
+### 43.4 A third way for a mechanism to do nothing
+
+Worth naming, because this project now has three and they want different responses.
+
+| | what is wrong | how it shows |
+|---|---|---|
+| **§32.2, §35's killing** | the conjunction is never satisfied | count the occasions: zero |
+| **§36.6's envy** | the occasions are real but vanishingly rare | count the occasions: 903 in 1.79M |
+| **§43** | the occasions are everywhere and the term is outnumbered | count the occasions: everybody has one |
+
+Only the first two are found by asking "how often can this fire". The third needs the question
+asked of the *other* terms in the same expression — a mechanism can be common and still lose
+every vote it is in. The instrument that answers it is not a count but a ratio, and nothing in
+this project had ever printed one.
+
+What would actually split a town is not more weight on avoidance. It is something that makes
+people's friendships *cluster* in the first place — trades, kinship lines, a reason to spend
+evenings with some of a town rather than a sample of all of it. `choose_company` draws its
+candidates from a uniform sample of neighbours plus existing ties, and a uniform sample is a
+solvent. That is the real finding and it is structural rather than a matter of one term's sign.
+
 ## 37. Leaving, built and taken out again
 
 §33 counted what people are to each other and found the sharpest gap in the model: **nobody

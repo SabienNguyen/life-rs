@@ -201,12 +201,193 @@ fn main() {
             }
         }
     }
+    // And how much of that warmth is *hostile*, which is the material any avoidance mechanism
+    // has to work with. `meet_repeatedly` pulls warmth toward `suits` on every one of 1.79
+    // million evenings, and `suits` is temperament compatibility alone — so a dislike created
+    // by an event is a displacement from an attractor, and the attractor wins. If almost no
+    // live tie sits below `allied()`'s mirror of -0.25, then two people who get on will get on
+    // whoever else they know, and a faction — which is precisely "I dislike you for who you
+    // stand with" — has nothing to be built out of.
+    {
+        let (mut hostile, mut all) = (0usize, 0usize);
+        for seed in SEEDS {
+            let mut world = World::genesis(WorldSeed::from_u128(seed), 120);
+            world.record_only(Salience::Pivotal);
+            world.set_detail_budget(100_000);
+            world.run_for(Duration::from_years(years));
+            for (who, person) in world.people.iter() {
+                if !person.is_alive() {
+                    continue;
+                }
+                for (_, tie) in world.bonds.of(who) {
+                    if !tie.holds() {
+                        continue;
+                    }
+                    all += 1;
+                    if tie.warmth < -0.25 {
+                        hostile += 1;
+                    }
+                }
+            }
+        }
+        println!(
+            "  hostile ties (warmth < -0.25)  {hostile} of {all}  ({:.2}%)  <- what avoidance \
+             has to work with",
+            100.0 * hostile as f32 / all.max(1) as f32
+        );
+    }
     for (at, name) in [(0usize, "regard"), (1usize, "warmth")] {
         let (moved, all) = live[at];
         println!(
             "  {name:<7} moved off zero on {moved:>7} of {all:>7} live ties  ({:>5.1}%),  mean |value| {:.4}",
             100.0 * moved as f32 / all.max(1) as f32,
             sums[at] / all.max(1) as f64
+        );
+    }
+
+    // Could a faction *hold*, though? Taking a side needs somebody to take it against, but a
+    // faction needs a **boundary** — two groups who mostly talk within themselves — and
+    // `hearsay` runs on every one of 1.79 million evenings dragging everybody's opinion toward
+    // their friends'. Against a graph where everybody knows everybody, that is a consensus
+    // engine with nothing to push back, and no partisanship mechanism built on top could
+    // survive it. This is the §32.2 question asked about structure rather than about events.
+    //
+    // Label propagation: everybody starts in their own camp and repeatedly adopts whichever
+    // camp their allies mostly belong to. On a graph with communities it settles into a few
+    // large ones. On a graph without, it collapses to a single camp, which is the answer.
+    //
+    // Measured both ways on one build. Comparing against a remembered figure from a previous
+    // build is what §42 spent a section learning not to do: the trajectories differ, so the
+    // difference measures the divergence and not the mechanism.
+    println!("\n  Could a faction hold?\n");
+    for seed in SEEDS {
+        let mut world = World::genesis(WorldSeed::from_u128(seed), 120);
+        world.record_only(Salience::Pivotal);
+        world.set_detail_budget(100_000);
+        world.run_for(Duration::from_years(years));
+
+        // **Within one place**, and that distinction is the whole question. Run over the
+        // world, label propagation finds camps — and they are the settlements. People in
+        // Ingwick befriend people in Ingwick, so 99% of friendships stay inside a camp and
+        // the camps come out the size of the quarters. That is a map, not a faction.
+        //
+        // A faction is a split *inside* a community: two blocs in the same town who mostly
+        // talk among themselves. So this asks the question of the biggest quarter alone,
+        // where geography cannot answer it.
+        let biggest_place = world
+            .places
+            .ids()
+            .max_by_key(|p| world.society.households_in(*p).count());
+        let folk: Vec<_> = world
+            .people
+            .iter()
+            .filter(|(id, p)| {
+                p.is_alive()
+                    && p.has_matured()
+                    && world.society.place_of(*id) == biggest_place
+            })
+            .map(|(id, _)| id)
+            .collect();
+        let at: std::collections::BTreeMap<_, usize> =
+            folk.iter().enumerate().map(|(n, id)| (*id, n)).collect();
+        let allies: Vec<Vec<usize>> = folk
+            .iter()
+            .map(|id| {
+                world
+                    .bonds
+                    .of(*id)
+                    .filter(|(_, t)| t.allied())
+                    .filter_map(|(other, _)| at.get(&other).copied())
+                    .collect()
+            })
+            .collect();
+        let mut camp: Vec<usize> = (0..folk.len()).collect();
+        for _ in 0..20 {
+            let mut moved = false;
+            for who in 0..folk.len() {
+                let mut tally: std::collections::BTreeMap<usize, usize> = Default::default();
+                for other in &allies[who] {
+                    *tally.entry(camp[*other]).or_default() += 1;
+                }
+                if let Some((&best, _)) = tally.iter().max_by_key(|(_, n)| **n)
+                    && best != camp[who]
+                {
+                    camp[who] = best;
+                    moved = true;
+                }
+            }
+            if !moved {
+                break;
+            }
+        }
+        let mut sizes: std::collections::BTreeMap<usize, usize> = Default::default();
+        for c in &camp {
+            *sizes.entry(*c).or_default() += 1;
+        }
+        let mut counts: Vec<usize> = sizes.into_values().filter(|n| *n > 1).collect();
+        counts.sort_unstable_by(|a, b| b.cmp(a));
+        let biggest = counts.first().copied().unwrap_or(0);
+        // How much of a person's social life stays inside their own camp. Anything near 1.0
+        // with a single camp holding everybody is a world with no boundaries in it at all.
+        let inside: usize = (0..folk.len())
+            .map(|w| allies[w].iter().filter(|o| camp[**o] == camp[w]).count())
+            .sum();
+        let all: usize = allies.iter().map(Vec::len).sum();
+        println!(
+            "  seed {seed:x}: the biggest quarter's {} adults fall into {} camps of more than \
+             one; biggest holds {biggest} ({:.0}%), and {:.0}% of friendships stay inside a camp",
+            folk.len(),
+            counts.len(),
+            100.0 * biggest as f32 / folk.len().max(1) as f32,
+            100.0 * inside as f32 / all.max(1) as f32
+        );
+    }
+
+    // And how often the §43 term can speak at all. It fires when one of your *allies* holds
+    // warmth below -0.25 toward somebody — an enemy of a friend. §36.6's rule, which this
+    // project has now had to learn four times: count the occasions before diagnosing the
+    // arithmetic. A term that fires on one relation in a thousand is inert whatever its weight.
+    println!("\n  How often can a friend's enemy be avoided?\n");
+    for seed in SEEDS {
+        let mut world = World::genesis(WorldSeed::from_u128(seed), 120);
+        world.record_only(Salience::Pivotal);
+        world.set_detail_budget(100_000);
+        world.run_for(Duration::from_years(years));
+
+        let (mut through_ally, mut against, mut with) = (0usize, 0usize, 0usize);
+        let mut anybody = 0usize;
+        for (who, person) in world.people.iter() {
+            if !person.is_alive() || !person.has_matured() {
+                continue;
+            }
+            let mut has_one = false;
+            for (friend, mine) in world.bonds.of(who) {
+                if !mine.allied() {
+                    continue;
+                }
+                for (_, theirs) in world.bonds.of(friend) {
+                    if !theirs.holds() {
+                        continue;
+                    }
+                    through_ally += 1;
+                    if theirs.allied() {
+                        with += 1;
+                    } else if theirs.warmth < -0.25 {
+                        against += 1;
+                        has_one = true;
+                    }
+                }
+            }
+            if has_one {
+                anybody += 1;
+            }
+        }
+        println!(
+            "  seed {seed:x}: of {through_ally} (me, my ally, someone they know) triples, \
+             {with} are allies of an ally ({:.1}%) and {against} are enemies of one ({:.2}%); \
+             {anybody} people have even one",
+            100.0 * with as f32 / through_ally.max(1) as f32,
+            100.0 * against as f32 / through_ally.max(1) as f32
         );
     }
 
