@@ -5293,6 +5293,33 @@ That is the fourth entry in the list §43.4 started, and the one that would have
 | §43 | the occasions are everywhere and the term is outnumbered | ask about the other terms |
 | **§46** | **the world is too comfortable for it to matter** | **run it at `FOUNDERS=600`** |
 
+### 46.3 The protocol, applied to the mechanism it most implicates
+
+§43's avoidance term was reverted for being outnumbered by friendship — every adult has
+enemies-of-allies, and they lose every vote they are in. That was measured in the comfortable
+world, and a hungry one should have people falling out more, so it is the first thing §46.2's
+protocol should be pointed at.
+
+| | 120 founders | 600 founders |
+|---|---|---|
+| allies-of-an-ally | 15.4% | 7.5% |
+| enemies-of-an-ally | 6.41% | 4.43% |
+| **ratio** | **2.4 to 1** | **1.7 to 1** |
+| camps in the biggest town | 1.0, holding 96% | **1.7, holding 90%** |
+
+Both move the predicted way. The balance narrows by a third, and the biggest town in a world
+starts to fall into more than one camp for the first time in any measurement in this document.
+
+**And §43 stays reverted.** 1.7 to 1 is still friendship winning, and 90% in one camp is still
+one bloc; the mechanism would go from losing badly to losing. What the run establishes is that
+the protocol *works* — the same question asked of two world sizes gives materially different
+answers, so "measured at the default and found inert" is a weaker claim than it reads. It is
+just not, this time, a different verdict.
+
+Worth noting what did **not** move: acquaintance is near-complete at either size, so §44's
+diagnosis stays retired. The thing scale supplies is lineages (§45.3) and hunger (§46), not
+sparsity.
+
 §44's mechanism is reverted. It is correct about how people meet, it moves the graph slightly,
 it does not move what friendship means, and it was built against a diagnosis its own measurement
 replaced — twice over, since the replacement was then replaced by §44.2.
