@@ -391,6 +391,98 @@ fn main() {
         );
     }
 
+    // §43.4's real finding, measured. If a town is one bloc because `choose_company` draws its
+    // new faces from a **uniform** sample of the place, then friendships should show no trace
+    // of the one axis the model already has to cluster on — what people do all day. Assortativity
+    // by trade: how much likelier two friends are to share a trade than two people picked at
+    // random from the same town. 1.00 means the uniform sample has dissolved it entirely.
+    println!("\n  Do friendships cluster on anything at all?\n");
+    for seed in SEEDS {
+        let mut world = World::genesis(WorldSeed::from_u128(seed), 120);
+        world.record_only(Salience::Pivotal);
+        world.set_detail_budget(100_000);
+        world.run_for(Duration::from_years(years));
+
+        // Per place, so this measures clustering *within* a town rather than the fact that
+        // towns differ in what they do — which is §43.1's mistake in miniature.
+        let (mut same_tied, mut all_tied, mut same_pairs, mut all_pairs) = (0usize, 0usize, 0usize, 0usize);
+        for place in world.places.ids() {
+            let here: Vec<_> = world
+                .people
+                .iter()
+                .filter(|(id, p)| {
+                    p.is_alive() && p.has_matured() && world.society.place_of(*id) == Some(place)
+                })
+                .map(|(id, p)| (id, p.trade()))
+                .collect();
+            if here.len() < 10 {
+                continue;
+            }
+            for (n, (a, trade_a)) in here.iter().enumerate() {
+                for (b, trade_b) in here.iter().skip(n + 1) {
+                    all_pairs += 1;
+                    if trade_a == trade_b {
+                        same_pairs += 1;
+                    }
+                    if world.bonds.tie(*a, *b).allied() {
+                        all_tied += 1;
+                        if trade_a == trade_b {
+                            same_tied += 1;
+                        }
+                    }
+                }
+            }
+        }
+        let among_friends = same_tied as f32 / all_tied.max(1) as f32;
+        let by_chance = same_pairs as f32 / all_pairs.max(1) as f32;
+        println!(
+            "  seed {seed:x}: trade — {:.1}% of friendships share one against {:.1}% of all pairs \
+             in the same town ({:.2}x chance; base rate that high because most of a town farms)",
+            100.0 * among_friends,
+            100.0 * by_chance,
+            among_friends / by_chance.max(1e-6)
+        );
+
+        // And kin, which is the one axis in this model that is genuinely partitioned — trade
+        // cannot split a town when three quarters of it does the same thing. If friendships are
+        // no likelier among kin either, then the uniform sample is dissolving *everything* and
+        // the fix is not another term but the pool itself.
+        let (mut kin_tied, mut tied, mut kin_pairs, mut pairs) = (0usize, 0usize, 0usize, 0usize);
+        for place in world.places.ids() {
+            let here: Vec<_> = world
+                .people
+                .iter()
+                .filter(|(id, p)| {
+                    p.is_alive() && p.has_matured() && world.society.place_of(*id) == Some(place)
+                })
+                .map(|(id, _)| id)
+                .collect();
+            if here.len() < 10 {
+                continue;
+            }
+            for (n, a) in here.iter().enumerate() {
+                for b in here.iter().skip(n + 1) {
+                    let kin = world.society.is_close_kin(*a, *b);
+                    pairs += 1;
+                    kin_pairs += usize::from(kin);
+                    if world.bonds.tie(*a, *b).allied() {
+                        tied += 1;
+                        kin_tied += usize::from(kin);
+                    }
+                }
+            }
+        }
+        let kin_among = kin_tied as f32 / tied.max(1) as f32;
+        let kin_chance = kin_pairs as f32 / pairs.max(1) as f32;
+        println!(
+            "           kin   — {:.1}% of friendships are close kin against {:.1}% of all pairs \
+             ({:.2}x chance)",
+            100.0 * kin_among,
+            100.0 * kin_chance,
+            kin_among / kin_chance.max(1e-6)
+        );
+    }
+
     println!("\n  Is anybody an outcast already?\n");
     println!(
         "  adults disliked by anybody at all  {any:>5} of {}   ({:.1}%)",

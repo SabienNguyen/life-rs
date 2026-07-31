@@ -5000,10 +5000,42 @@ every vote it is in. The instrument that answers it is not a count but a ratio, 
 this project had ever printed one.
 
 What would actually split a town is not more weight on avoidance. It is something that makes
-people's friendships *cluster* in the first place — trades, kinship lines, a reason to spend
-evenings with some of a town rather than a sample of all of it. `choose_company` draws its
-candidates from a uniform sample of neighbours plus existing ties, and a uniform sample is a
-solvent. That is the real finding and it is structural rather than a matter of one term's sign.
+people's friendships *cluster* in the first place. `choose_company` draws its candidates from
+existing ties plus a **uniform sample of twelve neighbours**, and a uniform sample is a solvent:
+every evening, a person's social world is redrawn at random from the whole town.
+
+### 43.5 The solvent, measured
+
+That is a claim with a number behind it. Assortativity — how much likelier two friends are to
+share something than two people drawn at random *from the same town*, so the measure cannot be
+answered by geography the way §43.1 was:
+
+| | seed 0x11 | seed 0x21 | seed 0x221 |
+|---|---|---|---|
+| **trade** | 0.94x | 0.97x | 1.02x |
+| **close kin** | 1.14x | 1.31x | 1.25x |
+
+**Trade is dissolved exactly.** Friendships are neither more nor less likely to share a trade
+than any two people in the town — the sample has erased the one axis the model spends a whole
+crate computing. And trade could not have split a town anyway: the base rate of shared trade is
+56%, 76%, 77%, because most of a town farms. An axis three quarters of the population sits on is
+not a boundary.
+
+**Kin survives, faintly.** A quarter above chance, and almost certainly not because anybody
+prefers their kin: households co-reside, so relatives are forced into each other's company by
+where they sleep. It is the residue of a structure the sampling has not quite managed to
+dissolve, rather than a social preference the model holds.
+
+So the honest statement of what this world lacks is not a mechanism at all. **Nobody here has a
+neighbourhood.** Real people see the same faces because of where they stand each day — a field,
+a forge, a well — and this model gives everybody the whole town, uniformly, every evening. A
+society whose members are all sampled from the same urn has no sub-communities to find, and
+every mechanism built to divide one will be dividing an urn.
+
+That is the next thing worth attacking, and it is structural: not a term in `choose_company` but
+what `to_hand` is drawn from. It would be a large change to the most load-bearing loop in the
+model — §40.3.1 already found that who you *meet* is the strongest lever in this world — and it
+deserves its own section and its own ablation rather than being tacked onto this one.
 
 ## 37. Leaving, built and taken out again
 
