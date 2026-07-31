@@ -454,9 +454,7 @@ const WHAT_A_WITNESS_MAKES_OF_IT: f32 = 0.06;
 /// the means at which somebody of a given age reads as neither well-off nor badly-off (§42.4).
 ///
 /// Measured, not chosen. Mean `means()` by fifth of a life, over three worlds:
-///
-///     (children)   0.60   0.70   0.78   0.79
-///
+/// `(children)` then `0.60`, `0.70`, `0.78`, `0.79` —
 /// so par runs from about 0.57 early to about 0.81 late, which is what these two give. The
 /// saturating form needs a middle and never a maximum, which matters because `means()` has no
 /// ceiling — it is `standing + estate * WORTH_AT_A_DOOR` and runs past 1.9, and dividing an
