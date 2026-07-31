@@ -5076,27 +5076,52 @@ town. So: how many people does anybody actually know, against how many there are
 town. On a complete graph a two-step walk *is* a uniform sample, so §44 was never able to
 concentrate anything — and neither is any other sampling scheme, however it is written.
 
-Which retires §43.5's diagnosis and replaces it with a better one. The solvent is not how
-candidates are drawn. **There is no room for structure, because everybody already knows
-everybody**, and a graph with no absent edges has no sub-communities in it to find. Three
-sections of mechanism — §40's witnesses, §42's reputation, §43's avoidance — were all trying to
-build social structure on a substrate that has none and cannot hold any.
+That explains why §44 could not work. It does **not** explain why there are no factions, and the
+first version of this section said it did. The correction is §44.2 and it matters, because the
+wrong diagnosis pointed at a change to the substrate that would have been a waste of a week.
 
-The one place structure survives is the ally graph: 8 to 14 allies out of 40 to 90 townspeople,
-a density of 13% to 17%. That is a real network with real gaps in it, and it is the one every
-faction question should have been asked of. `holds()` is `known > 0.04`, which is loose enough
-that a person carries their entire town at faint strength; `allied()` is `known > 0.3 && warmth
-> 0.25` and is genuinely selective. `CLOSE_TIES` exists and is 20, and is not what `holds()`
-enforces.
+### 44.2 The friendship graph is clustered. It is just not partitioned
 
-So the next change is not to sampling and not to any social mechanism. It is that **knowing
-somebody should be scarce** — a bound on how many ties a person carries at all, rather than a
-threshold so low that everybody carries everyone. That is a change to the substrate every one of
-§40 through §44 is written on top of, which is exactly why it should be made deliberately, with
-its own ablation, and not as the tail of a section about who meets whom.
+The camps in §43.1 and §44 were computed on `allied()`, not `holds()` — on a graph of 8 to 14
+friends out of 40 to 90 townspeople, 11% to 22% dense. That graph is not complete, so
+completeness cannot be the reason it came back as one bloc. Asking whether it is distinguishable
+from a random graph of the same density:
 
-§44 is reverted. It is correct about how people meet, it moves the graph slightly, it does not
-move what friendship means, and it was built against a diagnosis its own measurement replaced.
+    seed 11  Shawhythe   125 grown, density 0.113, clustering 0.312 — 2.76x a random graph
+    seed 21  Ingwick      68 grown, density 0.217, clustering 0.457 — 2.10x a random graph
+    seed 221 Stanquay     91 grown, density 0.198, clustering 0.411 — 2.07x a random graph
+
+**Friendship here is two to three times more clustered than chance.** Triadic closure works,
+`friends_of_friends` does what it says, and people's friends really are friends with each other
+far more often than a coin flip. The substrate has plenty of local structure and always did.
+
+What it has is a **small world**: dense neighbourhoods that overlap continuously, with no cut
+anywhere. Everybody sits in a tight circle; every circle shades into the next; label propagation
+walks from any of them to all of them. A community needs clusters that are *separated*, and this
+has clusters that are merely dense.
+
+And the reason is the one thing that decides friendship here: `suits`, which scores two
+temperaments by similarity. **Similarity on a continuum cannot partition a population.** Everybody
+has a dense neighbourhood of people like them, and "like me" names a different set for every
+person, so the neighbourhoods tile the space without ever cutting it. That is exactly the graph
+measured: clustered 2x, partitioned 0x.
+
+So a faction needs something similarity cannot supply — a **discrete** shared attribute that many
+people hold identically, or a constraint that puts a hard wall between two groups who would
+otherwise mix. Trade is discrete and was measured at 0.94-1.02x chance and three-quarters
+farmers, so it is neither carried into friendship nor evenly enough spread to divide anything.
+Kin is discrete, is genuinely partitioned, and reaches friendship at only 1.2x — through
+households co-residing rather than through anybody preferring their relatives.
+
+**Kin is the candidate**, and it is the only one this world already has: lineages are disjoint by
+construction, they persist across generations, and they are the axis real village factions
+actually run on. Making kinship count in `suits` or in `choose_company` is a small change with a
+discrete partition behind it, which is the one thing three sections of mechanism have been
+missing. It gets its own section and its own ablation.
+
+§44's mechanism is reverted. It is correct about how people meet, it moves the graph slightly,
+it does not move what friendship means, and it was built against a diagnosis its own measurement
+replaced — twice over, since the replacement was then replaced by §44.2.
 
 ## 37. Leaving, built and taken out again
 

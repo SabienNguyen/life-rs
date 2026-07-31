@@ -528,6 +528,69 @@ fn main() {
         }
     }
 
+    // §44 concluded that a complete acquaintance graph leaves no room for structure. But the
+    // camps above were computed on `allied()`, not `holds()` — on a graph of 8 to 14 friends
+    // out of 40 to 90 townspeople, 13% to 17% dense — and *that* graph still came back one
+    // bloc. So completeness is not the whole story and this asks the sharper question: is the
+    // friendship graph distinguishable from a random one of the same density?
+    //
+    // Clustering coefficient. In a random graph two of my friends are friends with each other
+    // at the graph's own density; in a structured one, far more often. C/density near 1.0 means
+    // friendship here is a coin flip weighted by nothing that groups anybody.
+    println!("\n  Is friendship structured, or just sparse?\n");
+    for seed in SEEDS {
+        let mut world = World::genesis(WorldSeed::from_u128(seed), 120);
+        world.record_only(Salience::Pivotal);
+        world.set_detail_budget(100_000);
+        world.run_for(Duration::from_years(years));
+        for place in world.places.ids() {
+            let here: Vec<_> = world
+                .people
+                .iter()
+                .filter(|(id, p)| {
+                    p.is_alive() && p.has_matured() && world.society.place_of(*id) == Some(place)
+                })
+                .map(|(id, _)| id)
+                .collect();
+            if here.len() < 30 {
+                continue;
+            }
+            let allied: Vec<Vec<person::PersonId>> = here
+                .iter()
+                .map(|a| {
+                    here.iter()
+                        .copied()
+                        .filter(|b| b != a && world.bonds.tie(*a, *b).allied())
+                        .collect()
+                })
+                .collect();
+            let edges: usize = allied.iter().map(Vec::len).sum();
+            let density = edges as f32 / (here.len() * (here.len() - 1)) as f32;
+            // How often two of somebody's friends are friends with each other.
+            let (mut closed, mut wedges) = (0usize, 0usize);
+            for friends in &allied {
+                for (n, a) in friends.iter().enumerate() {
+                    for b in friends.iter().skip(n + 1) {
+                        wedges += 1;
+                        if world.bonds.tie(*a, *b).allied() {
+                            closed += 1;
+                        }
+                    }
+                }
+            }
+            let clustering = closed as f32 / wedges.max(1) as f32;
+            println!(
+                "  seed {seed:x} {:<14} {:>3} grown, friendship density {:.3}, clustering {:.3} \
+                 — {:.2}x a random graph",
+                world.places.get(place).map(|p| p.name.clone()).unwrap_or_default(),
+                here.len(),
+                density,
+                clustering,
+                clustering / density.max(1e-6)
+            );
+        }
+    }
+
     println!("\n  Is anybody an outcast already?\n");
     println!(
         "  adults disliked by anybody at all  {any:>5} of {}   ({:.1}%)",
