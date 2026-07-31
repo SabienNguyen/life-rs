@@ -43,6 +43,13 @@ fn main() {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(90);
+    // §45.2's first claim is that a larger settlement outgrows universal acquaintance and
+    // universal kinship on its own, without anything being added. That is falsifiable in one
+    // run, so `FOUNDERS=n` makes it a measurement rather than a guess.
+    let founders: usize = std::env::var("FOUNDERS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(120);
 
     // Triangles: for a tie that holds between A and B, how many third parties know them both.
     let (mut pairs, mut with_a_third) = (0usize, 0usize);
@@ -54,7 +61,7 @@ fn main() {
     let mut disliked_by: Vec<(usize, usize, String)> = Vec::new();
 
     for seed in SEEDS {
-        let mut world = World::genesis(WorldSeed::from_u128(seed), 120);
+        let mut world = World::genesis(WorldSeed::from_u128(seed), founders);
         world.record_only(Salience::Pivotal);
         world.set_detail_budget(100_000);
         world.run_for(Duration::from_years(years));
@@ -179,7 +186,7 @@ fn main() {
     let mut live = [(0usize, 0usize); 2];
     let mut sums = [0.0f64; 2];
     for seed in SEEDS {
-        let mut world = World::genesis(WorldSeed::from_u128(seed), 120);
+        let mut world = World::genesis(WorldSeed::from_u128(seed), founders);
         world.record_only(Salience::Pivotal);
         world.set_detail_budget(100_000);
         world.run_for(Duration::from_years(years));
@@ -211,7 +218,7 @@ fn main() {
     {
         let (mut hostile, mut all) = (0usize, 0usize);
         for seed in SEEDS {
-            let mut world = World::genesis(WorldSeed::from_u128(seed), 120);
+            let mut world = World::genesis(WorldSeed::from_u128(seed), founders);
             world.record_only(Salience::Pivotal);
             world.set_detail_budget(100_000);
             world.run_for(Duration::from_years(years));
@@ -261,7 +268,7 @@ fn main() {
     // difference measures the divergence and not the mechanism.
     println!("\n  Could a faction hold?\n");
     for seed in SEEDS {
-        let mut world = World::genesis(WorldSeed::from_u128(seed), 120);
+        let mut world = World::genesis(WorldSeed::from_u128(seed), founders);
         world.record_only(Salience::Pivotal);
         world.set_detail_budget(100_000);
         world.run_for(Duration::from_years(years));
@@ -349,7 +356,7 @@ fn main() {
     // arithmetic. A term that fires on one relation in a thousand is inert whatever its weight.
     println!("\n  How often can a friend's enemy be avoided?\n");
     for seed in SEEDS {
-        let mut world = World::genesis(WorldSeed::from_u128(seed), 120);
+        let mut world = World::genesis(WorldSeed::from_u128(seed), founders);
         world.record_only(Salience::Pivotal);
         world.set_detail_budget(100_000);
         world.run_for(Duration::from_years(years));
@@ -398,7 +405,7 @@ fn main() {
     // random from the same town. 1.00 means the uniform sample has dissolved it entirely.
     println!("\n  Do friendships cluster on anything at all?\n");
     for seed in SEEDS {
-        let mut world = World::genesis(WorldSeed::from_u128(seed), 120);
+        let mut world = World::genesis(WorldSeed::from_u128(seed), founders);
         world.record_only(Salience::Pivotal);
         world.set_detail_budget(100_000);
         world.run_for(Duration::from_years(years));
@@ -490,7 +497,7 @@ fn main() {
     // for a reason that has nothing to do with how candidates are drawn.
     println!("\n  Is there room for structure?\n");
     for seed in SEEDS {
-        let mut world = World::genesis(WorldSeed::from_u128(seed), 120);
+        let mut world = World::genesis(WorldSeed::from_u128(seed), founders);
         world.record_only(Salience::Pivotal);
         world.set_detail_budget(100_000);
         world.run_for(Duration::from_years(years));
@@ -539,7 +546,7 @@ fn main() {
     // friendship here is a coin flip weighted by nothing that groups anybody.
     println!("\n  Is friendship structured, or just sparse?\n");
     for seed in SEEDS {
-        let mut world = World::genesis(WorldSeed::from_u128(seed), 120);
+        let mut world = World::genesis(WorldSeed::from_u128(seed), founders);
         world.record_only(Salience::Pivotal);
         world.set_detail_budget(100_000);
         world.run_for(Duration::from_years(years));
@@ -600,7 +607,7 @@ fn main() {
     // rather than after it.
     println!("\n  Is kin a partition, or is everyone a cousin?\n");
     for seed in SEEDS {
-        let mut world = World::genesis(WorldSeed::from_u128(seed), 120);
+        let mut world = World::genesis(WorldSeed::from_u128(seed), founders);
         world.record_only(Salience::Pivotal);
         world.set_detail_budget(100_000);
         world.run_for(Duration::from_years(years));

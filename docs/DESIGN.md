@@ -5161,8 +5161,8 @@ village. Feuds between quarters are reachable from here; feuds inside one are no
 
 Not another social mechanism. Any of:
 
-- **Larger settlements.** Above a few hundred, a town outgrows both universal acquaintance and
-  universal kinship on its own, and the axes start to bite without anything being added.
+- **A larger world.** Measured rather than guessed — see §45.3, where it turns out to be the
+  answer and not merely a plausible one.
 - **Patterned marriage.** Lineages stay distinct only if whom you may marry is constrained.
   Exogamy is why real villages of seventy are not one family, and this model pairs people on
   `suits` and close-kin exclusion alone.
@@ -5173,6 +5173,45 @@ Not another social mechanism. Any of:
 Each is a change to demography or geography rather than to how anybody feels about anybody, and
 that is the point. **Four sections looked for the missing mechanism in the wrong layer.** The
 social machinery is fine; there is simply nothing at this scale for it to divide.
+
+### 45.3 It is the world that is too small, not the town
+
+The first of those is falsifiable in one run, so it should not have been left as a bullet. Five
+hundred founders rather than a hundred and twenty, same ninety years, same everything else:
+
+    FOUNDERS=120
+      Shawhythe    125 grown; knows  99% of town, 14.0 allies;   1 kin group,  biggest 100%
+      Ingwick       68 grown; knows  99% of town, 14.6 allies;   1 kin group,  biggest 100%
+
+    FOUNDERS=600
+      Shawhythe    117 grown; knows  98% of town, 10.2 allies;   9 kin groups, biggest  73%
+      Eldhythe     189 grown; knows  86% of town,  9.2 allies;   4 kin groups, biggest  96%
+      Hollinhaven   31 grown; knows 100% of town,  5.7 allies;  11 kin groups, biggest  19%
+      Hollinedge    55 grown; knows  99% of town, 10.1 allies;  21 kin groups, biggest  15%
+
+**Kin partitions.** Twenty-one groups in Hollinedge with the biggest holding fifteen percent,
+eleven in Hollinhaven with nineteen — where every town in the small world was one family at a
+hundred.
+
+And the crucial detail is which towns partition. Hollinedge holds **fifty-five** adults, *fewer*
+than Ingwick's sixty-eight, and it falls into twenty-one lineages where Ingwick was one. So the
+variable is not the size of the town. It is the size of the **world** the town draws its people
+from: a big world has more lineages in it and enough movement to mix them, so a hamlet in a
+populous world contains twenty families while a hamlet in an empty one contains the descendants
+of the four that founded it.
+
+That is the whole of it. Acquaintance stays near-complete either way — 86% to 100%, because a
+town of a hundred is smaller than the number of people anybody can know, and that was never the
+problem. What changes is that a discrete axis finally has more than one value in it.
+
+So §40 through §45 were not building the wrong machinery. **They were running it in a world too
+small to have anything for it to act on**, and the fix is a number in `genesis` rather than a
+mechanism anywhere. Which is worth stating plainly because five sections of instrument were
+needed to establish it, and because it retires four separate proposals — partisanship, avoidance,
+meeting-through-friends, and making acquaintance scarce — none of which would have helped.
+
+The honest next step is therefore to find out what else the default size has been hiding. Every
+measurement in this document was taken at a hundred and twenty founders.
 
 §44's mechanism is reverted. It is correct about how people meet, it moves the graph slightly,
 it does not move what friendship means, and it was built against a diagnosis its own measurement
