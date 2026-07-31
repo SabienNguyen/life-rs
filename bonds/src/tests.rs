@@ -337,7 +337,7 @@ fn a_season_in_one_call_is_the_season() {
     for _ in 0..40 {
         slow.meet(who[0], who[1], 0.8);
     }
-    fast.meet_repeatedly(who[0], who[1], 0.8, 40);
+    fast.meet_repeatedly(who[0], who[1], 0.8, None, 40);
     let (a, b) = (slow.tie(who[0], who[1]), fast.tie(who[0], who[1]));
     assert!((a.known - b.known).abs() < 1e-5, "{a:?} against {b:?}");
     assert!((a.warmth - b.warmth).abs() < 1e-5, "{a:?} against {b:?}");
@@ -647,7 +647,7 @@ fn what_somebody_thinks_you_make_of_them_can_be_wrong() {
 
     // They get on, and both come to know it — but not at the same speed. Feelings are your
     // own; what somebody else feels has to be read off them.
-    bonds.meet_repeatedly(a, b, 0.95, 30);
+    bonds.meet_repeatedly(a, b, 0.95, None, 30);
     let tie = bonds.tie(a, b);
     assert!(tie.warmth > 0.5, "thirty meetings should warm them: {:.2}", tie.warmth);
     assert!(
@@ -666,7 +666,7 @@ fn what_somebody_thinks_you_make_of_them_can_be_wrong() {
     // that happens here — and she has no way of knowing until they next meet.
     let soured = bonds.tie(b, a).warmth;
     for _ in 0..40 {
-        bonds.meet_repeatedly(b, a, 0.0, 1);
+        bonds.meet_repeatedly(b, a, 0.0, None, 1);
     }
     let now = bonds.tie(b, a).warmth;
     assert!(now < soured, "he should have cooled: {soured:.2} to {now:.2}");

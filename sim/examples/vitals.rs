@@ -52,8 +52,14 @@
 //! that may be half or twice what it says (§40.3.2). Read the block this prints; do not
 //! remember it.
 //!
-//! `ACTS=0` switches §35's vocabulary off, `WITNESS=0` §40's, `CHANGE=0` §41's and `ENVY=0`
-//! §36.6's, on the same instrument, for the comparison.
+//! `ACTS=0` switches §35's vocabulary off, `WITNESS=0` §40's, `CHANGE=0` §41's, `ENVY=0`
+//! §36.6's and `EARNED=0` §42.4's, on the same instrument, for the comparison.
+//!
+//! `EARNED=0` is the largest of them. It removes the only thing that writes `regard` on an
+//! ordinary evening, and `regard` is what `hearsay` carries, what `saw` writes into, and what
+//! `repute` — and therefore `rank`, and therefore `Dream::ToRise`, household sorting and
+//! patronage — is a ranking of. Every number in this project before §42 was measured with it
+//! effectively off.
 //!
 //! `ENVY=0` is the one worth studying, because it is the only switch here that has to leave a
 //! **reading** in place while removing a **mechanism**. Who somebody envies is also the
@@ -128,6 +134,11 @@ fn main() {
     // And `ONE_DREAM=1` puts back the winner-take-all channel §36.6 replaced, so that what the
     // replacement cost stays a thing anybody can re-measure.
     let one_dream = std::env::var("ONE_DREAM").map(|v| v == "1").unwrap_or(false);
+    // And `EARNED=0` for §42.4 — whether an ordinary evening moves what you rate somebody at.
+    // The most consequential switch here: with it off, `regard` has no source at all, sits at
+    // the zero it was born with on 97.7% of live ties, and `hearsay` spends 1.79 million
+    // evenings spreading nothing. Every measurement taken before §42 was taken in that world.
+    let earned = std::env::var("EARNED").map(|v| v != "0").unwrap_or(true);
 
     let (mut moves, mut back) = (0usize, 0usize);
     let (mut biggest, mut empty, mut spread, mut short) = (0.0, 0.0, 0.0, 0.0);
@@ -155,6 +166,17 @@ fn main() {
     // turned out to settle it.
     let (mut occasions, mut met_envied, mut robbed_envied) = (0u64, 0u64, 0usize);
     let mut told_envied = 0u64;
+    // Whether the world ever *disagrees* about somebody (§42). Here before the mechanism that
+    // is meant to produce it, which is §31.2's rule: an instrument that cannot see what a
+    // mechanism claims reports its ablation as having changed nothing.
+    //
+    // `divided` is the mean spread of regard held about a person, and it is the one number
+    // that can tell a town which thinks well of a man from a town half of which thinks well
+    // of him. Every other reading here — repute, standing, rank — is a mean, and a mean cannot.
+    let (mut divided, mut divided_of) = (0.0f32, 0usize);
+    let mut most_divided = 0.0f32;
+    // And whether anybody is shut out: known to people who have all turned against them.
+    let mut outcasts = 0usize;
     // How far a life has moved people from the temperaments they grew up with (§41). Here
     // before the mechanism, for §31.2's reason.
     let (mut weathered, mut weathered_of) = (0.0f32, 0usize);
@@ -181,6 +203,7 @@ fn main() {
         world.people_change = changing;
         world.people_envy = envying;
         world.only_the_strongest_dream = one_dream;
+        world.reputation_is_earned = earned;
         world.run_for(Duration::from_years(years));
         living += world.living();
 
@@ -272,6 +295,35 @@ fn main() {
         }
         withheld += world.withheld as usize;
         witnessed += world.witnessed as usize;
+        for (_, (_, spread, holders)) in world.bonds.how_divided() {
+            // Ten opinions before a spread means anything. Below that it is measuring how few
+            // people know somebody, which `known` already answers.
+            if holders < 10 {
+                continue;
+            }
+            divided += spread;
+            divided_of += 1;
+            most_divided = most_divided.max(spread);
+        }
+        for (who, person) in world.people.iter() {
+            if !person.is_alive() || !person.has_matured() {
+                continue;
+            }
+            let (mut against, mut held) = (0usize, 0usize);
+            for (_, tie) in world.bonds.of(who) {
+                if !tie.holds() {
+                    continue;
+                }
+                held += 1;
+                if tie.warmth < -0.05 {
+                    against += 1;
+                }
+            }
+            // Known to a dozen people and disliked by four in five of them.
+            if held >= 12 && against * 5 >= held * 4 {
+                outcasts += 1;
+            }
+        }
         occasions += world.occasions;
         met_envied += world.met_the_envied;
         told_envied += world.told_the_envied;
@@ -386,6 +438,12 @@ fn main() {
     );
     println!("  withheld   {withheld:>6}   times somebody turned away where that is not done");
     println!("  witnessed  {witnessed:>6}   times somebody who was not part of it saw (§40)");
+    println!(
+        "  divided    {:>6.3}   how far people disagree about the same person; worst {:.2} (§42)",
+        divided / divided_of.max(1) as f32,
+        most_divided
+    );
+    println!("  shut out   {outcasts:>6}   known to a dozen and disliked by four fifths of them");
     {
         let per_thousand =
             |robs: usize, evenings: u64| 1000.0 * robs as f32 / evenings.max(1) as f32;
