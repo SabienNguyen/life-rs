@@ -78,6 +78,18 @@
 //! Under a minute at three seeds, five at twelve, against eight minutes for the suite that
 //! would otherwise tell you.
 //!
+//! **`FOUNDERS=600` before calling anything inert** (§46). At the default hundred and twenty,
+//! the hungriest quarter in the world is short by one hundredth of a year's food; at six hundred
+//! it is short by eighteen. §21's ceiling never engages at the default size, so the whole of
+//! §35's act vocabulary was built and measured in a world too comfortable to need it — killing
+//! happens four and a half times as often per head at six hundred, robbery nearly twice, while
+//! giving falls by half. A mechanism that does nothing here may only be waiting for the land to
+//! run short.
+//!
+//! The default stays a hundred and twenty, because that is what makes a run five minutes rather
+//! than an hour and every guard in the suite is calibrated to it. It is the *second* thing to
+//! try when an ablation reports nothing, after counting the occasions.
+//!
 //! **Add a line here before ablating the mechanism it belongs to.** §31.2 switches mechanisms
 //! off and compares against this, and an instrument that cannot see what a mechanism claims
 //! will report that switching it off changed nothing — which is the same sentence as "the

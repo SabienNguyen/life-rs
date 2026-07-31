@@ -5211,7 +5211,87 @@ needed to establish it, and because it retires four separate proposals — parti
 meeting-through-friends, and making acquaintance scarce — none of which would have helped.
 
 The honest next step is therefore to find out what else the default size has been hiding. Every
-measurement in this document was taken at a hundred and twenty founders.
+measurement in this document was taken at a hundred and twenty founders — see §46.
+
+## 46. The default world has no scarcity in it
+
+§45.3 found that the world size was hiding a structural fact about the whole social layer. There
+is no reason to think it was hiding only one, and every number in this document was taken at a
+hundred and twenty founders. So: `vitals` at 120 against 600, three seeds each, everything else
+held.
+
+Population runs 661 against 2036, so the raw tallies are divided by it before being compared.
+
+| | 120 | 600 | per head |
+|---|---|---|---|
+| **short** | 0.01 | **0.18** | — |
+| killed | 2 | 28 | **4.5x** |
+| robbed | 70 | 372 | **1.7x** |
+| shunned | 275 | 638 | 0.75x |
+| gave to | 397 | 646 | **0.53x** |
+| taught | 210 | 419 | 0.65x |
+| withheld | 1511 | 4084 | 0.88x |
+| advances | 13 | 22 | 0.55x |
+| taken up | 92 | 215 | 0.76x |
+| divided, settled | 0.029 | 0.044 | — |
+| envy aims | 1.23 | 2.05 | — |
+| biggest | 0.72 | 0.43 | — |
+| empty | 0.33 | 0.13 | — |
+| churn | 9% | 5% | — |
+
+The first line explains most of the rest. **At a hundred and twenty founders the hungriest
+quarter in the world is short by one hundredth of what a person eats in a year. At six hundred it
+is short by eighteen.** §21's ceiling is doing nothing at the default size, because the default
+size never reaches it — the small world grows 5.5x from its founders in ninety years and the
+large one only 3.4x, which is the Malthusian trap engaging exactly as it should.
+
+And a world with scarcity in it is a different society. Killing rises four and a half times per
+head and robbery nearly twice; giving falls by half and teaching by a third. Nobody has to be
+told to behave differently — `nothing_to_lose` reads means and dependents and health, and in a
+world where the land is short those readings change. The whole of §35's act vocabulary was built
+and measured in a world too comfortable to need it.
+
+### 46.1 What this does to five sections of findings
+
+Uncomfortably much, and it should be said before anybody builds on them.
+
+**Every "the mechanism is inert" result in §35 through §45 was measured in a world without
+scarcity.** §36.6's envy fires on 903 evenings in 1.79 million at the default size; the aim rate
+here goes from 1.23 to 2.05 and the speaking count rises with it. §43's avoidance was outnumbered
+by friendship three and a half to one, in a world where nobody is hungry enough to fall out.
+§35's killing was so rare it needed its own instrument to establish it was possible at all, and
+at six hundred founders it happens fourteen times as often.
+
+None of that makes the earlier conclusions wrong — the arithmetic errors §36.6 found were real
+errors, and §42's dead `regard` was dead at any size. But **"this mechanism does nothing" is a
+claim about a world, and the world it was claimed about turns out to be the comfortable corner of
+the parameter space.**
+
+**The noise floor is a separate question and mostly unchanged.** `biggest` at 0.72 against 0.43
+is about three and a half standard errors at three seeds, and `empty` and `churn` move the same
+way — a larger world spreads out and settles down, which is what §30.5's concentration term is
+for and is reassuring rather than surprising. But three seeds is three seeds; §40.3's whole
+lesson applies and these are directions rather than magnitudes.
+
+### 46.2 What to do about it
+
+Not to change the default. A hundred and twenty founders is what makes a ninety-year run take
+five minutes rather than an hour, and every guard in the suite is calibrated to it. Raising it
+would cost the project its instrument.
+
+What it means is that **a mechanism should be measured at both sizes before it is called inert**,
+because the interesting half of this model — hunger, violence, people with nothing to lose — only
+switches on when the land is short. `FOUNDERS=600` costs one run and is now the second thing to
+try whenever an ablation reports nothing, immediately after counting the occasions.
+
+That is the fourth entry in the list §43.4 started, and the one that would have caught the most:
+
+| | what is wrong | how it shows |
+|---|---|---|
+| §32.2, §35's killing | the conjunction is never satisfied | count the occasions: zero |
+| §36.6's envy | the occasions are real but vanishingly rare | count the occasions: 903 in 1.79M |
+| §43 | the occasions are everywhere and the term is outnumbered | ask about the other terms |
+| **§46** | **the world is too comfortable for it to matter** | **run it at `FOUNDERS=600`** |
 
 §44's mechanism is reverted. It is correct about how people meet, it moves the graph slightly,
 it does not move what friendship means, and it was built against a diagnosis its own measurement
