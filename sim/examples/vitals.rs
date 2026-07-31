@@ -175,6 +175,14 @@ fn main() {
     // of him. Every other reading here — repute, standing, rank — is a mean, and a mean cannot.
     let (mut divided, mut divided_of) = (0.0f32, 0usize);
     let mut most_divided = 0.0f32;
+    // And the same among people old enough for regard to have arrived (§42.8). Spread over
+    // everybody reads 0.057 under thirty and 0.023 between forty-five and sixty: most of what
+    // looked like a town disagreeing is a town still making up its mind, because `regard`
+    // starts at zero and walks toward what somebody is worth at a rate gated on `known`, so
+    // holders who know a young person to different degrees sit at different points on the
+    // *same* path. That is lag wearing the shape of dissent. The settled figure is the honest
+    // one and both are printed, because the gap between them is the size of the mistake.
+    let (mut settled, mut settled_of) = (0.0f32, 0usize);
     // And whether anybody is shut out: known to people who have all turned against them.
     let mut outcasts = 0usize;
     // How far a life has moved people from the temperaments they grew up with (§41). Here
@@ -295,7 +303,7 @@ fn main() {
         }
         withheld += world.withheld as usize;
         witnessed += world.witnessed as usize;
-        for (_, (_, spread, holders)) in world.bonds.how_divided() {
+        for (who, (_, spread, holders)) in world.bonds.how_divided() {
             // Ten opinions before a spread means anything. Below that it is measuring how few
             // people know somebody, which `known` already answers.
             if holders < 10 {
@@ -304,6 +312,14 @@ fn main() {
             divided += spread;
             divided_of += 1;
             most_divided = most_divided.max(spread);
+            if world
+                .people
+                .get(who)
+                .is_some_and(|p| p.is_alive() && p.age(world.now()).years() > 45.0)
+            {
+                settled += spread;
+                settled_of += 1;
+            }
         }
         for (who, person) in world.people.iter() {
             if !person.is_alive() || !person.has_matured() {
@@ -442,6 +458,11 @@ fn main() {
         "  divided    {:>6.3}   how far people disagree about the same person; worst {:.2} (§42)",
         divided / divided_of.max(1) as f32,
         most_divided
+    );
+    println!(
+        "             {:>6.3}   of somebody past forty-five, whose reputation has arrived — the \
+         honest figure (§42.8)",
+        settled / settled_of.max(1) as f32
     );
     println!("  shut out   {outcasts:>6}   known to a dozen and disliked by four fifths of them");
     {

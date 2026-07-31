@@ -4732,9 +4732,10 @@ And the thing the section set out to measure, over twelve worlds:
 
     divided    0.001  ->  0.048        worst 0.02 -> 0.31
 
-Forty-eight times. The world can now hold two opinions about the same man, which is the
-precondition for every one of factions, feuds and reputation, and which no amount of building
-partisanship on top would have supplied.
+Forty-eight times — though **§42.7 walks that back to twenty-eight**, because
+most of the spread turned out to be young people whose reputations had not finished arriving. The
+residual is real and is the precondition for every one of factions, feuds and reputation, and it
+is not something building partisanship on top would ever have supplied.
 
 ### 42.4 Two more bugs, both unmasked rather than caused
 
@@ -4850,7 +4851,43 @@ the well-regarded cluster: `biggest` rises from 0.54 to 0.61, which is 1.7 stand
 the Matthew effect arriving. `empty`, `spread` and `churn` do not move at all. The world has not
 collapsed — it has become stratified, which is a different thing and the point.
 
-### 42.7 What this says about looking for mechanisms in the right place
+### 42.7 And most of the disagreement was regard still arriving
+
+§42.5 reports that the spread of opinion about a person went from 0.001 to 0.048, and calls that
+the world learning to hold two views of the same man. Read as an aggregate it is unanswerable.
+`what_it_looks_like` walks a single world and puts names to it instead, and the three most
+divided people in seed 0x21 are aged **22, 23 and 22**.
+
+That is not a society splitting. `regard` starts at zero and walks toward what somebody is worth
+at `RATING * known` a meeting, so two holders who know a young person to different degrees are at
+different points along the *same path*. The spread between them is **convergence lag wearing the
+shape of dissent**. If that is what `divided` is measuring it must decay with age, and it does:
+
+    spread by age   under 30  0.057    30-45  0.031    45-60  0.023    over 60  0.030
+
+It halves. So most of the headline figure is a town still making up its mind, and the honest
+number is the residual once reputations have arrived. Over the same twelve worlds:
+
+    divided   0.048   over everybody
+    divided   0.028   over people past forty-five
+
+**0.028, not 0.048** — real, twenty-eight times the 0.001 it replaced, and a little over half of
+what §42.5 first claimed. `vitals` now prints both, because
+the gap between them is the size of the mistake.
+
+Two things worth keeping from this. The first is that **an aggregate cannot tell you whether a
+mechanism produced anything worth having** — only whether it produced *something*. Every check in
+§42 was a distribution, every one passed, and it took reading four names to notice they were all
+the same age. The second is that this is the fourth appearance in three sections of one shape: a
+quantity that looks like a mechanism and is an artefact of how the model is wired. §39's directed
+ties, §36.6's cancelling errors, §42.2's ranking of the arena, and now this.
+
+`what_it_looks_like` exists for that reason and is the counterpart to `vitals`: that one asks
+whether a change is real, this one asks whether it is any good. §30.4's alternating-towns fault
+was found the same way — by reading one life end to end and seeing the same two place names for
+twenty years — months after the aggregates had reported the world healthy.
+
+### 42.8 What this says about looking for mechanisms in the right place
 
 Three sections running have now ended somewhere other than where they started, and the pattern is
 the same each time. §39 set out to show unrequited regard and found the tie graph undirected.
