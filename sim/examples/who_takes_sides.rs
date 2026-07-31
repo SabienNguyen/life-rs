@@ -51,6 +51,21 @@ fn main() {
         .and_then(|v| v.parse().ok())
         .unwrap_or(120);
 
+    // **Founded once and shared.** This used to re-found every world in every section — nine
+    // times over for three seeds, twenty-seven runs where three would do — which was tolerable
+    // at a hundred and twenty founders and made §46.2's `FOUNDERS=600` protocol unusable. An
+    // instrument too slow to point at the world you care about is not an instrument.
+    let worlds: Vec<(u128, World)> = SEEDS
+        .into_iter()
+        .map(|seed| {
+            let mut world = World::genesis(WorldSeed::from_u128(seed), founders);
+            world.record_only(Salience::Pivotal);
+            world.set_detail_budget(100_000);
+            world.run_for(Duration::from_years(years));
+            (seed, world)
+        })
+        .collect();
+
     // Triangles: for a tie that holds between A and B, how many third parties know them both.
     let (mut pairs, mut with_a_third) = (0usize, 0usize);
     let mut thirds_each: Vec<usize> = Vec::new();
@@ -60,11 +75,7 @@ fn main() {
     // hold positive. The question is whether dislike concentrates on somebody or scatters.
     let mut disliked_by: Vec<(usize, usize, String)> = Vec::new();
 
-    for seed in SEEDS {
-        let mut world = World::genesis(WorldSeed::from_u128(seed), founders);
-        world.record_only(Salience::Pivotal);
-        world.set_detail_budget(100_000);
-        world.run_for(Duration::from_years(years));
+    for (seed, world) in &worlds {
 
         let living: Vec<_> = world
             .people
@@ -185,11 +196,7 @@ fn main() {
     println!("\n  Is `regard` alive?\n");
     let mut live = [(0usize, 0usize); 2];
     let mut sums = [0.0f64; 2];
-    for seed in SEEDS {
-        let mut world = World::genesis(WorldSeed::from_u128(seed), founders);
-        world.record_only(Salience::Pivotal);
-        world.set_detail_budget(100_000);
-        world.run_for(Duration::from_years(years));
+    for (seed, world) in &worlds {
         for (who, person) in world.people.iter() {
             if !person.is_alive() {
                 continue;
@@ -217,11 +224,7 @@ fn main() {
     // stand with" — has nothing to be built out of.
     {
         let (mut hostile, mut all) = (0usize, 0usize);
-        for seed in SEEDS {
-            let mut world = World::genesis(WorldSeed::from_u128(seed), founders);
-            world.record_only(Salience::Pivotal);
-            world.set_detail_budget(100_000);
-            world.run_for(Duration::from_years(years));
+        for (seed, world) in &worlds {
             for (who, person) in world.people.iter() {
                 if !person.is_alive() {
                     continue;
@@ -267,11 +270,7 @@ fn main() {
     // build is what §42 spent a section learning not to do: the trajectories differ, so the
     // difference measures the divergence and not the mechanism.
     println!("\n  Could a faction hold?\n");
-    for seed in SEEDS {
-        let mut world = World::genesis(WorldSeed::from_u128(seed), founders);
-        world.record_only(Salience::Pivotal);
-        world.set_detail_budget(100_000);
-        world.run_for(Duration::from_years(years));
+    for (seed, world) in &worlds {
 
         // **Within one place**, and that distinction is the whole question. Run over the
         // world, label propagation finds camps — and they are the settlements. People in
@@ -355,11 +354,7 @@ fn main() {
     // project has now had to learn four times: count the occasions before diagnosing the
     // arithmetic. A term that fires on one relation in a thousand is inert whatever its weight.
     println!("\n  How often can a friend's enemy be avoided?\n");
-    for seed in SEEDS {
-        let mut world = World::genesis(WorldSeed::from_u128(seed), founders);
-        world.record_only(Salience::Pivotal);
-        world.set_detail_budget(100_000);
-        world.run_for(Duration::from_years(years));
+    for (seed, world) in &worlds {
 
         let (mut through_ally, mut against, mut with) = (0usize, 0usize, 0usize);
         let mut anybody = 0usize;
@@ -404,11 +399,7 @@ fn main() {
     // by trade: how much likelier two friends are to share a trade than two people picked at
     // random from the same town. 1.00 means the uniform sample has dissolved it entirely.
     println!("\n  Do friendships cluster on anything at all?\n");
-    for seed in SEEDS {
-        let mut world = World::genesis(WorldSeed::from_u128(seed), founders);
-        world.record_only(Salience::Pivotal);
-        world.set_detail_budget(100_000);
-        world.run_for(Duration::from_years(years));
+    for (seed, world) in &worlds {
 
         // Per place, so this measures clustering *within* a town rather than the fact that
         // towns differ in what they do — which is §43.1's mistake in miniature.
@@ -496,11 +487,7 @@ fn main() {
     // complete and *every* sampling scheme is a uniform one — which would make §44 marginal
     // for a reason that has nothing to do with how candidates are drawn.
     println!("\n  Is there room for structure?\n");
-    for seed in SEEDS {
-        let mut world = World::genesis(WorldSeed::from_u128(seed), founders);
-        world.record_only(Salience::Pivotal);
-        world.set_detail_budget(100_000);
-        world.run_for(Duration::from_years(years));
+    for (seed, world) in &worlds {
         for place in world.places.ids() {
             let here: Vec<_> = world
                 .people
@@ -545,11 +532,7 @@ fn main() {
     // at the graph's own density; in a structured one, far more often. C/density near 1.0 means
     // friendship here is a coin flip weighted by nothing that groups anybody.
     println!("\n  Is friendship structured, or just sparse?\n");
-    for seed in SEEDS {
-        let mut world = World::genesis(WorldSeed::from_u128(seed), founders);
-        world.record_only(Salience::Pivotal);
-        world.set_detail_budget(100_000);
-        world.run_for(Duration::from_years(years));
+    for (seed, world) in &worlds {
         for place in world.places.ids() {
             let here: Vec<_> = world
                 .people
@@ -606,11 +589,7 @@ fn main() {
     // This is the check whose absence caused §44's wrong conclusion, run before the mechanism
     // rather than after it.
     println!("\n  Is kin a partition, or is everyone a cousin?\n");
-    for seed in SEEDS {
-        let mut world = World::genesis(WorldSeed::from_u128(seed), founders);
-        world.record_only(Salience::Pivotal);
-        world.set_detail_budget(100_000);
-        world.run_for(Duration::from_years(years));
+    for (seed, world) in &worlds {
         for place in world.places.ids() {
             let here: Vec<_> = world
                 .people
