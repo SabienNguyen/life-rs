@@ -71,6 +71,21 @@ const FORGETTING: f32 = 0.22;
 /// How fast liking follows from suiting each other.
 const WARMING: f32 = 0.14;
 
+/// How fast what you *rate* somebody at follows what they visibly are — §42.4.
+///
+/// Slower than `WARMING` and on the order of `READING`, because liking somebody is a feeling
+/// you have immediately and rating them is an inference from what you can see of their life.
+/// The gap between the two rates is what lets a reputation lag a reality, which is the whole
+/// reason this is a separate number from the standing it tracks: **two fields for one fact are
+/// two facts that can disagree**, and it is the disagreement that is worth having.
+///
+/// Until §42.1 there was no such constant, because nothing anywhere moved `regard` on an
+/// ordinary evening. It was written by `saw` (1,936 times in twelve worlds), by `cut` (589)
+/// and by `helped` — against 1.79 million meetings — so it sat at the zero it was born with on
+/// 97.7% of live ties, and `hearsay`, which exists to spread it, was a diffusion operator with
+/// nothing to diffuse.
+const RATING: f32 = 0.05;
+
 /// How fast an obligation fades on its own.
 ///
 /// Slower than familiarity. Being owed outlasts being close, which is why old debts between
@@ -265,6 +280,39 @@ impl Bonds {
         said
     }
 
+    /// How far the world disagrees about each person — the mean regard held about them, the
+    /// spread of it, and how many hold an opinion at all.
+    ///
+    /// The mean is what `everybodys_repute` already answers and is a measure of standing. The
+    /// **spread** is a different question and there was nothing here that could ask it: whether
+    /// a person is thought well of by everybody, or thought well of by half the town and badly
+    /// of by the other half. Those are the same reputation to every instrument in this project
+    /// and they are not remotely the same society.
+    ///
+    /// It matters because two forces here pull against each other. `hearsay` drifts everybody's
+    /// opinion toward their friends' and is a consensus engine; anything that makes people
+    /// react differently to the same event is a splitting one. Which of them wins is not
+    /// arguable from the code, and this is the number that settles it.
+    pub fn how_divided(&self) -> std::collections::BTreeMap<PersonId, (f32, f32, u32)> {
+        let mut said: std::collections::BTreeMap<PersonId, Vec<f32>> = Default::default();
+        for (holder, held) in &self.ties {
+            for (about, tie) in held {
+                if about == holder || !tie.holds() {
+                    continue;
+                }
+                said.entry(*about).or_default().push(tie.regard);
+            }
+        }
+        said.into_iter()
+            .map(|(who, regards)| {
+                let n = regards.len() as f32;
+                let mean = regards.iter().sum::<f32>() / n;
+                let spread = (regards.iter().map(|r| (r - mean).powi(2)).sum::<f32>() / n).sqrt();
+                (who, (mean, spread, regards.len() as u32))
+            })
+            .collect()
+    }
+
     /// How many ties somebody is carrying.
     pub fn count(&self, holder: PersonId) -> usize {
         self.ties.get(&holder).map_or(0, |held| held.len())
@@ -284,7 +332,7 @@ impl Bonds {
     /// for pairing — the same number, because liking somebody and being able to live with
     /// them are not different faculties.
     pub fn meet(&mut self, a: PersonId, b: PersonId, suits: f32) {
-        self.meet_repeatedly(a, b, suits, 1);
+        self.meet_repeatedly(a, b, suits, None, 1);
     }
 
     /// A season's worth of evenings, in one call.
@@ -295,7 +343,19 @@ impl Bonds {
     /// at all: unwatched people cannot spend a deed each on an evening, but their ties
     /// have to advance as if they had, or looking away would quietly dissolve everybody's
     /// friendships and looking back would rebuild them from nothing.
-    pub fn meet_repeatedly(&mut self, a: PersonId, b: PersonId, suits: f32, times: u32) {
+    /// `worth` is what each of them is visibly making of their life, on regard's own -1 to 1
+    /// scale, in the order `[a, b]` — or `None` to leave regard alone, which is what this did
+    /// before §42.4 and is the ablation. It is supplied by the caller rather than read here for
+    /// the same reason `suits` is: `bonds` holds what people think of each other and has no
+    /// business knowing what a living looks like.
+    pub fn meet_repeatedly(
+        &mut self,
+        a: PersonId,
+        b: PersonId,
+        suits: f32,
+        worth: Option<[f32; 2]>,
+        times: u32,
+    ) {
         if a == b || times == 0 {
             return;
         }
@@ -310,6 +370,7 @@ impl Bonds {
         let mut known = [held[0].known, held[1].known];
         let mut warmth = [held[0].warmth, held[1].warmth];
         let mut welcome = [held[0].welcome, held[1].welcome];
+        let mut regard = [held[0].regard, held[1].regard];
         for _ in 0..times {
             // What there was to read, before this meeting changed it.
             let shown = warmth;
@@ -325,6 +386,14 @@ impl Bonds {
                 welcome[side] = (welcome[side]
                     + READING * known[side] * (shown[1 - side] - welcome[side]))
                     .clamp(-1.0, 1.0);
+                // And what they make of what the other has made of themselves. Gated on
+                // `known` like everything else here, so a stranger's standing is not read off
+                // them at a glance — a reputation is something a place arrives at.
+                if let Some(worth) = worth {
+                    regard[side] = (regard[side]
+                        + RATING * known[side] * (worth[1 - side] - regard[side]))
+                        .clamp(-1.0, 1.0);
+                }
             }
         }
         for (side, (holder, subject)) in [(a, b), (b, a)].into_iter().enumerate() {
@@ -332,6 +401,7 @@ impl Bonds {
             tie.known = known[side];
             tie.warmth = warmth[side];
             tie.welcome = welcome[side];
+            tie.regard = regard[side];
         }
     }
 

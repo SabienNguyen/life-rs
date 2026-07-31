@@ -4624,6 +4624,253 @@ seventy-eight robberies, every one of them there before envy was written. The co
 zero was the one nothing measured: how often the term was consulted at all. Two rounds went to
 interrogating arithmetic that had scarcely run.
 
+## 42. Reputation, and what it turned out to be a ranking of
+
+The next gap after §36.6 was that every act in this world is one person to one person. Nobody
+has ever acted *together*, and nobody has ever turned on somebody because of what was done to a
+third party — so feuds, factions, ostracism and collective punishment, which are all the same
+shape, are none of them reachable. The plan was **partisanship**: what a witness makes of a wrong
+should depend on who it was done *to*.
+
+Following §36.6's rule — count the occasions before building the mechanism — `who_takes_sides`
+went in first, and the world turned out to supply the conditions abundantly, which after three
+sections of the opposite was a surprise:
+
+    pairs who know each other        19955
+    with at least one mutual friend  19955   (100.0%)
+    third parties per pair           median 132, p90 202
+    of those onlookers, fond of exactly one   24.4%   <- has a side to take
+
+100% is itself a warning — a condition that is always true carries no information — but warmth
+discriminates even where knowing does not, and outcasts already exist: one man disliked by 117
+people and liked by 2. There was material.
+
+So the instrument for the *effect* went in next, and that is where this section stops being about
+factions. To see a community split you need to measure disagreement, and nothing here could:
+every reading of a reputation in this project — `repute`, `rank`, `everybodys_repute` — is a
+**mean**, and a mean cannot tell a town that thinks well of a man from a town half of which
+thinks well of him. `Bonds::how_divided` reports the spread instead. Twelve worlds:
+
+    divided    0.001   how far people disagree about the same person; worst 0.02
+
+One thousandth. Nobody in this world has ever disagreed with anybody about anybody.
+
+### 42.1 Regard has no source
+
+That reading has two explanations wanting opposite responses — `hearsay` has ground opinion flat,
+or the number was never written and everyone sits at the zero they were born with. One count
+settles it:
+
+    regard  moved off zero on   2578 of 113124 live ties  ( 2.3%),  mean |value| 0.0015
+    warmth  moved off zero on  63482 of 113124 live ties  (56.1%),  mean |value| 0.1241
+
+**`regard` is a dead dimension**, eighty-three times smaller than warmth and touched on one tie in
+forty-three. The cause is one line long: `meet_repeatedly` writes `known`, `warmth` and `welcome`,
+and never `regard`. Warmth has 1.79 million evenings a run to grow on. Regard has `saw` (1,936
+events), `cut` (589) and `helped` — and `hearsay`, which is a **diffusion operator with no source
+term**. It faithfully spreads zero.
+
+Which reframes §40 unkindly. Witnesses were built to give reputation a source and deliver one
+write per nine hundred evenings, into a quantity whose only other inputs are rarer still.
+
+### 42.2 And a percentile of a constant is a ranking of the arena
+
+`repute` is not the raw mean — it is a percentile, everybody sorted by mean regard and given
+their normalised position. That is a good design: it cannot saturate and it cannot drift with the
+units underneath it. It has one property that had never been checked, which is that **a percentile
+of a constant is not a percentile of anything.**
+
+Sorting needs a total order, so the sort had a tie-break:
+
+    said.sort_by(|a, b| a.1.total_cmp(&b.1).then(a.0.cmp(&b.0)))
+
+and `a.0` is a `PersonId` — an arena handle, handed out in the order people are born. Measured
+across three worlds, **between 22% and 49% of adults have a mean regard of exactly zero**, so for
+between a fifth and a half of every population the entire social hierarchy was decided by that
+tie-break. Rank correlated with birth order at 0.079, 0.321 and 0.396.
+
+`rank` is read by `Dream::ToRise` (`below = 1 - rank`), by `Dream::ToBeLookedTo`, by household
+sorting, and by who a patron opens a door for. All of them were partly reading the arena.
+
+The fix is that people the world rates identically **share a rank**, which is what a percentile
+with ties has always meant:
+
+    rank against birth order    0.068 / 0.068 / -0.092     (was 0.079 / 0.321 / 0.396)
+    distinct ranks handed out   143 of 167, 70 of 114, 80 of 120
+
+The tie-break stays, because the sort must stay deterministic. What changed is that its result is
+no longer allowed to mean anything. And the collapsed rank counts are the honest reading rather
+than a defect: the community genuinely has no opinion about a third of its members, and a
+hierarchy that says so is better than one that invents an ordering to hide it.
+
+### 42.3 Giving regard a source
+
+The cause of §42.1 is one line long. `meet_repeatedly` writes `known`, `warmth` and `welcome`,
+and never `regard` — so warmth has 1.79 million evenings a run to grow on and regard has only
+rare events. The fix is the missing fourth line, in the shape the file already uses for
+`welcome`: a reading that lags and can be wrong.
+
+    regard[side] += RATING * known[side] * (worth[1 - side] - regard[side])
+
+`worth` is what somebody is visibly making of their life, supplied by the caller for the same
+reason `suits` is — `bonds` holds what people think of each other and has no business knowing
+what a living looks like. `RATING` is 0.05, under `WARMING`'s 0.14, because liking somebody is
+a feeling you have immediately and rating them is an inference from what you can see. **The gap
+between the two rates is the point**: it is what lets a reputation lag a reality, and two fields
+for one fact are only worth having if they can disagree.
+
+The caller maps `means()` through `means / (means + par)`, saturating rather than scaled, because
+`means()` has no ceiling — `standing + estate * WORTH_AT_A_DOOR`, past 1.9 in a measured world —
+and dividing an unbounded quantity by a guessed maximum is exactly the error §36.6 spent three
+rounds on. A saturating form needs a middle and never a maximum.
+
+    regard  moved off zero on   2578 of 113124 live ties  ( 2.3%)   before
+    regard  moved off zero on 107500 of 111276 live ties  (96.6%)   after
+    mean |regard|                     0.0015  ->  0.2625
+
+And the thing the section set out to measure, over twelve worlds:
+
+    divided    0.001  ->  0.048        worst 0.02 -> 0.31
+
+Forty-eight times. The world can now hold two opinions about the same man, which is the
+precondition for every one of factions, feuds and reputation, and which no amount of building
+partisanship on top would have supplied.
+
+### 42.4 Two more bugs, both unmasked rather than caused
+
+Making a dead quantity live is a good way to find out what was quietly depending on it being
+dead. Two things broke immediately, and neither was new.
+
+**Rank was a percentile over children.** `Dream::ToRise` fell by three quarters, from 396 wanting
+to get on to 91. Not noise — a mechanism nearly disappearing. `everybodys_repute` returns everyone
+anybody holds a tie *about*, and in a world of 113 grown adults that is 209 people: the rest are
+children, who have nothing yet and sit at the bottom. Ranking adults against them put the median
+adult at **0.689** rather than 0.5, and `ToRise` reads `1 - rank`, so the world stopped believing
+anybody was near the bottom of anything.
+
+That bug is older than the fix that revealed it. While regard sat at zero for everybody, adults
+and children tied at the same value and §42.2's tie-break scattered the adults evenly through the
+order — which put the median adult back at 0.5 by accident. **Two errors cancelling, again**, and
+found the same way as §36.6's: by asking a quantity what its distribution looked like rather than
+what its mean was.
+
+    rank of the living   mean 0.689  ->  0.500,  p10 0.10, p50 0.50, p90 0.90
+
+**Regard became a second name for wealth, and taxed the young.** Patronage fell 40%, 489 openings
+to 291. `seek_patron` scores a candidate at `standing * known * (warmth + regard).max(0)`, and
+regard rated against one fixed middle is a standing charge on being twenty — the people who seek
+a patron are by construction the people who have least. The mean adult's means by fifth of a life:
+
+    (children)   0.60   0.70   0.78   0.79
+
+so par is not one number, it is a line. Rating people against what is normal **for their age**
+recovers most of it, 291 back to 385, and it is the more defensible claim anyway: nobody thinks
+badly of a young person for having little, and everybody thinks something of an old one who does.
+The rest of the gap is the mechanism working — a patron now backs somebody they *rate*, where
+before regard was zero and only warmth could speak.
+
+### 42.5 What it did to the world
+
+Twelve worlds, against the same twelve before any of §42:
+
+| | before | after | |
+|---|---|---|---|
+| divided | 0.001 | 0.048 | the world can disagree |
+| shunned | 589 | 932 | +58% |
+| witnessed | 1936 | 2877 | +49% |
+| robbed | 208 | 257 | +24% |
+| taken up | 489 | 385 | −21% |
+| gave to | 1535 | 1564 | — |
+| living | 2960 | 2917 | — |
+| biggest | 0.54 | 0.61 | 1.7 se — marginal |
+| empty / spread / churn | | | inside the floor |
+
+The settlement pattern is untouched within §40.3's noise floor. What moved is what people do to
+each other, and it moved coherently: `regard` below zero feeds `contempt` in robbery's scoring and
+feeds shunning directly, so a world that can now look down on somebody does. Shunning is the
+cheapest act in the vocabulary and it is the one that rose most.
+
+That is worth stating plainly because it is the first time in this project that giving a quantity
+a source produced a *behavioural* change of this size without moving the world's shape at all. The
+map is the same; the society living on it is meaner.
+
+### 42.6 Three guards that were already failing
+
+§42 broke three tests, and none of the three was broken by §42.
+
+**The level-of-detail guard.** `who_your_friends_are_does_not_depend_on_who_is_watching`
+compares ties per head with the world watched and unwatched, over three seeds, and its comment
+reasoned that the coarse tier came out −33%, −8% and +18% — mixed in sign, therefore noise rather
+than bias. Measured over twelve:
+
+    -36 -31 -27 -22 -13 -13 -11 -10 -4 +7 +8 +10
+    mean -11.8%   sd 14.6   se 4.2
+
+The coarse tier really does hold about an eighth fewer acquaintances, at nearly three standard
+errors from zero. It is a small, real, one-directional cost of not deliberating over everybody —
+the same class of known gap as its fifth-larger population in §21 — and the mixed sign that
+argued it away was an artefact of three samples from a distribution with an sd of 15. At three
+seeds the standard error is 8.4 against a 20% band, so the guard sat about one error from its
+own bar and passed or failed with the weather.
+
+**The concentration guard.** `a_world_does_not_end_up_in_one_quarter` asserted `biggest < 0.75`
+on each of three seeds. Across twelve, per-seed `biggest` runs **0.34 to 0.80 with nothing
+changed** — two seeds were already over the bar, and the test passed only because it did not use
+them. A per-seed bar clear of that range would have to sit near 0.85, which is close enough to
+collapse to be no guard at all. So the two questions it was conflating are now asked separately:
+whether the world *tends* to pile up is a question about a mean over twelve and is stable, and
+whether a world has actually collapsed is a question about one world, where 1.00 is the answer.
+
+**The churn guard.** Same disease, and the most embarrassing of the three: three seeds against a
+bar of 10%. Pooled over twelve the world reads **10.4%** — and **10.9% before §42**, which
+improved it. The world has been fractionally over its own bar the entire time and the three-seed
+sample was hiding it. The bar is now 12, which is three standard errors above where the world
+actually sits and five times under the fault it was written against: churn ran at **65%** when
+households were admitted and evicted in alternate years for their whole lives. A bar at 10 sat
+inside the measurement and told nobody anything except which seeds it had been handed.
+
+All three now run eight or twelve seeds with bars set from the measured floor, and the two
+settlement guards share one `LazyLock` fixture of eight full worlds rather than founding sixteen
+between them. **That is not an optimisation of the tests, it is what makes a properly-powered
+guard affordable at all.** Those two cost nine minutes of the suite even shared, because a
+statistic about how a world settles can only be measured by settling worlds — and a guard too
+slow to run is the same as no guard, which is how three under-powered ones survived this long.
+The suite goes from about eight minutes to about fifteen. That is the price and it is worth
+stating rather than hiding. **§40.3's rule turns out to
+apply to tests and not only to instruments**: a bar set inside its own noise is not a bar, and a
+suite full of them fails on whatever change happens to be in flight rather than on the change
+that deserved it. That is worse than no guard, because it spends the credibility of the suite.
+
+There is one honest behavioural change underneath all this, and it is not a defect. `backing` —
+how a household gets admitted to a quarter — reads `repute`, and its own comment calls it *"the
+only sanction in this world: no violence, no law, no court, just a door that does not open for
+somebody the neighbours have turned against."* Until §42 that door was gated on **arena order**.
+Now it is gated on something real, so the poorly-thought-of are kept out of the good quarters and
+the well-regarded cluster: `biggest` rises from 0.54 to 0.61, which is 1.7 standard errors and is
+the Matthew effect arriving. `empty`, `spread` and `churn` do not move at all. The world has not
+collapsed — it has become stratified, which is a different thing and the point.
+
+### 42.7 What this says about looking for mechanisms in the right place
+
+Three sections running have now ended somewhere other than where they started, and the pattern is
+the same each time. §39 set out to show unrequited regard and found the tie graph undirected.
+§36.6 set out to build envy and found two cancelling arithmetic errors. This set out to build
+factions and found the quantity a faction would have to divide was written by nothing at all —
+and then, on fixing that, found two further bugs that had been surviving inside its shadow.
+
+What the three share is that the **instrument was the deliverable**. None was found by reading
+code — all three files had been read many times — and none by a test, because each was a case of
+a number being uninformative rather than wrong. All were found by asking a quantity to describe
+its own distribution: is it undirected, is it on its siblings' scale, is it ever written at all,
+what does its histogram look like among the people who actually read it.
+
+**Before building a mechanism on a quantity, make it describe itself.** Not its mean, which is
+what nearly every reading in this project was: its spread, its support, and how often anything
+writes to it. Every bug in this section is invisible to a mean and obvious to a histogram.
+
+The partisanship mechanism that started all this is still not built. It would have been built on
+sand.
+
 ## 37. Leaving, built and taken out again
 
 §33 counted what people are to each other and found the sharpest gap in the model: **nobody
