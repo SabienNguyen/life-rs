@@ -591,6 +591,70 @@ fn main() {
         }
     }
 
+    // §44.2 nominates kin as the discrete axis a faction could run on. Before building
+    // anything on that: **is kin actually disjoint?** 12-18% of all pairs in a town are close
+    // kin, which is a lot — if everybody is a cousin of everybody, kin is no more a partition
+    // than similarity is, and would fail for exactly the reason §44.2 says similarity fails.
+    //
+    // This is the check whose absence caused §44's wrong conclusion, run before the mechanism
+    // rather than after it.
+    println!("\n  Is kin a partition, or is everyone a cousin?\n");
+    for seed in SEEDS {
+        let mut world = World::genesis(WorldSeed::from_u128(seed), 120);
+        world.record_only(Salience::Pivotal);
+        world.set_detail_budget(100_000);
+        world.run_for(Duration::from_years(years));
+        for place in world.places.ids() {
+            let here: Vec<_> = world
+                .people
+                .iter()
+                .filter(|(id, p)| {
+                    p.is_alive() && p.has_matured() && world.society.place_of(*id) == Some(place)
+                })
+                .map(|(id, _)| id)
+                .collect();
+            if here.len() < 30 {
+                continue;
+            }
+            // Connected components of the kin graph — the honest question, because a partition
+            // is exactly a graph that falls apart into pieces.
+            let mut group: Vec<usize> = (0..here.len()).collect();
+            fn root(group: &mut Vec<usize>, mut n: usize) -> usize {
+                while group[n] != n {
+                    group[n] = group[group[n]];
+                    n = group[n];
+                }
+                n
+            }
+            for (n, a) in here.iter().enumerate() {
+                for (m, b) in here.iter().enumerate().skip(n + 1) {
+                    if world.society.is_close_kin(*a, *b) {
+                        let (ra, rb) = (root(&mut group, n), root(&mut group, m));
+                        if ra != rb {
+                            group[ra] = rb;
+                        }
+                    }
+                }
+            }
+            let mut sizes: std::collections::BTreeMap<usize, usize> = Default::default();
+            for n in 0..here.len() {
+                *sizes.entry(root(&mut group, n)).or_default() += 1;
+            }
+            let mut counts: Vec<usize> = sizes.into_values().collect();
+            counts.sort_unstable_by(|a, b| b.cmp(a));
+            let biggest = counts.first().copied().unwrap_or(0);
+            println!(
+                "  seed {seed:x} {:<14} {:>3} grown fall into {:>3} kin groups; biggest holds \
+                 {biggest} ({:.0}%), and {} are alone",
+                world.places.get(place).map(|p| p.name.clone()).unwrap_or_default(),
+                here.len(),
+                counts.len(),
+                100.0 * biggest as f32 / here.len() as f32,
+                counts.iter().filter(|n| **n == 1).count()
+            );
+        }
+    }
+
     println!("\n  Is anybody an outcast already?\n");
     println!(
         "  adults disliked by anybody at all  {any:>5} of {}   ({:.1}%)",

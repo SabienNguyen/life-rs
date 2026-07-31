@@ -5113,11 +5113,66 @@ farmers, so it is neither carried into friendship nor evenly enough spread to di
 Kin is discrete, is genuinely partitioned, and reaches friendship at only 1.2x — through
 households co-residing rather than through anybody preferring their relatives.
 
-**Kin is the candidate**, and it is the only one this world already has: lineages are disjoint by
-construction, they persist across generations, and they are the axis real village factions
-actually run on. Making kinship count in `suits` or in `choose_company` is a small change with a
-discrete partition behind it, which is the one thing three sections of mechanism have been
-missing. It gets its own section and its own ablation.
+Kin looked like the candidate — disjoint by construction, persistent across generations, the
+axis real village factions actually run on. §45 checked that before building on it, which is the
+check whose absence produced §44's wrong conclusion, and it did not survive either.
+
+## 45. A village of seventy is one family
+
+§44.2 nominated kin as the discrete axis a faction could run on. Twelve to eighteen percent of
+all pairs in a town are close kin, which is a lot, and a lot in the wrong direction: if everybody
+is a cousin of everybody then kin partitions nothing, and would fail for precisely the reason
+similarity fails. So — asked first this time, and of the honest question, which is whether the
+kin graph falls into pieces:
+
+    seed 11  Shawhythe   125 grown fall into 1 kin group; it holds 125 (100%), 0 alone
+    seed 21  Ingwick      68 grown fall into 1 kin group; it holds  68 (100%), 0 alone
+    seed 221 Stanquay     91 grown fall into 1 kin group; it holds  91 (100%), 0 alone
+
+**Every town is a single kin group.** Not mostly — entirely, with nobody left over in any world.
+
+And that is not a bug. `is_close_kin` reaches first cousins; a quarter is sixty-eight to a hundred
+and twenty-five adults; migration between quarters is rare; and ninety years is four generations.
+A closed population of seventy, breeding for four generations, becomes one family — which is what
+happens to real isolated villages and is the reason real ones practise exogamy.
+
+### 45.1 There is no axis, and that is the finding
+
+Three candidates, all measured, none of them able to divide a town:
+
+| axis | why not |
+|---|---|
+| **temperament** (`suits`) | a continuum; dense neighbourhoods that tile without cutting — clustered 2.1-2.8x, partitioned 0x (§44.2) |
+| **trade** | discrete, but carried into friendship at 0.94-1.02x chance, and three quarters of a town farms anyway (§43.5) |
+| **kin** | discrete, and by ninety years the whole town is one component of it |
+
+So the answer to four sections of asking is that **a village of seventy has no sub-communities
+because there is nothing for one to be made of.** Everybody knows everybody, everybody is related
+to everybody, three quarters do the same work, and the one axis that varies continuously cannot
+cut. §40's witnesses, §42's reputation, §43's avoidance and §44's meeting-through-friends were
+all mechanisms for dividing a community that is, at this scale, genuinely indivisible.
+
+The world does have factions. They are called **towns** — §43.1 found the camps and they were the
+settlements, 98-99% of friendships staying inside one. That reads as a disappointing result and
+is the correct one: in a world of small closed villages, the unit of collective feeling is the
+village. Feuds between quarters are reachable from here; feuds inside one are not.
+
+### 45.2 What would actually be needed
+
+Not another social mechanism. Any of:
+
+- **Larger settlements.** Above a few hundred, a town outgrows both universal acquaintance and
+  universal kinship on its own, and the axes start to bite without anything being added.
+- **Patterned marriage.** Lineages stay distinct only if whom you may marry is constrained.
+  Exogamy is why real villages of seventy are not one family, and this model pairs people on
+  `suits` and close-kin exclusion alone.
+- **A discrete attribute that does not merge.** Peoples and their `norms` already exist and
+  already split (§17.2.1); they are attached to places rather than to lineages, which is why they
+  reproduce the settlement partition rather than cutting across it.
+
+Each is a change to demography or geography rather than to how anybody feels about anybody, and
+that is the point. **Four sections looked for the missing mechanism in the wrong layer.** The
+social machinery is fine; there is simply nothing at this scale for it to divide.
 
 §44's mechanism is reverted. It is correct about how people meet, it moves the graph slightly,
 it does not move what friendship means, and it was built against a diagnosis its own measurement
