@@ -5320,6 +5320,62 @@ Worth noting what did **not** move: acquaintance is near-complete at either size
 diagnosis stays retired. The thing scale supplies is lineages (§45.3) and hunger (§46), not
 sparsity.
 
+## 47. A town splits, and it is nobody's family
+
+With the instrument founding each world once rather than nine times, the whole of it can be
+pointed at a large world for the first time. `FOUNDERS=600`, three seeds, the biggest quarter of
+each:
+
+    seed 11:  189 adults fall into 3 camps; biggest holds 138 (73%), 90% of friendships inside one
+    seed 21:  239 adults fall into 1 camp;  biggest holds 235 (98%), 100% inside
+    seed 221: 148 adults fall into 1 camp;  biggest holds 146 (99%), 100% inside
+
+**One town in three has split.** Every measurement before this, at any size, came back a single
+camp holding 93% to 99% with every friendship inside it. Seed 11's biggest quarter has three
+camps, the largest holding under three quarters, and one friendship in ten crossing a boundary.
+That is a sub-community inside a settlement, which is the thing §43 through §45 spent four
+sections failing to produce — and it arrived with no social mechanism at all, from nothing but a
+larger world.
+
+### 47.1 The base rate, and the same mistake twice in one session
+
+§45 nominated kin as the only discrete axis that could carry a faction, so the obvious question is
+whether the camps are lineages. The first version of the measurement said:
+
+    of same-camp pairs, 94% are also same-kin
+
+which reads as a resounding yes and is worth nothing at all. **One kin group holds 96% of that
+town** (§45.3), so 94% is roughly what any partition whatever would score. Against the base rate:
+
+    seed 11:  same-camp pairs are same-kin 94% against 92% for any two townsfolk — 1.02x
+    seed 21:  93% against 93% — 1.00x
+    seed 221: 73% against 73% — 1.00x
+
+**The camps are not lineages.** Not weakly — exactly, to two decimal places, at chance.
+
+This is §44's error made a second time in the same session, in the same file, three sections after
+writing it up: a raw share reported without the share it should be measured against. It was caught
+only by asking what the number would have been if the camps meant nothing. The instrument now
+prints both and says which conclusion the ratio supports, because the failure mode is evidently
+not one that noticing once cures.
+
+### 47.2 What the camps are instead
+
+Not kin, not trade (§43.5 measured it at chance), not place — this is one quarter. What is left is
+that the friendship graph in a large town is **sparse enough to have modules**. Density falls from
+0.217 in a town of 68 to 0.049 in a town of 189, while clustering against chance *rises* from 2.10x
+to 4.80x. A small town is a dense blob that cannot be cut; a large one is a genuine small-world
+graph, and a small-world graph sparse enough eventually has regions a partition can separate.
+
+So the first real faction in this project is not a family or a guild or a party. It is a region of
+the social graph with no label on it — the people who happen to know each other. That is both less
+satisfying than a lineage feud and more honest: it is what `suits` and triadic closure produce when
+given enough people to work with, and nothing was added to obtain it.
+
+Which is the correct end to the arc §43 opened. Four mechanisms were proposed to create factions
+and all four are reverted. The factions were reachable the whole time, and what they needed was a
+world with more people in it.
+
 §44's mechanism is reverted. It is correct about how people meet, it moves the graph slightly,
 it does not move what friendship means, and it was built against a diagnosis its own measurement
 replaced — twice over, since the replacement was then replaced by §44.2.

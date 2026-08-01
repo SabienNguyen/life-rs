@@ -347,6 +347,76 @@ fn main() {
             100.0 * biggest as f32 / folk.len().max(1) as f32,
             100.0 * inside as f32 / all.max(1) as f32
         );
+        // And if it *has* split — are the camps lineages? §45 found kin to be the only
+        // discrete axis in the model, and §45.3 found a large world supplies more than one of
+        // them per town. If the camps line up with the kin groups, then a faction here is a
+        // family, arrived at without anybody writing a mechanism for either.
+        //
+        // Measured as the share of friendships that stay inside a *kin group* against the
+        // share that stay inside a camp: if the camps are lineages the two move together.
+        let mut kin_of: Vec<usize> = (0..folk.len()).collect();
+        fn root(g: &mut Vec<usize>, mut n: usize) -> usize {
+            while g[n] != n {
+                g[n] = g[g[n]];
+                n = g[n];
+            }
+            n
+        }
+        for (n, a) in folk.iter().enumerate() {
+            for (m, b) in folk.iter().enumerate().skip(n + 1) {
+                if world.society.is_close_kin(*a, *b) {
+                    let (ra, rb) = (root(&mut kin_of, n), root(&mut kin_of, m));
+                    if ra != rb {
+                        kin_of[ra] = rb;
+                    }
+                }
+            }
+        }
+        let same_kin: usize = (0..folk.len())
+            .map(|w| {
+                let mine = root(&mut kin_of, w);
+                allies[w]
+                    .iter()
+                    .filter(|o| root(&mut kin_of, **o) == mine)
+                    .count()
+            })
+            .sum();
+        // How often two people in the same camp are also in the same kin group.
+        let (mut both, mut in_camp) = (0usize, 0usize);
+        for n in 0..folk.len() {
+            for m in (n + 1)..folk.len() {
+                if camp[n] == camp[m] {
+                    in_camp += 1;
+                    if root(&mut kin_of, n) == root(&mut kin_of, m) {
+                        both += 1;
+                    }
+                }
+            }
+        }
+        // **Against the base rate**, which is the whole of it. One kin group holds 96% of a big
+        // town, so 94% of same-camp pairs being same-kin is what pure chance already gives —
+        // and the first version of this line printed the 94% alone. That is §44's error
+        // exactly, made a second time in the same session, and caught only by asking what the
+        // number would have been if the camps meant nothing.
+        let all_kin: usize = (0..folk.len())
+            .flat_map(|n| ((n + 1)..folk.len()).map(move |m| (n, m)))
+            .filter(|(n, m)| {
+                let (a, b) = (*n, *m);
+                let mut g = kin_of.clone();
+                root(&mut g, a) == root(&mut g, b)
+            })
+            .count();
+        let all_pairs = folk.len() * folk.len().saturating_sub(1) / 2;
+        let by_chance = all_kin as f32 / all_pairs.max(1) as f32;
+        let in_camps = both as f32 / in_camp.max(1) as f32;
+        println!(
+            "           same-camp pairs are same-kin {:.0}% of the time against {:.0}% for any \
+             two townsfolk — {:.2}x chance, so the camps are {}",
+            100.0 * in_camps,
+            100.0 * by_chance,
+            in_camps / by_chance.max(1e-6),
+            if in_camps / by_chance.max(1e-6) > 1.25 { "lineages" } else { "NOT lineages" }
+        );
     }
 
     // And how often the §43 term can speak at all. It fires when one of your *allies* holds
