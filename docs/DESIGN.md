@@ -5479,6 +5479,50 @@ Two of the four are absences rather than faults: nothing was ever built to make 
 each other, and nothing was ever built to carry meaning between people. The other two are
 mechanisms that exist and are throttled — acts by their rarity, invention by the trap.
 
+### 48.6 Somebody's own stomach is their own
+
+The gate in `advances` reads a **per-place average**, so it switched off the thinking of everybody
+in a crowded quarter — the prosperous along with the hungry. Watching the places fall out one at a
+time over a hundred and sixty years, with slack printed beside the rate:
+
+    seed 11:  5 of 5 quarters have slack at year 32, 4 at 96, 3 at 128, 2 at 160
+    seed 21:  5 of 5,                                2 at 96,           0 at 160
+    seed 221: 4 of 5,        3 at 64,                2 at 96, 1 at 128, 0 at 160
+
+**In two worlds of three, every inhabited quarter reaches exactly zero and the gate shuts
+completely.** Seed 0x221 makes four advances by year thirty-two and none at all in the hundred
+and twenty-eight years after, while its population trebles.
+
+A trap that closes is right; §21 built it deliberately and `ground_of` leaves the escape open by
+making yield proportional to technique. A trap that closes on the people who could plainly afford
+an idle evening is an average standing in for a reading.
+
+So the place's slack became what somebody with **nothing of their own** has to work with, and
+their own standing is the other half. The difficulty is the one this project keeps meeting:
+`slack` is years of food per head and `means()` is `standing + estate * WORTH_AT_A_DOOR` reaching
+1.93, and adding them is §36.6's error. §42.4 had already built the bridge — how well somebody is
+doing *for their age*, saturating, −1 to 1 — so only its positive half is used, since doing worse
+than your neighbours does not take away time you never had, and it is multiplied by
+`TIME_TO_THINK`. Somebody at par contributes nothing; the best-off contributes exactly one span of
+it. It lands in slack's units by construction, with no maximum to guess.
+
+Ablated on one build, three seeds, a hundred and sixty years — advances in total:
+
+| seed | before | after |
+|---|---|---|
+| 0x11 | 9 | **13** |
+| 0x21 | 7 | 7 |
+| 0x221 | 4 | **8** |
+
+Forty percent more invention, and the qualitative change is in the worst world rather than the
+best: seed 0x221's rate per century goes from 12.5, 0.0, 0.0, 0.0, 0.0 to 12.5, 0.0, 6.2, 3.1,
+3.1. **A world that had stopped is moving.** Seed 0x21 does not move at all, so this is real and
+not universal — its quarters reach zero slack too, and there the fix buys nothing because nobody
+in them is doing well enough for their age to have an evening spare.
+
+Which is the honest shape of the result. The trap still closes; what changed is that closing it
+now requires everybody to be poor, rather than the average to be.
+
 ## 37. Leaving, built and taken out again
 
 §33 counted what people are to each other and found the sharpest gap in the model: **nobody
