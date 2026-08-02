@@ -834,6 +834,12 @@ pub struct World {
     /// floor and a number that large should not live only in a document. Set it and the array
     /// handed to the scorer keeps its maximum and zeroes the rest.
     pub only_the_strongest_dream: bool,
+    /// Whether somebody's own standing buys them time to think — §48.4.
+    ///
+    /// Its own switch, because it changes the one thing in this model that decides whether a
+    /// world has a history or only a demography. With it off, the input to discovery is a
+    /// per-place average and a crowded quarter cannot invent however rich the people in it.
+    pub people_think_on_their_own_means: bool,
     /// Whether an ordinary evening in somebody's company moves what you rate them at — §42.4.
     ///
     /// Its own switch because it is the source of a quantity that had none, and the ablation
@@ -1210,6 +1216,7 @@ impl World {
             people_change: true,
             people_envy: true,
             reputation_is_earned: true,
+            people_think_on_their_own_means: true,
             only_the_strongest_dream: false,
             witnesses_notice: true,
             witnessed: 0,
@@ -3282,6 +3289,7 @@ impl World {
                 continue;
             }
 
+            let whole_life = life::Mortality::HUMAN.median_lifespan();
             let mut found: Vec<(PersonId, economy::Trade)> = Vec::new();
             for place in &places {
                 // What this place had spare, per head. Nobody thinks on an empty stomach.
@@ -3290,10 +3298,17 @@ impl World {
                     .get(*place)
                     .map(|p| (p.prosperity - p.want).clamp(0.0, 1.0))
                     .unwrap_or(0.0);
-                if slack <= 0.0 {
-                    continue;
-                }
-                let idle = (slack / TIME_TO_THINK).min(1.0) as f64;
+                // **No `continue` on an empty place** — §48.4. `slack` is a per-place
+                // *average*, and gating on it meant one crowded quarter switched off the
+                // thinking of everybody in it, the prosperous along with the hungry. Measured
+                // over a hundred and sixty years: three quarters in five reach exactly zero
+                // slack, the gate shuts on them, and the world's rate of invention falls to
+                // nothing while its population quintuples. A trap that closes is right; one
+                // that closes on the people who could plainly afford an idle evening is an
+                // average standing in for a reading.
+                //
+                // The place's slack is now what somebody with nothing of their own has to
+                // work with, and their own standing is the other half — see below.
                 // How easily the people of this country reach each other. Not how many of
                 // them there are — that is already counted by there being more of them to
                 // roll for. What this is for is that ideas need somebody to have them *at*:
@@ -3319,7 +3334,32 @@ impl World {
                     if !person.is_alive() || person.stage(at).is_dependent() {
                         continue;
                     }
-                    let curious = (1.0 + 0.6 * person.personality.openness).max(0.0) as f64;
+                        let curious = (1.0 + 0.6 * person.personality.openness).max(0.0) as f64;
+                    // Their own margin, in the same units as the place's slack — which is the
+                    // whole difficulty and the reason this is not simply `+ person.means()`.
+                    // `slack` is years of food per head; `means()` is `standing + estate *
+                    // WORTH_AT_A_DOOR` and reaches 1.93, on no scale in particular. Adding
+                    // them is the error §36.6 spent three rounds on.
+                    //
+                    // §42.4 already built the bridge: how well somebody is doing *for their
+                    // age*, saturating, -1 to 1. Only the positive half is used — doing worse
+                    // than your neighbours does not take away time you never had — and it is
+                    // multiplied by `TIME_TO_THINK`, so somebody at par contributes nothing
+                    // and the best-off contributes exactly one span of it. By construction it
+                    // lands in slack's units without anybody having to guess a maximum.
+                    let mine = if self.people_think_on_their_own_means {
+                        let means = person.means().max(0.0);
+                        let through =
+                            (person.age(at).years() / whole_life).clamp(0.0, 1.0) as f32;
+                        let par = A_LIVING_STARTING_OUT + A_LIVING_BY_THE_END * through;
+                        TIME_TO_THINK * (means / (means + par) * 2.0 - 1.0).max(0.0)
+                    } else {
+                        0.0
+                    };
+                    let idle = ((slack + mine) / TIME_TO_THINK).min(1.0) as f64;
+                    if idle <= 0.0 {
+                        continue;
+                    }
                     let chance = WORKING_IT_OUT * idle * curious * talking;
                     let mut rng = self.moment_stream(Domain::Chance, who.to_bits() ^ 0x_1dea, at);
                     if rng.chance(chance) {

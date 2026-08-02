@@ -25,28 +25,40 @@
 use sim::World;
 use sim_core::{Duration, Salience, WorldSeed};
 
-const SEEDS: [u128; 3] = [0x11, 0x21, 0x221];
+const ALL_SEEDS: [u128; 3] = [0x11, 0x21, 0x221];
 
 fn main() {
     let years: u64 = std::env::var("YEARS")
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(200);
+    // §48.4's switch: whether somebody's own standing buys them time to think, or only the
+    // average of the quarter they live in does.
+    let own_means = std::env::var("OWN_MEANS").map(|v| v != "0").unwrap_or(true);
     let founders: usize = std::env::var("FOUNDERS")
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(300);
+    // Two hundred years at three hundred founders is three quarters of an hour for three
+    // seeds. `SEEDS=1` is for diagnosing rather than concluding.
+    let how_many: usize = std::env::var("SEEDS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(3)
+        .clamp(1, ALL_SEEDS.len());
+    let seeds = &ALL_SEEDS[..how_many];
 
     // Progress needs the world sampled *as it goes*, not at the end, so the worlds are run in
     // slices and read between them. Everything else is read once at the finish.
     let steps = 5;
     let slice = years / steps as u64;
-    let mut over_time: Vec<Vec<(u64, usize, f32, usize)>> = Vec::new();
+    let mut over_time: Vec<Vec<(u64, usize, f32, usize, usize, usize, f32)>> = Vec::new();
     let mut worlds: Vec<(u128, World)> = Vec::new();
-    for seed in SEEDS {
+    for seed in seeds.iter().copied() {
         let mut world = World::genesis(WorldSeed::from_u128(seed), founders);
         world.record_only(Salience::Pivotal);
         world.set_detail_budget(100_000);
+        world.people_think_on_their_own_means = own_means;
         let mut track = Vec::new();
         for step in 1..=steps {
             world.run_for(Duration::from_years(slice));
@@ -61,13 +73,41 @@ fn main() {
                 .map(|id| world.technique_of(id).level())
                 .sum::<f32>()
                 / world.places.ids().count().max(1) as f32;
-            track.push((step as u64 * slice, advances, technique, world.living()));
+            // What the gate in `advances` actually sees. `slack` is `prosperity - want` per
+            // place and the loop does `if slack <= 0.0 { continue }` — so the question that
+            // decides whether progress is throttled or *stopped* is how many places still
+            // have any, not how much they have on average.
+            let (mut with_slack, mut places, mut total_slack) = (0usize, 0usize, 0.0f32);
+            for id in world.places.ids() {
+                if world.society.households_in(id).count() == 0 {
+                    continue;
+                }
+                places += 1;
+                let slack = world
+                    .places
+                    .get(id)
+                    .map(|p| (p.prosperity - p.want).clamp(0.0, 1.0))
+                    .unwrap_or(0.0);
+                total_slack += slack;
+                if slack > 0.0 {
+                    with_slack += 1;
+                }
+            }
+            track.push((
+                step as u64 * slice,
+                advances,
+                technique,
+                world.living(),
+                with_slack,
+                places,
+                total_slack / places.max(1) as f32,
+            ));
         }
         over_time.push(track);
         worlds.push((seed, world));
     }
 
-    println!("{} seeds, {years} years, {founders} founders\n", SEEDS.len());
+    println!("{} seeds, {years} years, {founders} founders\n", seeds.len());
 
     // ── 1. Do souls truly interact? ───────────────────────────────────────────────────────
     //
@@ -227,20 +267,22 @@ fn main() {
     // signature of progress is a rate that rises with the population that carries it.
     println!("\n── 4. Does the world progress? ──\n");
     println!(
-        "  {:<8} {:>10} {:>12} {:>10} {:>12}",
-        "year", "living", "advances", "technique", "per century"
+        "  {:<6} {:>8} {:>9} {:>10} {:>12} {:>16} {:>10}",
+        "year", "living", "advances", "technique", "per century", "places with slack", "mean slack"
     );
     for (n, track) in over_time.iter().enumerate() {
-        println!("  seed {:x}", SEEDS[n]);
+        println!("  seed {:x}", seeds[n]);
         let mut last = (0u64, 0usize);
-        for (year, advances, technique, living) in track {
+        for (year, advances, technique, living, with_slack, places, mean_slack) in track {
             let per_century = if *year > last.0 {
                 (advances - last.1) as f32 * 100.0 / (year - last.0) as f32
             } else {
                 0.0
             };
             println!(
-                "  {year:<8} {living:>10} {advances:>12} {technique:>10.3} {per_century:>12.1}"
+                "  {year:<6} {living:>8} {advances:>9} {technique:>10.3} {per_century:>12.1} \
+                 {:>16} {mean_slack:>10.4}",
+                format_args!("{with_slack} of {places}")
             );
             last = (*year, *advances);
         }
