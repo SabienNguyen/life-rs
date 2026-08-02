@@ -203,6 +203,54 @@ fn main() {
         );
     }
 
+    // Before anything could be built to make regions act on each other, the precondition:
+    // do neighbouring places ever differ in what they need *at the same time*? A relation
+    // between two places has to be about something, and the obvious something is that one has
+    // and the other wants. If every quarter is short together — common weather, common
+    // harvest — then there is nothing to carry between them and any trade mechanism would be
+    // §32.2's conquest again: correct, and keyed on a state the world never enters.
+    println!("\n  could one place have what another needs?");
+    for (seed, world) in &worlds {
+        let inhabited: Vec<_> = world
+            .places
+            .ids()
+            .filter(|p| world.society.households_in(*p).count() > 0)
+            .collect();
+        let (mut reachable, mut complementary, mut best) = (0usize, 0usize, 0.0f32);
+        for (n, a) in inhabited.iter().enumerate() {
+            for b in inhabited.iter().skip(n + 1) {
+                // `within_reach` takes roster positions, which is what `countries` walks.
+                let at = |id| world.places.ids().position(|p| p == id);
+                let (Some(x), Some(y)) = (at(*a), at(*b)) else {
+                    continue;
+                };
+                if !world.within_reach(x, y) {
+                    continue;
+                }
+                reachable += 1;
+                let spare = |id| {
+                    world
+                        .places
+                        .get(id)
+                        .map(|p| p.prosperity - p.want)
+                        .unwrap_or(0.0)
+                };
+                let (here, there) = (spare(*a), spare(*b));
+                // One with something over, the other going short.
+                let gap = (here - there).abs();
+                if here.min(there) < 0.0 && here.max(there) > 0.0 {
+                    complementary += 1;
+                    best = best.max(gap);
+                }
+            }
+        }
+        println!(
+            "  seed {seed:x}: {} inhabited quarters, {reachable} pairs within reach, \
+             {complementary} of them complementary right now (widest gap {best:.2})",
+            inhabited.len()
+        );
+    }
+
     // ── 3. Is the communication intelligent? ──────────────────────────────────────────────
     //
     // The measurable half of an unanswerable question. `hearsay` is the only channel by which
