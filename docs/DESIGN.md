@@ -5479,7 +5479,52 @@ Two of the four are absences rather than faults: nothing was ever built to make 
 each other, and nothing was ever built to carry meaning between people. The other two are
 mechanisms that exist and are throttled — acts by their rarity, invention by the trap.
 
-### 48.6 Somebody's own stomach is their own
+### 48.6 The quarters of a region were out of each other's reach
+
+§48.2's repair looked obvious — a place with a surplus feeds a neighbour that is short — so, the
+precondition first: how many pairs of inhabited quarters are within reach of each other at all?
+
+**One in ten.** Every quarter its own country. §32.2's finding about countries turns out to be
+true of *places*: the world is a handful of settlements that cannot get to each other, and no
+mechanism between regions could have fired whatever it was.
+
+The obvious cause is resolution. `SETTLED_GRID` is 3, a cell is 961 km, and the quarters sit 1482
+to 2645 km apart — London to Moscow, between two villages of seventy people. But a finer grid
+makes it **worse**:
+
+    level 3  (961 km cells, reach 1538 km):  1 of 10 pairs within reach
+    level 4  (481 km,       reach  770 km):  0 of 10
+    level 5  (241 km,       reach  385 km):  0 of 10
+
+Reach scales down with spacing while the quarters stay the same number of *rings* apart, so the
+kilometres were never the problem. That measurement is the whole value of the check: the repair
+everybody would reach for first is the one that makes it worse.
+
+It is ring geometry. `settlement::survey` places a world's quarters greedily inside one region —
+`REGION_RINGS` of 2, widening to 6 where the ground is narrow — each at least one ring from the
+last, and they land **1.5 to 2.7 rings apart**. `NEIGHBOURING_GROUND` was **1.6**. So the reach
+test excluded the very places the survey had deliberately grouped, at every resolution, by
+construction.
+
+At 3.0 rings — a region as the survey actually lays one out:
+
+| | before | after |
+|---|---|---|
+| pairs within reach | 1 / 1 / 1 of 10 | **4 / 6 / 7** |
+| countries | 5 / 3 / 2 | **2 / 2 / 2** |
+| ties crossing a quarter | 31% / 33% / 26% | **59% / 39% / 63%** |
+
+A settled region is now usually one country rather than five, which is the honest reading of what
+the survey was doing all along and what §23 was already uneasy about.
+
+**This does not make criterion two pass.** Regions can now reach each other and still do nothing
+to each other; what was removed is the thing that made any such mechanism impossible. And the
+next question is already visible in the same table: of the pairs now within reach, three are
+complementary in one world and **none** in the other two — one place over and the other under at
+the same moment. If places equalise, a trade mechanism would carry nothing, and that wants
+measuring over a run rather than at the instant the world stops.
+
+### 48.7 Somebody's own stomach is their own
 
 The gate in `advances` reads a **per-place average**, so it switched off the thinking of everybody
 in a crowded quarter — the prosperous along with the hungry. Watching the places fall out one at a
