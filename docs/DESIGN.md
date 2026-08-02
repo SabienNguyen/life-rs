@@ -5380,6 +5380,105 @@ world with more people in it.
 it does not move what friendship means, and it was built against a diagnosis its own measurement
 replaced — twice over, since the replacement was then replaced by §44.2.
 
+## 48. Four questions asked of the world
+
+Every instrument before this one asks whether a *mechanism* works. `does_it_live` asks whether
+the world does, against four things it ought to have, and the verdicts are allowed to be no.
+Three hundred founders, two hundred years, three seeds — long, because three of the four are
+about things that take more than a lifetime.
+
+### 48.1 Do souls truly interact? — thinly
+
+    2405 grown souls
+    6947 deliberate acts — 2.9 per adult now living
+    801 of them (33%) carry a memory of something somebody did to them
+    3,809,872 evenings in company; an act on 0.2% of them
+
+Two thirds of the adults in this world reach the end of their lives with **no memory of anybody
+having done anything to them**. Not a wrong, not a kindness, not a door opened. They met people,
+they came to like some and not others, and nothing ever happened.
+
+Three acts per lifetime is not nothing — §35 built a vocabulary that fires — but "a society where
+people act on each other" and "a society where one adult in three has ever been acted upon" are
+different claims and only the second is true. The tally reads as abundance because it is counted
+per world; per life it is one deliberate act every twenty years.
+
+### 48.2 Do regions have relationships? — no
+
+    seed 11:  4 countries, 5 inhabited quarters; 43.4% of ties cross a quarter; 3209 moves
+    seed 21:  5 countries, 5 inhabited quarters; 40.9%; 3401 moves
+    seed 221: 2 countries, 3 inhabited quarters; 37.2%; 1584 moves
+
+The first half is better than expected: four ties in ten cross a quarter, and people move in
+thousands. Individuals are not sealed into their villages.
+
+The second half is the finding. **No region has ever done anything to another region.** There is
+no trade between places, no alliance, no war, no tribute, no embassy — §32.2 took conquest out
+after finding it keyed on an adjacency that never occurs, and nothing replaced it. Countries are
+computed (`World::countries` walks a reachability chain and names each after its largest place)
+and they are *readings*, not actors: nothing in the model ever asks what one country does about
+another. A region here is a container, not a party.
+
+### 48.3 Is the communication intelligent? — it propagates, and carries one number
+
+    seed 11: 87,578 opinions from acquaintance, 134,462 from hearsay alone (61%); 94% agreement
+    seed 21: 117,521 / 201,418 (63%); 92%
+    seed 221: 58,083 / 69,223 (54%); 93%
+
+Better than the honest expectation. **The majority of all opinions in this world are about people
+the holder has barely met**, and they agree with the people who actually know them better than
+nine times in ten. Information travels, travels far, and arrives accurate. §42's giving `regard` a
+source is what made this possible — before it, hearsay was diffusing zero.
+
+But what travels is **one scalar**. Not "he is a thief", not "she is good with tools", not a lie,
+not a rumour that gets worse in the telling — a single number, drifting toward the speaker's.
+There is no language in this model (§40 says so plainly) and this does not change that. It is
+faithful diffusion, and calling it communication is generous; calling it intelligent is not
+defensible.
+
+### 48.4 Does the world progress? — no, and it used to
+
+Advances per century, by slice of a two-hundred-year run:
+
+| year | living | advances | technique | per century |
+|---|---|---|---|---|
+| 40 | 305 | 2 | 1.008 | 5.0 |
+| 80 | 415 | 7 | 1.016 | 12.5 |
+| 120 | 720 | 8 | 1.034 | 2.5 |
+| 160 | 1186 | 9 | 1.068 | 2.5 |
+| 200 | 1538 | 9 | 1.120 | **0.0** |
+
+Seed 0x221 is starker: four advances by year 40 and **not one more in the following hundred and
+sixty years**, while its population trebles.
+
+**The population quintuples and the rate of invention falls to zero.** That is not slow progress,
+it is a world that stops. And the cause is one line in `advances`:
+
+    let slack = (p.prosperity - p.want).clamp(0.0, 1.0);
+    if slack <= 0.0 { continue; }
+
+Nobody thinks on an empty stomach, which is right, and a filling world runs out of stomachs that
+are not empty. This is the Malthusian trap doing exactly what §21 built it to do — and the escape
+route exists in the code, because `economy::ground_of` makes the land's yield proportional to
+technique, so a better plough should feed the people who might invent the next one.
+
+The loop simply loses the race. Technique climbs 1.008 to 1.120 in two centuries — fourteen
+percent — while population climbs five hundred. Slack goes to zero long before compounding can
+start, and once it does the gate shuts and nothing reopens it.
+
+### 48.5 The verdict
+
+| | |
+|---|---|
+| souls interact | **thinly** — two thirds of lives are never acted upon |
+| regions relate | **no** — regions are containers, never parties |
+| communication is intelligent | **no** — faithful, far-reaching diffusion of a single number |
+| the world progresses | **no** — invention falls to zero as population rises |
+
+Two of the four are absences rather than faults: nothing was ever built to make regions act on
+each other, and nothing was ever built to carry meaning between people. The other two are
+mechanisms that exist and are throttled — acts by their rarity, invention by the trap.
+
 ## 37. Leaving, built and taken out again
 
 §33 counted what people are to each other and found the sharpest gap in the model: **nobody
