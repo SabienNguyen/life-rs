@@ -1064,7 +1064,22 @@ const LIVEABLE_FLUX: std::ops::Range<f64> = 0.97..1.12;
 ///
 /// It bounds the *links*, not the country — `World::countries` walks a chain of them, so a
 /// ribbon of places each within reach of the next is one country however long the ribbon is.
-const NEIGHBOURING_GROUND: f64 = 1.6;
+const NEIGHBOURING_GROUND: f64 = 3.0;
+// Was 1.6, and §49 is why. `settlement::survey` places a world's quarters greedily inside one
+// region — `REGION_RINGS` of 2, widening to 6 if the ground is narrow — each at least one ring
+// from the last. Measured, they land **1.5 to 2.7 rings apart**, so a reach of 1.6 excluded the
+// very places the survey had deliberately grouped: one pair in ten was within reach, every
+// quarter was its own country, and no region could have a relationship with another because
+// none of them could be got to.
+//
+// It is ring geometry and not kilometres, which is worth stating because the obvious repair is
+// a finer grid and a finer grid makes it *worse*: reach scales down with spacing while the
+// quarters stay the same number of rings apart. Measured at levels 3, 4 and 5 — one pair in
+// ten within reach, then none, then none.
+//
+// Three rings covers a region as the survey actually lays one out. What it costs is that a
+// settled region is now usually one country rather than five, which is the honest reading of
+// what the survey was doing all along.
 
 /// One ring. At this grid a ring is most of a country, and neighbouring cells would be
 /// the same place.
