@@ -161,7 +161,9 @@ version = "0.1.0"
 dependencies = [
  "biome",
  "bonds",
+ "chain",
  "climate",
+ "commerce",
  "cosmos",
  "culture",
  "ecology",
@@ -169,6 +171,7 @@ dependencies = [
  "evolution",
  "geo",
  "life",
+ "nations",
  "observer",
  "person",
  "planet",

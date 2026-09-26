@@ -896,8 +896,8 @@ impl Nations {
             if exchanged > 0.0 {
                 for t in &country.towns {
                     let town = &self.towns[*t];
-                    for m in 0..2 {
-                        shares[m] += town.acceptance.0[m] * town.exchange_value / exchanged;
+                    for (share, accepted) in shares.iter_mut().zip(town.acceptance.0) {
+                        *share += accepted * town.exchange_value / exchanged;
                     }
                 }
             }
@@ -1069,8 +1069,8 @@ impl Nations {
                 varieties[d] += both_ways / 2.0;
             }
         }
-        for c in 0..k {
-            self.countries[c].exports += varieties[c];
+        for (country, sold) in self.countries.iter_mut().zip(&varieties) {
+            country.exports += sold;
         }
         // Familiarity grows with the share of each country's business done with the other.
         let keys: Vec<usize> = self.countries.iter().map(|c| c.key).collect();
@@ -1151,12 +1151,30 @@ impl Nations {
         }
     }
 
+    /// What paying abroad would cost with no chain at all — routed through whichever houses
+    /// are cheapest — averaged over every ordered pair of countries. `None` for a world of one
+    /// country, which has nobody abroad to pay.
+    pub fn cost_through_houses(&self) -> Option<f64> {
+        let n = self.countries.len();
+        if n < 2 {
+            return None;
+        }
+        let trust = self.country_trust();
+        let mut total = 0.0;
+        for a in 0..n {
+            for b in (0..n).filter(|b| *b != a) {
+                total += payments::cheapest_route(&trust, a, b, self.fx(a, b)).0;
+            }
+        }
+        Some(total / (n * (n - 1)) as f64)
+    }
+
     /// How far each country's houses trust each other's, by position in `countries`.
     pub fn country_trust(&self) -> Vec<Vec<f64>> {
         let n = self.countries.len();
         let mut trust = vec![vec![1.0; n]; n];
-        for a in 0..n {
-            for b in 0..n {
+        for (a, row) in trust.iter_mut().enumerate() {
+            for (b, cell) in row.iter_mut().enumerate() {
                 if a == b {
                     continue;
                 }
@@ -1169,7 +1187,7 @@ impl Nations {
                 let same = self.cultures.of_place(self.countries[a].capital)
                     == self.cultures.of_place(self.countries[b].capital);
                 let distance = self.distances[self.countries[a].capital][self.countries[b].capital];
-                trust[a][b] = payments::trust(payments::trust_ceiling(same, distance), familiar);
+                *cell = payments::trust(payments::trust_ceiling(same, distance), familiar);
             }
         }
         trust

@@ -11,6 +11,7 @@ use sim_core::{Domain, Duration, Salience, WorldSeed};
 
 mod export;
 mod globe;
+mod nations_view;
 mod render;
 
 /// The viewer page, with a placeholder where the world goes.
@@ -19,6 +20,9 @@ const VIEWER: &str = include_str!("viewer.html");
 const GLOBE: &str = include_str!("globe.html");
 /// The atlas: a globe you can turn, and four steps down from it to one person.
 const ATLAS: &str = include_str!("atlas.html");
+/// Markets and ledgers: a world's towns, states and countries, their money, and the chain
+/// they come to keep between them.
+const NATIONS: &str = include_str!("nations.html");
 
 const USAGE: &str = "\
 life-rs — run a world and watch it
@@ -43,6 +47,10 @@ options:
                    write a page you can scrub through
   --ages <myr>     run a *populated* world for this many megayears: the planet
                    moves, and the people on it settle and fail as it does
+  --nations <y>    run the world's towns, states and countries for this many
+                   years: markets, money, and — where houses in different
+                   countries come to need one — a blockchain they keep between
+                   them. with --html, a page to explore it; with --json, data
   --grid <level>   how fine the planet's grid is (default: 4, ~450 km cells)
   --save <path>    write the world out so it can be opened again
   --load <path>    open a world written earlier, and carry on from there
@@ -64,6 +72,7 @@ struct Options {
     atlas: bool,
     globe: Option<f64>,
     ages: Option<f64>,
+    nations: Option<u64>,
     grid: u8,
     save: Option<String>,
     load: Option<String>,
@@ -104,6 +113,7 @@ impl Default for Options {
             atlas: false,
             globe: None,
             ages: None,
+            nations: None,
             grid: 4,
             save: None,
             load: None,
@@ -138,6 +148,13 @@ fn main() -> ExitCode {
     if let Some(myr) = options.ages {
         run_ages(&options, myr);
         return ExitCode::SUCCESS;
+    }
+
+    // The world at the scale of nations: every town a statistical population rather than
+    // people, so centuries cost seconds, and what it is about is what places do for each
+    // other — markets, money, and the ledger they come to keep.
+    if let Some(years) = options.nations {
+        return run_nations(&options, years);
     }
 
     // A saved world is opened by re-deriving it, which is exact and costs the time being
@@ -468,6 +485,40 @@ fn run_ages(options: &Options, myr: f64) {
     println!("\n  replay with --seed {} --ages {myr:.0}", options.seed);
 }
 
+/// Run the world at the scale of nations and tell it — or hand it to a page.
+fn run_nations(options: &Options, years: u64) -> ExitCode {
+    let started = std::time::Instant::now();
+    let mut world = nations::Nations::found(options.seed);
+    world.run(years);
+    let ran = started.elapsed().as_secs_f64();
+    // Every chain is replayed from its genesis before anything is said about it, so what the
+    // report calls a ledger is one somebody holding nothing but the genesis could check.
+    let checked = nations_view::check(&world);
+    if options.html || options.json {
+        let data = nations_view::snapshot(&world, &checked);
+        if options.html {
+            println!("{}", NATIONS.replace("__NATIONS_DATA__", &data));
+        } else {
+            println!("{data}");
+        }
+    } else {
+        println!("world {}", options.seed);
+        println!("{} years of towns, markets and money\n", world.year);
+        for line in nations_view::report(&world, &checked) {
+            println!("{line}");
+        }
+        println!(
+            "{} years in {ran:.1}s. replay with --seed {} --nations {years}",
+            world.year, options.seed
+        );
+    }
+    if checked.iter().any(|c| c.ok.is_err()) {
+        eprintln!("error: a chain did not replay from its genesis");
+        return ExitCode::FAILURE;
+    }
+    ExitCode::SUCCESS
+}
+
 /// Run the lithosphere and render its history.
 ///
 /// Sampled at a fixed number of points rather than every step: a page carrying five
@@ -548,6 +599,16 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Option<Options>, Str
             "--atlas" => options.atlas = true,
             "--save" => options.save = Some(value()?),
             "--load" => options.load = Some(value()?),
+            "--nations" => {
+                let raw = value()?;
+                let years: u64 = raw
+                    .parse()
+                    .map_err(|e| format!("bad year count {raw:?}: {e}"))?;
+                if years == 0 {
+                    return Err("--nations needs at least one year".to_string());
+                }
+                options.nations = Some(years);
+            }
             "--ages" => {
                 let raw = value()?;
                 let myr: f64 = raw
@@ -711,6 +772,28 @@ mod tests {
     }
 
     #[test]
+    fn the_nations_run_takes_a_number_of_years() {
+        assert_eq!(parse(&["--nations", "600"]).unwrap().unwrap().nations, Some(600));
+        assert_eq!(parse(&[]).unwrap().unwrap().nations, None);
+        assert!(parse(&["--nations", "0"]).is_err(), "no years is no history");
+        assert!(parse(&["--nations", "ages"]).is_err());
+        assert!(parse(&["--nations", "-5"]).is_err());
+    }
+
+    /// The markets page keeps the same contract as the others: one hole, a name, nothing
+    /// fetched from anywhere, and a script that closes everything it opens.
+    #[test]
+    fn the_markets_page_is_one_self_contained_template() {
+        assert_eq!(NATIONS.matches("__NATIONS_DATA__").count(), 1);
+        assert!(NATIONS.contains("<title>"));
+        assert!(
+            !NATIONS.contains("http://") && !NATIONS.contains("https://"),
+            "the page must stand on its own with nothing fetched"
+        );
+        balanced(NATIONS, "the markets page");
+    }
+
+    #[test]
     fn the_balance_report_is_opt_in() {
         assert!(!parse(&[]).unwrap().unwrap().balance);
         assert!(parse(&["--balance"]).unwrap().unwrap().balance);
@@ -753,9 +836,14 @@ mod tests {
     /// enough to catch the class of thing an editing script does to a file it cannot read.
     #[test]
     fn the_atlas_closes_everything_it_opens() {
-        let start = ATLAS.find("<script>").expect("the atlas has a script") + "<script>".len();
-        let end = ATLAS.rfind("</script>").expect("which is closed");
-        let script: Vec<char> = ATLAS[start..end].chars().collect();
+        balanced(ATLAS, "the atlas");
+    }
+
+    /// Walk a page's script and fail if its braces or brackets do not balance.
+    fn balanced(page: &str, name: &str) {
+        let start = page.find("<script>").expect("the page has a script") + "<script>".len();
+        let end = page.rfind("</script>").expect("which is closed");
+        let script: Vec<char> = page[start..end].chars().collect();
 
         #[derive(PartialEq)]
         enum In {
@@ -810,11 +898,11 @@ mod tests {
                     }
                 }
             }
-            assert!(depth >= 0, "the atlas closes a brace it never opened");
+            assert!(depth >= 0, "{name} closes a brace it never opened");
             at += 1;
         }
-        assert_eq!(depth, 0, "the atlas leaves {depth} brace(s) open");
-        assert_eq!(parens, 0, "the atlas leaves {parens} bracket(s) open");
-        assert!(mode == In::Code, "the atlas ends inside a string or a comment");
+        assert_eq!(depth, 0, "{name} leaves {depth} brace(s) open");
+        assert_eq!(parens, 0, "{name} leaves {parens} bracket(s) open");
+        assert!(mode == In::Code, "{name} ends inside a string or a comment");
     }
 }

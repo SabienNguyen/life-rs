@@ -235,18 +235,7 @@ fn a_chain_makes_paying_abroad_cheaper() {
     assert!(world.networks[0].carried > 0.0, "the chain carries payments");
     let now: f64 = world.countries.iter().map(|c| c.pay_cost).sum::<f64>() / world.countries.len() as f64;
     // What routing through houses would cost, with no chain at all, between the same countries.
-    let trust = world.country_trust();
-    let mut bank = 0.0;
-    let mut pairs = 0.0;
-    for a in 0..world.countries.len() {
-        for b in 0..world.countries.len() {
-            if a != b {
-                bank += payments::cheapest_route(&trust, a, b, world.fx(a, b)).0;
-                pairs += 1.0;
-            }
-        }
-    }
-    let bank = bank / pairs;
+    let bank = world.cost_through_houses().expect("more than one country");
     assert!(
         now < 0.8 * bank,
         "{now:.3} with the chain against {bank:.3} through houses, founded {founded}"
