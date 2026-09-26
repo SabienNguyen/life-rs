@@ -428,6 +428,18 @@ cargo run -p main -- --seed 0x11 --nations 600
 allowed, with paying abroad free, or with nothing moving between towns — the switches every
 comparison below was measured with.
 
+<p align="center">
+  <img src="docs/images/ledgers.png" width="820" alt="Six hundred years of one world: income, people, farmers and the share of payments abroad on a chain, charted, beside what happened" />
+</p>
+
+<p align="center"><i>World 0x11 over six hundred years, from <code>--html</code>. Money at year 69, the trap opening at 336,<br />and in red the share of payments abroad that move onto the chain once it is founded at 418.</i></p>
+
+<p align="center">
+  <img src="docs/images/payments.png" width="820" alt="Forty towns on the planet's land, joined to their market hubs, with the latest block's payments drawn between houses and the validators ringed" />
+</p>
+
+<p align="center"><i>The same world's towns on the planet's land, each drawn to its market hub. The curves are the<br />latest block's payments, house to house; the dashed rings are the validators.</i></p>
+
 Nothing below is scheduled:
 
 - **Money comes first.** Metal is in use by year eighty and coins by ninety — because trade
