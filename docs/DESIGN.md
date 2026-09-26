@@ -5596,8 +5596,9 @@ simulated statistically. This is that tier, for the first time, in three crates:
 `--nations <years>` tells a run; `--html` turns it into a page — the world's history charted,
 the towns on the planet's land with the latest block's payments drawn between their houses,
 every chain's accounts, validators and recent blocks down to their hashes, and a button that
-checks the latest block in the browser itself (§49.5); `--json` is the data; and
-`nations/examples/who_builds_a_ledger.rs` is the instrument every number below came from.
+checks the latest block in the browser itself (§49.5); `--json` is the data; and the numbers
+below come from two instruments, `nations/examples/who_builds_a_ledger.rs` for the chains and
+`nations/examples/what_the_chain_changes.rs` for the worlds around them.
 
 ### 49.1 Four levels, none of them drawn
 
