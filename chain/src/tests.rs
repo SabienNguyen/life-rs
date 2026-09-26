@@ -986,3 +986,124 @@ fn a_chain_with_nobody_left_to_validate_stops() {
     assert_eq!(world.chain.step(world.time + MONTH, &world.keys, &|_, _| true, 8), None);
     assert_eq!(world.chain.verify(), Ok(()));
 }
+
+/// Whatever anybody sends — hundreds of transactions of every kind drawn at random, half of them
+/// sensible and half not, with amounts from one base unit to the largest a number holds, wrong
+/// nonces, fees too low, consents stale and evidence of both kinds — the ledger's laws hold after
+/// every block, and the chain replays to exactly what it holds. The scenario tests show each rule
+/// once; this shows them in any order, and holds itself to having had every kind accepted.
+#[test]
+fn the_laws_hold_whatever_is_sent() {
+    let mut world = every_kind();
+    let everyone: Vec<SigningKey> = world.people.iter().chain(&world.validators).cloned().collect();
+    for key in &everyone {
+        world.keys.insert(Address::of(&key.public()), key.clone());
+    }
+    let (issuer, attestor) = (world.people[0].clone(), world.people[1].clone());
+    let id = world.chain.id;
+    let min_fee = world.chain.params().min_fee;
+    let mut noise = 0x9e37_79b9_7f4a_7c15u64;
+    let mut draw = move |n: u64| {
+        noise ^= noise << 13;
+        noise ^= noise >> 7;
+        noise ^= noise << 17;
+        noise % n.max(1)
+    };
+    let mut committed = 0;
+    let mut taken: BTreeMap<&str, usize> = BTreeMap::new();
+    for block in 0..60 {
+        for _ in 0..12 {
+            let kind = draw(12);
+            let sensible = draw(2) == 0;
+            // Who sends it: anybody, or — half the time — whoever could.
+            let who = match (kind, sensible) {
+                (3, true) => attestor.clone(),
+                (4, true) => issuer.clone(),
+                _ => everyone[draw(everyone.len() as u64) as usize].clone(),
+            };
+            let other = everyone[draw(everyone.len() as u64) as usize].clone();
+            let (from, to) = (Address::of(&who.public()), Address::of(&other.public()));
+            let asset = if draw(2) == 0 { Asset::Coin } else { Asset::Token(draw(2) as u32) };
+            // How much: part of what the sender holds, or anything at all.
+            let part_of = |held: u128, draw: &mut dyn FnMut(u64) -> u64| (held * (1 + draw(100) as u128) / 100).max(1);
+            let held = world.chain.pending_balance(&from, asset);
+            let amount = if sensible {
+                part_of(held, &mut draw)
+            } else {
+                let raw = draw(1 << 40) as u128;
+                [raw, raw << 60, u128::MAX - raw, COIN][draw(4) as usize]
+            };
+            let action = match kind {
+                0 | 1 => Action::Pay { to, asset, amount },
+                2 => Action::Issue {
+                    symbol: ["TIL", "X", "TOOLONGSYMBOL", ""][draw(4) as usize].into(),
+                    peg: "mark".into(),
+                    attestor: to,
+                },
+                3 => {
+                    let supply = world.chain.pending_token(0).map_or(0, |t| t.supply);
+                    let reserves = if sensible { supply + part_of(supply + TOKEN_UNIT, &mut draw) } else { amount };
+                    Action::Attest { token: 0, reserves }
+                }
+                4 => {
+                    let room = world
+                        .chain
+                        .pending_token(0)
+                        .map_or(0, |t| t.reserves.saturating_sub(t.supply));
+                    let amount = if sensible { part_of(room, &mut draw) } else { amount };
+                    Action::Mint { token: 0, to, amount }
+                }
+                5 => {
+                    let held = world.chain.pending_balance(&from, Asset::Token(0));
+                    let amount = if sensible { part_of(held, &mut draw) } else { amount };
+                    Action::Redeem { token: 0, amount }
+                }
+                6 => Action::Bond { amount },
+                7 => {
+                    let bonded = world.chain.pending_account(&from).map_or(0, |a| a.bonded);
+                    let amount = if sensible { part_of(bonded, &mut draw) } else { amount };
+                    Action::Unbond { amount }
+                }
+                8 | 9 => {
+                    let get = if asset == Asset::Coin { Asset::Token(0) } else { Asset::Coin };
+                    let theirs = world.chain.pending_balance(&to, get);
+                    let wanted = if sensible { part_of(theirs, &mut draw) } else { amount };
+                    let nonce = world.chain.next_nonce(&to) + u64::from(!sensible && draw(2) == 0);
+                    let agreed = Swap::agreed(&other, id, from, nonce, (asset, amount), (get, wanted));
+                    Action::Swap(Box::new(agreed))
+                }
+                10 if draw(6) == 0 => {
+                    // A validator's two signatures at some height: for two blocks, or one twice.
+                    let cheat = &world.validators[draw(world.validators.len() as u64) as usize];
+                    let height = draw(world.chain.height() + 1);
+                    let first = Box::new(Vote::signed(cheat, id, height, 0, Digest::of(b"one")));
+                    let block: &[u8] = if sensible { b"two" } else { b"one" };
+                    let second = Box::new(Vote::signed(cheat, id, height, 0, Digest::of(block)));
+                    Action::Evidence { first, second }
+                }
+                _ => Action::Pay {
+                    to,
+                    asset: Asset::Coin,
+                    amount: COIN / 100,
+                },
+            };
+            let nonce = world.chain.next_nonce(&from) + u64::from(!sensible && draw(4) == 0);
+            let fee = if !sensible && draw(4) == 0 { 0 } else { min_fee };
+            let label = action.label();
+            if world.chain.submit(Transaction::signed(&who, id, nonce, fee, action)).is_ok() {
+                *taken.entry(label).or_insert(0) += 1;
+            }
+        }
+        world.time += MONTH;
+        if world.chain.step(world.time, &world.keys, &|_, _| true, 8).is_none() {
+            break;
+        }
+        committed += 1;
+        assert_eq!(world.chain.ledger.broken_law(), None, "after block {block}");
+    }
+    assert!(committed >= 40, "the chain kept going through most of it: {committed} blocks");
+    for kind in ["pay", "issue", "attest", "mint", "redeem", "bond", "unbond", "swap", "evidence"] {
+        assert!(taken.contains_key(kind), "no {kind} was ever accepted: {taken:?}");
+    }
+    assert_eq!(world.chain.verify(), Ok(()));
+}
