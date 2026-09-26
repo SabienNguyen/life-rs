@@ -6055,10 +6055,11 @@ country has.
 What it cost is what holding a country to its share costs, and less of it. Chains keep more
 validators — 0xb's seven are ten, 0x55's thirteen sixteen — though where one house must hold its
 country's share, fewer: 0x37's seven are four, the fewest there may be. And in a few worlds the
-house that takes up the stake checks more slowly, and paying abroad costs a little more: 0x64's
-payments abroad cost 2.8 per cent of themselves rather than 2.6, and 0x39's 1.8 rather than 1.7,
-though 0x4e's cost 1.7 rather than 1.8. In the rest paying abroad and the chain's share of it read
-the same to the tenth.
+house that takes up the stake checks at another speed than the one it relieves, so paying abroad
+costs a little more or less: 2.8 per cent of a payment rather than 2.6 in 0x64, a tenth of a point
+more in 0x39, 0x81 and 0x99 and a tenth less in 0x4e and 0x7a, while the chain's share of those
+payments moves by a point or two in six worlds. In the other hundred and nineteen of the hundred
+and twenty-eight chains, both read the same to the tenth.
 
 ### 49.7 What went wrong on the way
 
