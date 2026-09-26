@@ -96,7 +96,9 @@ impl Account {
         self.bonded + self.unbonding.iter().map(|(_, a)| a).sum::<u128>()
     }
 
-    fn encode(&self, address: &Address) -> Vec<u8> {
+    /// The account's leaf in the state tree: what a proof of it is a proof of, and what anybody
+    /// checking one hashes.
+    pub fn encode(&self, address: &Address) -> Vec<u8> {
         let mut w = Writer::tagged("life-rs/chain/account/1");
         w.fixed(&address.0)
             .u64(self.nonce)

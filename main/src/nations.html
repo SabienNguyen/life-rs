@@ -511,7 +511,12 @@ drawCountries();
       "<div class='legend'><span><i style='background:var(--chart1)'></i>transactions in the block</span>" +
       "<span><i style='background:var(--ember);height:8px;width:8px;border-radius:50%'></i>a round lost to an absent proposer</span></div>" +
       "<h2 style='margin-top:14px'>Blocks</h2><p class='muted'>The latest " + c.recent.length + " blocks, in full. Pick one.</p>" +
-      "<div class='blocks' id='blocks" + at + "'></div><div id='block" + at + "'></div></div>";
+      "<div class='blocks' id='blocks" + at + "'></div><div id='block" + at + "'></div>" +
+      "<h2 style='margin-top:14px'>Check it yourself</h2>" +
+      "<p class='muted'>Your browser can check block #" + c.proof.height + " with its own SHA-256 and Ed25519, taking nothing on this page's word: that its header hashes to its name and holds its state root, that more than two thirds of the stake signed it, and that every house's balance is in the state it commits to.</p>" +
+      "<div style='display:flex;gap:8px;flex-wrap:wrap'><button class='toggle' style='float:none' id='check" + at + "'>Check block #" + c.proof.height + "</button>" +
+      "<button class='toggle' style='float:none' id='tamper" + at + "'>Check it with one byte changed</button></div>" +
+      "<div id='checked" + at + "' style='margin-top:10px'></div></div>";
   }).join("");
   WORLD.chains.forEach(function (c, at) {
     const strip = $("blocks" + at);
@@ -524,11 +529,191 @@ drawCountries();
     });
     if (c.recent.length) showBlock(at, c.recent.length - 1);
     drawLife(at);
+    $("check" + at).addEventListener("click", function () { checkYourself(at, false); });
+    $("tamper" + at).addEventListener("click", function () { checkYourself(at, true); });
   });
   window.addEventListener("resize", function () {
     requestAnimationFrame(function () { WORLD.chains.forEach(function (c, at) { drawLife(at); }); });
   });
 })();
+// ---- checking a block in the browser ---------------------------------------------------
+function unhex(text) {
+  const out = new Uint8Array(text.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(text.substr(2 * i, 2), 16);
+  return out;
+}
+function hexOf(data) {
+  return Array.prototype.map.call(data, function (b) { return (b < 16 ? "0" : "") + b.toString(16); }).join("");
+}
+// SHA-256 as FIPS 180-4 writes it, for a page opened somewhere the browser keeps its own to
+// itself. Where the browser offers one, that is used instead.
+const ROUND = [
+  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+];
+function sha256here(data) {
+  const bits = data.length * 8;
+  const padded = new Uint8Array(Math.ceil((data.length + 9) / 64) * 64);
+  padded.set(data);
+  padded[data.length] = 0x80;
+  const view = new DataView(padded.buffer);
+  view.setUint32(padded.length - 8, Math.floor(bits / 4294967296));
+  view.setUint32(padded.length - 4, bits >>> 0);
+  const hash = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+  const w = new Array(64);
+  const rotr = function (x, n) { return (x >>> n) | (x << (32 - n)); };
+  for (let block = 0; block < padded.length; block += 64) {
+    for (let i = 0; i < 16; i++) w[i] = view.getUint32(block + 4 * i);
+    for (let i = 16; i < 64; i++) {
+      const s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
+      const s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;
+    }
+    let a = hash[0], b = hash[1], c = hash[2], d = hash[3], e = hash[4], f = hash[5], g = hash[6], k = hash[7];
+    for (let i = 0; i < 64; i++) {
+      const t1 = (k + (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) + ((e & f) ^ (~e & g)) + ROUND[i] + w[i]) >>> 0;
+      const t2 = ((rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) >>> 0;
+      k = g; g = f; f = e; e = (d + t1) >>> 0; d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+    }
+    const add = [a, b, c, d, e, f, g, k];
+    for (let i = 0; i < 8; i++) hash[i] = (hash[i] + add[i]) >>> 0;
+  }
+  const out = new Uint8Array(32);
+  const outView = new DataView(out.buffer);
+  for (let i = 0; i < 8; i++) outView.setUint32(4 * i, hash[i]);
+  return out;
+}
+const BROWSER_SHA = !!(window.crypto && window.crypto.subtle);
+async function sha256(data) {
+  if (BROWSER_SHA) return new Uint8Array(await crypto.subtle.digest("SHA-256", data));
+  return sha256here(data);
+}
+function joined(parts) {
+  const out = new Uint8Array(parts.reduce(function (n, p) { return n + p.length; }, 0));
+  let at = 0;
+  parts.forEach(function (p) { out.set(p, at); at += p.length; });
+  return out;
+}
+// RFC 6962 leaves and nodes, and RFC 9162's walk up a path using only the index and size.
+async function merkleHolds(rootHex, leafBytes, index, size, path) {
+  if (index >= size) return false;
+  let r = await sha256(joined([new Uint8Array([0]), leafBytes]));
+  let f = index, s = size - 1;
+  for (let i = 0; i < path.length; i++) {
+    if (s === 0) return false;
+    const sibling = unhex(path[i]);
+    if ((f & 1) === 1 || f === s) {
+      r = await sha256(joined([new Uint8Array([1]), sibling, r]));
+      if ((f & 1) === 0) {
+        while ((f & 1) === 0 && f !== 0) { f >>= 1; s >>= 1; }
+      }
+    } else {
+      r = await sha256(joined([new Uint8Array([1]), r, sibling]));
+    }
+    f >>= 1; s >>= 1;
+  }
+  return s === 0 && hexOf(r) === rootHex;
+}
+// An account's leaf, read the way the chain writes it: a tag, the address, the nonce, coin,
+// stake, what is unbonding, and every token held — little-endian throughout.
+function readAccount(leaf) {
+  let at = 0;
+  const u32 = function () { const v = (leaf[at] | (leaf[at + 1] << 8) | (leaf[at + 2] << 16) | (leaf[at + 3] << 24)) >>> 0; at += 4; return v; };
+  const wide = function (n) { let v = BigInt(0); for (let i = n - 1; i >= 0; i--) v = v * BigInt(256) + BigInt(leaf[at + i]); at += n; return v; };
+  // Each length is read before it is skipped: `at += u32()` would read `at` before the call
+  // moved it, and land four bytes short.
+  const tag = u32();
+  at += tag + 20;
+  const nonce = wide(8), coin = wide(16), bonded = wide(16);
+  const unbonding = u32();
+  at += unbonding * 24;
+  const tokens = {};
+  const held = u32();
+  for (let i = 0; i < held; i++) { const id = u32(); tokens[id] = wide(16); }
+  return { nonce: nonce, coin: coin, bonded: bonded, tokens: tokens };
+}
+// The address a key signs for: the first twenty bytes of a tagged hash of it.
+async function addressOf(keyBytes) {
+  const tag = new TextEncoder().encode("life-rs/chain/address/1");
+  const length = new Uint8Array([tag.length, 0, 0, 0]);
+  return hexOf((await sha256(joined([length, tag, keyBytes]))).slice(0, 20));
+}
+async function ed25519Holds(keyHex, signatureHex, messageHex) {
+  const key = await crypto.subtle.importKey("raw", unhex(keyHex), { name: "Ed25519" }, false, ["verify"]);
+  return crypto.subtle.verify({ name: "Ed25519" }, key, unhex(signatureHex), unhex(messageHex));
+}
+async function checkYourself(at, tamper) {
+  const c = WORLD.chains[at];
+  const p = c.proof;
+  const out = $("checked" + at);
+  const lines = [];
+  const say = function (ok, text) {
+    lines.push("<li><span class='" + (ok ? "ok" : "bad") + "'>" + (ok ? "✓ holds" : "✗ fails") + "</span> " + text + "</li>");
+    out.innerHTML = "<ul class='events' style='max-height:none'>" + lines.join("") + "</ul>";
+  };
+  out.innerHTML = "<p class='muted'>Checking…</p>";
+  try {
+    lines.push("<li class='muted'>SHA-256 by " + (BROWSER_SHA ? "your browser's own" : "this page's copy of FIPS 180-4, since the browser keeps its own to itself here") + "</li>");
+    const header = unhex(p.header);
+    say(hexOf(await sha256(header)) === p.hash, "the header's " + header.length + " bytes hash to the block's name, " + p.hash.slice(0, 16) + "…");
+    say(p.header.indexOf(p.stateRoot) >= 0, "the header commits to the state root " + p.stateRoot.slice(0, 16) + "…");
+    // The votes: each names this block, is signed by the key it says, and that key is a validator's.
+    const power = {};
+    let total = 0;
+    c.validators.forEach(function (v) { power[v.address] = v.power; total += v.power; });
+    let signed = 0, good = 0, edOk = true;
+    const seen = {};
+    for (let i = 0; i < p.votes.length; i++) {
+      const v = p.votes[i];
+      const address = await addressOf(unhex(v.key));
+      let holds = v.payload.indexOf(p.hash) >= 0 && power[address] !== undefined && !seen[address];
+      if (holds) {
+        try {
+          holds = await ed25519Holds(v.key, v.signature, v.payload);
+        } catch (e) {
+          edOk = false;
+        }
+      }
+      if (holds && edOk) {
+        seen[address] = true;
+        good += 1;
+        signed += power[address];
+      }
+    }
+    if (!edOk) {
+      lines.push("<li class='muted'>This browser cannot check Ed25519 signatures, so the votes are left unchecked; every hash above and below still is.</li>");
+    } else {
+      say(3 * signed > 2 * total, good + " of " + p.votes.length + " votes are for this block and signed by a validator, holding " + pct(signed / Math.max(1, total)) + " of the stake — " + (3 * signed > 2 * total ? "more than two thirds, so the block is final" : "not two thirds"));
+    }
+    // Every house's account, proved into the state root the header holds.
+    const token = c.token ? c.token.symbol : "tokens";
+    for (let i = 0; i < p.accounts.length; i++) {
+      const a = p.accounts[i];
+      const leaf = unhex(a.leaf);
+      if (tamper && i === 0) {
+        // One base unit of coin more or less than the account holds — the least a forger could
+        // change. The coin sits after the tag, the address and the nonce.
+        leaf[4 + 23 + 20 + 8] ^= 1;
+      }
+      const read = readAccount(leaf);
+      const held = Object.keys(read.tokens).map(function (id) { return read.tokens[id]; }).reduce(function (n, v) { return n + v; }, BigInt(0));
+      const holds = await merkleHolds(p.stateRoot, leaf, a.index, a.size, a.path);
+      say(holds, esc(townName(a.town)) + " holds " + (read.coin / BigInt(100000000)).toLocaleString() + " coin, " +
+        (read.bonded / BigInt(100000000)).toLocaleString() + " staked and " + (held / BigInt(1000000)).toLocaleString() + " " + esc(token) +
+        " — read from the " + leaf.length + " bytes the proof carries" + (tamper && i === 0 ? ", with one byte changed" : ""));
+    }
+  } catch (e) {
+    lines.push("<li class='bad'>The check could not run here: " + esc(String(e)) + "</li>");
+    out.innerHTML = "<ul class='events' style='max-height:none'>" + lines.join("") + "</ul>";
+  }
+}
+
 // Every block since genesis: how full it was, and where a round was lost.
 function drawLife(at) {
   const c = WORLD.chains[at];

@@ -783,6 +783,7 @@ fn network_json(world: &Nations, at: usize, network: &Network, checked: Option<&
         None => "null".to_string(),
     };
     let ledger = &chain.ledger;
+    let proof = check_it_yourself(network);
     let verified = match checked {
         Some(c) => format!(
             "{{\"ok\":{},\"why\":{},\"seconds\":{},\"blocks\":{}}}",
@@ -798,7 +799,7 @@ fn network_json(world: &Nations, at: usize, network: &Network, checked: Option<&
         None => "null".to_string(),
     };
     format!(
-        "{{\"name\":{},\"id\":{},\"founded\":{},\"founders\":{},\"largestCountry\":{largest},\"height\":{},\"stalls\":{},\"refused\":{},\"roundsLost\":{},\"coin\":{{\"supply\":{},\"genesis\":{},\"issued\":{},\"burned\":{},\"price\":{}}},\"carried\":{},\"fees\":{},\"cost\":{},\"token\":{token},\"validators\":{validators},\"accounts\":{accounts},\"blocks\":{summary},\"recent\":{full},\"verified\":{verified}}}",
+        "{{\"name\":{},\"id\":{},\"founded\":{},\"founders\":{},\"largestCountry\":{largest},\"height\":{},\"stalls\":{},\"refused\":{},\"roundsLost\":{},\"coin\":{{\"supply\":{},\"genesis\":{},\"issued\":{},\"burned\":{},\"price\":{}}},\"carried\":{},\"fees\":{},\"cost\":{},\"token\":{token},\"validators\":{validators},\"accounts\":{accounts},\"blocks\":{summary},\"recent\":{full},\"proof\":{proof},\"verified\":{verified}}}",
         quoted(&network.name),
         quoted(&chain.id.to_string()),
         network.founded,
@@ -818,6 +819,90 @@ fn network_json(world: &Nations, at: usize, network: &Network, checked: Option<&
     )
 }
 
+/// The latest block of a chain as bytes somebody can check without taking this program's word
+/// for anything: the header, which hashes to the block's name and holds its state root; every
+/// vote's signed bytes, key and signature; and for every house, its account's bytes in the
+/// state tree with the path from them to that root.
+struct Checkable {
+    height: u64,
+    header: Vec<u8>,
+    hash: chain::Digest,
+    state_root: chain::Digest,
+    /// Signed bytes, key, signature.
+    votes: Vec<(Vec<u8>, chain::PublicKey, chain::Signature)>,
+    accounts: Vec<Proved>,
+}
+
+/// One house's account as a leaf of the state tree, and the path from it to the root.
+struct Proved {
+    town: usize,
+    leaf: Vec<u8>,
+    index: usize,
+    size: usize,
+    path: Vec<chain::Digest>,
+}
+
+fn checkable(network: &Network) -> Checkable {
+    let chain = &network.chain;
+    let tip = chain.tip();
+    Checkable {
+        height: tip.header.height,
+        header: tip.header.encode(),
+        hash: tip.hash(),
+        state_root: tip.header.state,
+        votes: tip
+            .commit
+            .votes
+            .iter()
+            .map(|v| (v.payload(), v.validator, v.signature))
+            .collect(),
+        accounts: network
+            .houses()
+            .filter_map(|town| {
+                let address = network.address_of(town)?;
+                let proof = chain.ledger.prove(&address)?;
+                Some(Proved {
+                    town,
+                    leaf: proof.account.encode(&address),
+                    index: proof.index,
+                    size: proof.size,
+                    path: proof.path,
+                })
+            })
+            .collect(),
+    }
+}
+
+/// `checkable`, for the page.
+fn check_it_yourself(network: &Network) -> String {
+    let it = checkable(network);
+    let votes = list(it.votes.iter().map(|(payload, key, signature)| {
+        format!(
+            "{{\"payload\":{},\"key\":{},\"signature\":{}}}",
+            quoted(&chain::hex(payload)),
+            quoted(&chain::hex(&key.0)),
+            quoted(&chain::hex(&signature.0))
+        )
+    }));
+    let accounts = list(it.accounts.iter().map(|a| {
+        format!(
+            "{{\"town\":{},\"leaf\":{},\"index\":{},\"size\":{},\"path\":{}}}",
+            a.town,
+            quoted(&chain::hex(&a.leaf)),
+            a.index,
+            a.size,
+            list(a.path.iter().map(|d| quoted(&d.to_string())))
+        )
+    }));
+    format!(
+        "{{\"height\":{},\"header\":{},\"hash\":{},\"stateRoot\":{},\"votes\":{votes},\"accounts\":{accounts}}}",
+        it.height,
+        quoted(&chain::hex(&it.header)),
+        quoted(&it.hash.to_string()),
+        quoted(&it.state_root.to_string())
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -830,6 +915,38 @@ mod tests {
         assert_eq!(grouped(12), "12");
         assert_eq!(when(2_629_800), (0, 1));
         assert_eq!(when(2_629_800 * 13), (1, 1));
+    }
+
+    /// What the page hands a browser to check the latest block is what the chain committed to:
+    /// the header hashes to the block's name and holds the state root, every vote is a real
+    /// signature over bytes naming the block, and every house's leaf and path lead to the root.
+    /// The page checks the same things again with the browser's own SHA-256 and Ed25519.
+    #[test]
+    fn a_browser_is_given_what_it_needs_to_check_the_latest_block() {
+        let mut world = Nations::found(sim_core::WorldSeed::from_u128(0x11));
+        while world.networks.is_empty() && world.year < 800 {
+            world.year();
+        }
+        world.run(2);
+        let it = checkable(&world.networks[0]);
+        assert_eq!(chain::Digest::of(&it.header), it.hash);
+        let holds_root = it.header.windows(32).any(|w| w == it.state_root.0);
+        assert!(holds_root, "the header carries its state root");
+        assert!(!it.votes.is_empty());
+        for (payload, key, signature) in &it.votes {
+            assert!(key.verify(payload, signature));
+            assert!(payload.windows(32).any(|w| w == it.hash.0), "a vote names its block");
+        }
+        assert!(it.accounts.len() > 4);
+        for a in &it.accounts {
+            assert!(
+                chain::merkle::verify(&it.state_root, &chain::merkle::leaf(&a.leaf), a.index, a.size, &a.path),
+                "{}'s account",
+                world.towns[a.town].name
+            );
+        }
+        let page = check_it_yourself(&world.networks[0]);
+        assert!(page.contains(&chain::hex(&it.header)));
     }
 
     #[test]
