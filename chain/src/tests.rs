@@ -92,6 +92,20 @@ fn a_chain_needs_more_than_two_thirds_of_its_founders_to_begin() {
     assert!(Chain::found(genesis, &keys).is_ok());
 }
 
+/// The set a block's header names is the set whose signatures made it final — so somebody holding
+/// only the header, the set and the commit can check the block without the chain behind it.
+#[test]
+fn the_signers_of_a_block_are_the_set_its_header_names() {
+    let mut world = found_with(&[40, 30, 20, 10]);
+    assert_eq!(world.chain.signers.hash(), world.chain.tip().header.validators);
+    for _ in 0..3 {
+        world.everybody();
+        let tip = world.chain.tip();
+        assert_eq!(world.chain.signers.hash(), tip.header.validators);
+        assert!(world.chain.signers.check(&tip.commit, world.chain.id, tip.header.height, tip.hash()).is_ok());
+    }
+}
+
 #[test]
 fn a_payment_moves_what_it_says_and_the_laws_hold() {
     let mut world = found_with(&[25, 25, 25, 25]);

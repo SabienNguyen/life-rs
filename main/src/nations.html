@@ -731,11 +731,12 @@ function readAccount(leaf) {
   for (let i = 0; i < held; i++) { const id = u32(); tokens[id] = wide(16); }
   return { nonce: nonce, coin: coin, bonded: bonded, tokens: tokens };
 }
-// The address a key signs for: the first twenty bytes of a tagged hash of it.
-async function addressOf(keyBytes) {
-  const tag = new TextEncoder().encode("life-rs/chain/address/1");
-  const length = new Uint8Array([tag.length, 0, 0, 0]);
-  return hexOf((await sha256(joined([length, tag, keyBytes]))).slice(0, 20));
+// A validator's leaf in the set a header names: tagged address, key and power.
+async function validatorLeaf(v) {
+  const tag = new TextEncoder().encode("life-rs/chain/validator/1");
+  const power = new Uint8Array(8);
+  new DataView(power.buffer).setBigUint64(0, BigInt(v.power), true);
+  return sha256(joined([new Uint8Array([0, tag.length, 0, 0, 0]), tag, unhex(v.address), unhex(v.key), power]));
 }
 // An RFC 6962 root over leaves already hashed: split at the largest power of two below the count.
 async function merkleRoot(leaves) {
@@ -775,16 +776,21 @@ async function checkYourself(at, tamper) {
     }
     const txRoot = hexOf(await merkleRoot(ids));
     say(txRoot === p.txRoot && p.header.indexOf(p.txRoot) >= 0, "its " + p.txs.length + " transactions hash up to the transaction root the header commits to, " + p.txRoot.slice(0, 16) + "…");
-    // The votes: each names this block, is signed by the key it says, and that key is a validator's.
+    // Who signed, and with how much stake: the set whose hash the header commits to, so the
+    // stake added up below is the stake the block itself names rather than the page's word.
+    const setLeaves = [];
+    for (let i = 0; i < p.signers.length; i++) setLeaves.push(await validatorLeaf(p.signers[i]));
+    const setRoot = hexOf(await merkleRoot(setLeaves));
+    say(setRoot === p.validatorsHash && p.header.indexOf(setRoot) >= 0, "its " + p.signers.length + " validators and the stake of each hash to the validator set the header commits to");
+    // The votes: each names this block and is signed by a validator of that set.
     const power = {};
     let total = 0;
-    c.validators.forEach(function (v) { power[v.address] = v.power; total += v.power; });
+    p.signers.forEach(function (v) { power[v.key] = v.power; total += v.power; });
     let signed = 0, good = 0, edOk = true;
     const seen = {};
     for (let i = 0; i < p.votes.length; i++) {
       const v = p.votes[i];
-      const address = await addressOf(unhex(v.key));
-      let holds = v.payload.indexOf(p.hash) >= 0 && power[address] !== undefined && !seen[address];
+      let holds = v.payload.indexOf(p.hash) >= 0 && power[v.key] !== undefined && !seen[v.key];
       if (holds) {
         try {
           holds = await ed25519Holds(v.key, v.signature, v.payload);
@@ -793,9 +799,9 @@ async function checkYourself(at, tamper) {
         }
       }
       if (holds && edOk) {
-        seen[address] = true;
+        seen[v.key] = true;
         good += 1;
-        signed += power[address];
+        signed += power[v.key];
       }
     }
     // And each transaction is signed by the key it names: the body is everything but the last

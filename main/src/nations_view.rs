@@ -873,6 +873,9 @@ struct Checkable {
     hash: chain::Digest,
     state_root: chain::Digest,
     tx_root: chain::Digest,
+    /// The validators that signed it — the set the header names — with the stake of each.
+    validators_hash: chain::Digest,
+    signers: Vec<(Address, chain::PublicKey, u64)>,
     /// Every transaction in the block, as the bytes whose hash is its id.
     txs: Vec<Vec<u8>>,
     /// Signed bytes, key, signature.
@@ -898,6 +901,13 @@ fn checkable(network: &Network) -> Checkable {
         hash: tip.hash(),
         state_root: tip.header.state,
         tx_root: tip.header.txs,
+        validators_hash: tip.header.validators,
+        signers: chain
+            .signers
+            .members
+            .iter()
+            .map(|v| (v.address, v.key, v.power))
+            .collect(),
         txs: tip.txs.iter().map(|tx| tx.encode()).collect(),
         votes: tip
             .commit
@@ -944,13 +954,21 @@ fn check_it_yourself(network: &Network) -> String {
         )
     }));
     let txs = list(it.txs.iter().map(|bytes| quoted(&chain::hex(bytes))));
+    let signers = list(it.signers.iter().map(|(address, key, power)| {
+        format!(
+            "{{\"address\":{},\"key\":{},\"power\":{power}}}",
+            quoted(&address.to_string()),
+            quoted(&chain::hex(&key.0))
+        )
+    }));
     format!(
-        "{{\"height\":{},\"header\":{},\"hash\":{},\"stateRoot\":{},\"txRoot\":{},\"txs\":{txs},\"votes\":{votes},\"accounts\":{accounts}}}",
+        "{{\"height\":{},\"header\":{},\"hash\":{},\"stateRoot\":{},\"txRoot\":{},\"validatorsHash\":{},\"signers\":{signers},\"txs\":{txs},\"votes\":{votes},\"accounts\":{accounts}}}",
         it.height,
         quoted(&chain::hex(&it.header)),
         quoted(&it.hash.to_string()),
         quoted(&it.state_root.to_string()),
-        quoted(&it.tx_root.to_string())
+        quoted(&it.tx_root.to_string()),
+        quoted(&it.validators_hash.to_string())
     )
 }
 
@@ -984,6 +1002,8 @@ mod tests {
         let holds_root = it.header.windows(32).any(|w| w == it.state_root.0);
         assert!(holds_root, "the header carries its state root");
         assert!(!it.votes.is_empty());
+        assert_eq!(world.networks[0].chain.signers.hash(), it.validators_hash);
+        assert_eq!(it.signers.len(), world.networks[0].chain.signers.members.len());
         for (payload, key, signature) in &it.votes {
             assert!(key.verify(payload, signature));
             assert!(payload.windows(32).any(|w| w == it.hash.0), "a vote names its block");

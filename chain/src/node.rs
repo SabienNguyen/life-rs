@@ -82,6 +82,9 @@ pub struct Chain {
     pub ledger: Ledger,
     /// Who must sign the next height, and where each stands in the rotation.
     pub rotation: ValidatorSet,
+    /// Who signed the last block: the set its header names, and the one a light client holding
+    /// that header checks its commit against.
+    pub signers: ValidatorSet,
     /// Transactions waiting for a block, in the order they arrived.
     pool: Vec<Transaction>,
     /// The ledger with the pool applied, which is what a new arrival is checked against — so a
@@ -121,6 +124,7 @@ impl Chain {
             }],
             pending: ledger.clone(),
             ledger,
+            signers: rotation.clone(),
             rotation,
             genesis,
             pool: Vec::new(),
@@ -272,7 +276,7 @@ impl Chain {
         let included: BTreeSet<Digest> = block.txs.iter().map(|t| t.id()).collect();
         self.blocks.push(block);
         self.ledger = ledger;
-        self.rotation = rotation;
+        self.signers = std::mem::replace(&mut self.rotation, rotation);
         // What is still waiting is re-checked against the new ledger; anything the block made
         // impossible — a second spend of the same coin, a nonce already used — falls out.
         let waiting = std::mem::take(&mut self.pool);
