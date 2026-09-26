@@ -121,6 +121,7 @@ cargo run -p main -- --years 200 --atlas > atlas.html # turn a globe, click down
 cargo run -p main -- --ages 500                       # half a gigayear, with people on it
 cargo run -p main -- --seed 0x11 --nations 600        # towns to world economy, and a blockchain
 cargo run -p main -- --seed 0x11 --nations 600 --html > ledgers.html  # explore it
+cargo run -p main -- --seed 0x11 --nations 600 --without chain        # the same world, no ledger
 ```
 
 Every world is reproducible from its seed and genuinely different from every other one.
@@ -419,6 +420,10 @@ world reads one; and the world.
 ```bash
 cargo run -p main -- --seed 0x11 --nations 600
 ```
+
+`--without chain`, `--without borders` and `--without trade` run the same world with no ledger
+allowed, with paying abroad free, or with nothing moving between towns — the switches every
+comparison below was measured with.
 
 Nothing below is scheduled:
 

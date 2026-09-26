@@ -23,6 +23,8 @@ pub fn without_a_chain(world: &Nations) -> Option<Nations> {
     }
     let mut other = Nations::found(world.seed);
     other.chains_are_possible = false;
+    other.borders_are_free = world.borders_are_free;
+    other.trade_is_possible = world.trade_is_possible;
     other.run(world.year);
     Some(other)
 }
@@ -366,6 +368,7 @@ pub fn report(world: &Nations, checked: &[Checked]) -> Vec<String> {
         out.push(format!(
             "  {}",
             match world.not_yet {
+                _ if !world.chains_are_possible => "this run allows none: it is the world run --without chain".to_string(),
                 Some(commerce::payments::NotYet::OneCountry) =>
                     "one country: there is a house everybody can pay through, and no border to pay across".to_string(),
                 Some(commerce::payments::NotYet::TooFew) =>
@@ -828,6 +831,19 @@ pub fn snapshot(world: &Nations, checked: &[Checked]) -> String {
             .not_yet
             .map(|w| quoted(&format!("{w:?}")))
             .unwrap_or_else(|| "null".to_string())
+    ));
+    fields.push(format!(
+        "\"without\":{}",
+        list(
+            [
+                (!world.chains_are_possible, "chain"),
+                (world.borders_are_free, "borders"),
+                (!world.trade_is_possible, "trade"),
+            ]
+            .into_iter()
+            .filter(|(off, _)| *off)
+            .map(|(_, what)| quoted(what))
+        )
     ));
     format!("{{{}}}", fields.join(",\n"))
 }

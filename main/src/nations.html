@@ -293,9 +293,11 @@ function monthLabel(m) { const k = Math.max(0, m - 1); return "year " + Math.flo
 // ---- the strip -------------------------------------------------------------------------
 (function () {
   const last = WORLD.readings[WORLD.readings.length - 1] || [0, 0, 0, 0, 0, 0, 0, 0, 0];
+  const without = { chain: "any chain", borders: "the cost of paying across borders", trade: "trade between towns" };
   $("subtitle").textContent = "World " + WORLD.seed + ", after " + WORLD.year + " years: " +
     WORLD.towns.length + " towns in " + WORLD.states.length + " states and " +
-    WORLD.countries.length + (WORLD.countries.length === 1 ? " country." : " countries.");
+    WORLD.countries.length + (WORLD.countries.length === 1 ? " country." : " countries.") +
+    ((WORLD.without || []).length ? " Run without " + WORLD.without.map(function (w) { return without[w]; }).join(" or ") + "." : "");
   const chain = WORLD.chains[0];
   const stats = [
     [amount(last[1]), "people"],
@@ -568,7 +570,9 @@ drawCountries();
       NotWorthIt: "Checking a chain would still cost more than the distrust it would save.",
     };
     const key = (WORLD.notYet || "").split("(")[0];
-    box.innerHTML = "<p class='muted'>" + esc(why[key] || (key === "TrustedKeeper" ? "One house is trusted by all the rest, so they keep their books with it." : "Nobody has asked yet.")) + "</p>";
+    const off = (WORLD.without || []).indexOf("chain") >= 0;
+    box.innerHTML = "<p class='muted'>" + esc(off ? "This run allows none: it is the same world, run --without chain, to see what it does without one." :
+      why[key] || (key === "TrustedKeeper" ? "One house is trusted by all the rest, so they keep their books with it." : "Nobody has asked yet.")) + "</p>";
     return;
   }
   const lastReading = WORLD.readings[WORLD.readings.length - 1] || [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];

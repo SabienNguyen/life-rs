@@ -51,6 +51,10 @@ options:
                    years: markets, money, and — where houses in different
                    countries come to need one — a blockchain they keep between
                    them. with --html, a page to explore it; with --json, data
+  --without <what> with --nations, run the same world without something, to
+                   see what it did: chain (no ledger may be founded), borders
+                   (paying abroad costs nothing), or trade (nothing moves
+                   between towns). may be given more than once
   --grid <level>   how fine the planet's grid is (default: 4, ~450 km cells)
   --save <path>    write the world out so it can be opened again
   --load <path>    open a world written earlier, and carry on from there
@@ -73,6 +77,8 @@ struct Options {
     globe: Option<f64>,
     ages: Option<f64>,
     nations: Option<u64>,
+    /// What a `--nations` run is to do without: `chain`, `borders` or `trade`.
+    without: Vec<String>,
     grid: u8,
     save: Option<String>,
     load: Option<String>,
@@ -114,6 +120,7 @@ impl Default for Options {
             globe: None,
             ages: None,
             nations: None,
+            without: Vec::new(),
             grid: 4,
             save: None,
             load: None,
@@ -489,6 +496,10 @@ fn run_ages(options: &Options, myr: f64) {
 fn run_nations(options: &Options, years: u64) -> ExitCode {
     let started = std::time::Instant::now();
     let mut world = nations::Nations::found(options.seed);
+    let without = |what: &str| options.without.iter().any(|w| w == what);
+    world.chains_are_possible = !without("chain");
+    world.borders_are_free = without("borders");
+    world.trade_is_possible = !without("trade");
     world.run(years);
     let ran = started.elapsed().as_secs_f64();
     // Every chain is replayed from its genesis before anything is said about it, so what the
@@ -503,12 +514,24 @@ fn run_nations(options: &Options, years: u64) -> ExitCode {
         }
     } else {
         println!("world {}", options.seed);
-        println!("{} years of towns, markets and money\n", world.year);
+        println!("{} years of towns, markets and money", world.year);
+        for what in &options.without {
+            println!(
+                "  without {}",
+                match what.as_str() {
+                    "chain" => "any chain: no ledger may be founded",
+                    "borders" => "borders: paying abroad costs nothing",
+                    _ => "trade: nothing moves between towns",
+                }
+            );
+        }
+        println!();
         for line in nations_view::report(&world, &checked) {
             println!("{line}");
         }
+        let switches: String = options.without.iter().map(|w| format!(" --without {w}")).collect();
         println!(
-            "{} years in {ran:.1}s. replay with --seed {} --nations {years}",
+            "{} years in {ran:.1}s. replay with --seed {} --nations {years}{switches}",
             world.year, options.seed
         );
     }
@@ -608,6 +631,15 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Option<Options>, Str
                     return Err("--nations needs at least one year".to_string());
                 }
                 options.nations = Some(years);
+            }
+            "--without" => {
+                let what = value()?;
+                if !["chain", "borders", "trade"].contains(&what.as_str()) {
+                    return Err(format!(
+                        "--without takes chain, borders or trade, not {what:?}"
+                    ));
+                }
+                options.without.push(what);
             }
             "--ages" => {
                 let raw = value()?;
@@ -778,6 +810,9 @@ mod tests {
         assert!(parse(&["--nations", "0"]).is_err(), "no years is no history");
         assert!(parse(&["--nations", "ages"]).is_err());
         assert!(parse(&["--nations", "-5"]).is_err());
+        let without = parse(&["--nations", "600", "--without", "chain", "--without", "borders"]);
+        assert_eq!(without.unwrap().unwrap().without, vec!["chain", "borders"]);
+        assert!(parse(&["--nations", "600", "--without", "money"]).is_err(), "money is not a switch");
     }
 
     /// The markets page keeps the same contract as the others: one hole, a name, nothing
