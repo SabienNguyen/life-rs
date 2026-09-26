@@ -72,6 +72,19 @@ const SEAT_AT: f64 = 0.05;
 /// takes less stake than its business would give it, and every block needs somebody abroad.
 pub const ONE_COUNTRY_AT_MOST: f64 = 0.6;
 
+/// How much of a house's standing on a chain one year's business sets: its share of what the
+/// chain carries, averaged over about five years. Read afresh each year, a small state that
+/// merged into its neighbour and split off again took a seat and gave it up thirteen times in
+/// three centuries, which is the oscillation §31.1 warns a decision read off a moving quantity
+/// always has.
+const STANDING_MEMORY: f64 = 0.2;
+
+/// A validator whose standing falls below this share of a chain's business takes its stake
+/// back: a house that hardly trades abroad any more has no reason to check other houses'
+/// payments, and its stake is better sold to one that does. A fifth of what it takes to join,
+/// so the two do not chase each other.
+const LEAVE_BELOW: f64 = SEAT_AT / 5.0;
+
 /// A state that makes this share of its country's product has its own market house on a chain,
 /// paying and being paid for its own trade abroad. A smaller one's trade goes through the
 /// capital's house.
@@ -128,6 +141,12 @@ pub struct Network {
     /// Why transactions were refused, by the ledger's own reason.
     pub refusals: BTreeMap<String, u64>,
     pub blocks_this_year: u64,
+    /// What each house paid and was paid on the chain last year, in years of food.
+    pub business: BTreeMap<usize, f64>,
+    /// The same, so far this year.
+    working: BTreeMap<usize, f64>,
+    /// Each house's share of the business here, averaged over the years (`STANDING_MEMORY`).
+    pub standing: BTreeMap<usize, f64>,
 }
 
 impl Network {
@@ -186,25 +205,33 @@ pub(crate) fn year(nations: &mut Nations) {
     }
 }
 
-/// Who could found a chain: every state's hub, with the business abroad of its state.
+/// The houses that would found a chain: the ones that would carry their country's trade on it —
+/// every state's own market house where the state is large enough to have one, and the
+/// capital's for the rest, as `carriers` settles it once there is a chain — each with the part of
+/// its country's trade it would carry. A small state's hub founding a chain its trade would never
+/// run through left again within a few years, nine founders of fifteen on 0x11.
 fn candidates(nations: &Nations) -> (Vec<usize>, Vec<Candidate>) {
     let mut towns = Vec::new();
     let mut found = Vec::new();
-    for state in &nations.states {
-        let country = &nations.countries[state.country];
+    for (c, country) in nations.countries.iter().enumerate() {
         if country.product <= 0.0 {
             continue;
         }
-        let product: f64 = state.towns.iter().map(|t| nations.towns[*t].product()).sum();
-        let volume = country.exports * product / country.product;
-        let hub = &nations.towns[state.hub];
-        towns.push(state.hub);
-        found.push(Candidate {
-            country: state.country,
-            reckoners: hub.workers()[Sector::Reckoning as usize],
-            technique: hub.technique[Sector::Reckoning as usize],
-            volume,
-        });
+        let mut carried: BTreeMap<usize, f64> = BTreeMap::new();
+        for (hub, share) in state_shares(nations, c) {
+            let house = if share >= OWN_HOUSE { hub } else { country.capital };
+            *carried.entry(house).or_insert(0.0) += share;
+        }
+        for (house, share) in carried {
+            let town = &nations.towns[house];
+            towns.push(house);
+            found.push(Candidate {
+                country: c,
+                reckoners: town.workers()[Sector::Reckoning as usize],
+                technique: town.technique[Sector::Reckoning as usize],
+                volume: country.exports * share,
+            });
+        }
     }
     (towns, found)
 }
@@ -415,6 +442,14 @@ fn consider_founding(nations: &mut Nations) {
         refused: 0,
         refusals: BTreeMap::new(),
         blocks_this_year: 0,
+        business: BTreeMap::new(),
+        working: BTreeMap::new(),
+        // Every founder starts with the share of the business that made it one.
+        standing: founding
+            .founders
+            .iter()
+            .map(|i| (towns[*i], candidates[*i].volume / founding_volume.max(1e-9)))
+            .collect(),
     });
     nations.history.push(Event::Founded {
         year: nations.year,
@@ -500,6 +535,7 @@ fn keep(nations: &mut Nations, at: usize) {
     }
 
     issue_token(nations, at, reserve);
+    leave_idle(nations, at);
     take_seats(nations, at);
 
     // Twelve months.
@@ -541,6 +577,16 @@ fn keep(nations: &mut Nations, at: usize) {
     network.carried = carried;
     network.fees = fees;
     network.refused = network.chain.refused;
+    network.business = std::mem::take(&mut network.working);
+    let total: f64 = network.business.values().sum();
+    if total > 0.0 {
+        let houses: Vec<usize> = network.houses().collect();
+        for town in houses {
+            let share = network.business.get(&town).copied().unwrap_or(0.0) / total;
+            let standing = network.standing.entry(town).or_insert(0.0);
+            *standing += STANDING_MEMORY * (share - *standing);
+        }
+    }
 }
 
 /// The reckoning technique of each validator's town.
@@ -797,65 +843,106 @@ fn fund_keeping(
     paid
 }
 
-/// A country whose business on a chain has grown large enough takes a seat among its
-/// validators: it buys stake from those who have it and bonds it.
+/// A house whose business on a chain has grown large enough takes a seat among its validators:
+/// it buys stake from those who have it and bonds it — within what keeps its country's houses
+/// short of `ONE_COUNTRY_AT_MOST` of the stake, and only if it checks as fast as the others.
 fn take_seats(nations: &mut Nations, at: usize) {
-    let validators = nations.networks[at].validators();
     let most = nations.networks[at].chain.params().max_validators;
-    if validators.len() >= most {
-        return;
-    }
-    let total: f64 = nations.payments.values().sum();
-    if total <= 0.0 {
-        return;
-    }
+    let standing = nations.networks[at].standing.clone();
     let best = validator_techniques(nations, at)
         .into_iter()
         .fold(0.0f64, f64::max);
-    for c in 0..nations.countries.len() {
-        let capital = nations.countries[c].capital;
-        if validators.contains(&capital) || !nations.networks[at].keys.contains_key(&capital) {
+    let houses: Vec<usize> = nations.networks[at].houses().collect();
+    for town in houses {
+        let validators = nations.networks[at].validators();
+        if validators.len() >= most {
+            return;
+        }
+        if validators.contains(&town) {
+            continue;
+        }
+        let share = standing.get(&town).copied().unwrap_or(0.0);
+        if share < SEAT_AT {
             continue;
         }
         // A seat is only worth taking by a house that checks as fast as the others: a slow one
         // would make every payment on the chain dearer.
-        if nations.towns[capital].technique[Sector::Reckoning as usize] < payments::CAPABLE * best {
+        if nations.towns[town].technique[Sector::Reckoning as usize] < payments::CAPABLE * best {
             continue;
         }
-        let key = nations.countries[c].key;
-        let mine: f64 = nations
-            .payments
-            .iter()
-            .filter(|((a, b), _)| *a == key || *b == key)
-            .map(|((a, b), v)| v * nations.networks[at].share_of((*a, *b)))
-            .sum();
-        if mine / total < SEAT_AT {
-            continue;
-        }
-        let wanted = (GENESIS_COINS as f64 * mine / total).max(20.0);
-        // No more than keeps its country's houses short of `ONE_COUNTRY_AT_MOST` of the stake.
-        let (ours, all) = country_power(nations, at, c);
+        let wanted = (GENESIS_COINS as f64 * share).max(20.0);
+        let (ours, all) = pending_country_power(nations, at, nations.towns[town].country);
         let room = (ONE_COUNTRY_AT_MOST * all as f64 - ours as f64) / (1.0 - ONE_COUNTRY_AT_MOST);
         if room < 20.0 {
             continue;
         }
         let stake = wanted.min(room) as u128 * COIN;
-        fund(nations, at, capital, stake + COIN);
+        fund(nations, at, town, stake + COIN);
         let network = &mut nations.networks[at];
         let min_fee = network.chain.params().min_fee;
         // A seat nobody would sell it the coin for is a seat it does not take this year.
-        let Some(address) = network.address_of(capital) else {
+        let Some(address) = network.address_of(town) else {
             continue;
         };
         if network.chain.pending_balance(&address, Asset::Coin) < stake + min_fee {
             continue;
         }
-        let tx = sign(network, capital, min_fee, Action::Bond { amount: stake });
+        let tx = sign(network, town, min_fee, Action::Bond { amount: stake });
         if submit(network, tx) {
             nations.history.push(Event::Joined {
                 year: nations.year,
                 network: at,
-                town: capital,
+                town,
+            });
+        } else {
+            network.refused += 1;
+        }
+    }
+}
+
+/// A validator whose standing has fallen below `LEAVE_BELOW` takes its stake back — unless the
+/// chain would be left with fewer than four validators, or with one country's houses holding
+/// more of the stake than `ONE_COUNTRY_AT_MOST`.
+fn leave_idle(nations: &mut Nations, at: usize) {
+    let network = &nations.networks[at];
+    let idle: Vec<usize> = network
+        .validators()
+        .into_iter()
+        .filter(|town| network.standing.get(town).copied().unwrap_or(0.0) < LEAVE_BELOW)
+        .collect();
+    for town in idle {
+        let network = &nations.networks[at];
+        let Some(address) = network.address_of(town) else {
+            continue;
+        };
+        let pending = network.chain.pending_validators();
+        let Some(&(_, _, leaving)) = pending.iter().find(|(a, _, _)| *a == address) else {
+            continue;
+        };
+        if pending.len() <= payments::FEWEST_FOUNDERS {
+            continue;
+        }
+        let left = pending.iter().map(|(_, _, power)| power).sum::<u64>() - leaving;
+        let too_much = (0..nations.countries.len()).any(|c| {
+            let (ours, _) = pending_country_power(nations, at, c);
+            let ours = if nations.towns[town].country == c { ours - leaving } else { ours };
+            ours as f64 > ONE_COUNTRY_AT_MOST * left as f64
+        });
+        if too_much {
+            continue;
+        }
+        let bonded = network.chain.ledger.account(&address).map(|a| a.bonded).unwrap_or(0);
+        let network = &mut nations.networks[at];
+        let min_fee = network.chain.params().min_fee;
+        if bonded == 0 || network.chain.pending_balance(&address, Asset::Coin) < min_fee {
+            continue;
+        }
+        let tx = sign(network, town, min_fee, Action::Unbond { amount: bonded });
+        if submit(network, tx) {
+            nations.history.push(Event::Left {
+                year: nations.year,
+                network: at,
+                town,
             });
         } else {
             network.refused += 1;
@@ -934,6 +1021,24 @@ fn country_power(nations: &Nations, at: usize, country: usize) -> (u64, u64) {
         .map(|v| v.power)
         .sum();
     (ours, members.iter().map(|v| v.power).sum())
+}
+
+/// The same once everything already sent this year has gone through — what a house deciding to
+/// join or leave has to reckon with, or two houses of one country each finding room under the cap
+/// in the same year take it twice.
+fn pending_country_power(nations: &Nations, at: usize, country: usize) -> (u64, u64) {
+    let network = &nations.networks[at];
+    let pending = network.chain.pending_validators();
+    let ours = pending
+        .iter()
+        .filter(|(address, _, _)| {
+            network
+                .town_of(address)
+                .is_some_and(|t| nations.towns[t].country == country)
+        })
+        .map(|(_, _, power)| power)
+        .sum();
+    (ours, pending.iter().map(|(_, _, power)| power).sum())
 }
 
 /// The largest share of a chain's voting power the validators of any one country hold.
@@ -1158,6 +1263,8 @@ fn settle_month(
         if submit(network, tx) {
             settled += 2.0 * food;
             fees += fee as f64 / COIN as f64 * coin_price / reserve_level;
+            *network.working.entry(*from).or_insert(0.0) += food;
+            *network.working.entry(*to).or_insert(0.0) += food;
         } else {
             network.refused += 1;
         }

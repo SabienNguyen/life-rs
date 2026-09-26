@@ -165,6 +165,11 @@ impl Chain {
         self.pending.nonce_of(address)
     }
 
+    /// Who will validate once everything waiting has gone through: address, key and power.
+    pub fn pending_validators(&self) -> Vec<(Address, PublicKey, u64)> {
+        self.pending.validators()
+    }
+
     /// What an address will hold once everything waiting has gone through.
     pub fn pending_balance(&self, address: &Address, asset: Asset) -> u128 {
         self.pending.balance(address, asset)

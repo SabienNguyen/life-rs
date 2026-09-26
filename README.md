@@ -211,7 +211,7 @@ tokens against attested reserves
 </td></tr>
 </table>
 
-**826 tests.** Most of them are about a claim rather than a function.
+**831 tests.** Most of them are about a claim rather than a function.
 
 ---
 
@@ -439,7 +439,8 @@ Nothing below is scheduled:
 It is a real chain: SHA-256, Ed25519 and Merkle trees written from their standards and checked
 against the RFC vectors and OpenSSL; Byzantine-fault-tolerant proof of stake, with a block final
 once two thirds of the stake has signed it; and a whole history that replays from genesis, every
-signature and root rechecked, before the report says a word about it. With `--html` the page
+signature and root rechecked, before the report says a word about it — and that can be followed
+by its headers alone, as a light client follows a real chain. With `--html` the page
 shows all of it and checks the latest block in your own browser, with the browser's own
 SHA-256 and Ed25519. A world of one country never builds one — it has a house everybody can
 pay through.

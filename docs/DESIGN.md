@@ -5673,10 +5673,10 @@ Nine seeds, seven hundred years each:
 
 | seed | towns | countries | first money | first coin | trap opens | people | income | farmers | traded | famines |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 0x11 | 40 | 2 | 69 | 81 | 336 | 5.1B | 181 | 80% → 9% | 3.8% | 6 |
-| 0x21 | 36 | 3 | 73 | 82 | 478 | 9.6B | 60 | 80% → 10% | 9.3% | 12 |
+| 0x11 | 40 | 2 | 69 | 81 | 336 | 5.1B | 180 | 80% → 9% | 3.8% | 6 |
+| 0x21 | 36 | 3 | 73 | 82 | 478 | 9.6B | 59 | 80% → 10% | 9.3% | 12 |
 | 0x221 | 34 | 5 | 69 | 88 | 449 | 6.9B | 76 | 79% → 10% | 7.1% | 15 |
-| 0xbeef | 42 | 3 | 65 | 89 | 505 | 10.0B | 45 | 80% → 11% | 10.7% | 20 |
+| 0xbeef | 42 | 3 | 65 | 89 | 505 | 10.0B | 45 | 80% → 11% | 10.8% | 20 |
 | 0x5eed | 25 | 2 | 75 | 91 | 474 | 5.9B | 59 | 81% → 10% | 3.5% | 8 |
 | 0x7 | 45 | 3 | 72 | 88 | 422 | 8.8B | 96 | 81% → 10% | 9.7% | 6 |
 | 0x1234 | 34 | 3 | 69 | 91 | 496 | 8.9B | 49 | 81% → 11% | 9.4% | 10 |
@@ -5702,7 +5702,7 @@ with trade, and a tenth fewer people at the end. A bad harvest met from somebody
 one is most of what a market is for, before it is for anything else.
 
 **Two of the three richest worlds have one country.** 0xc0ffee and 0x2b end at 205 and 152 times
-subsistence; of the seven with borders only 0x11, at 181, reaches them, and the other six end at
+subsistence; of the seven with borders only 0x11, at 180, reaches them, and the other six end at
 45 to 96. The obvious reading — a border costs nine per cent of every payment across it until a
 chain brings it to two, and a single country never pays it — is wrong, and measured to be:
 making every border free from the founding moves income by under four per cent in every one of
@@ -5732,9 +5732,11 @@ as three conditions, and the answer is no until all three hold:
    reckons thirty times better, and in between it is exactly as worth founding as the saving on
    what paying abroad costs says.
 
-In the seven worlds with borders it happens between years 428 and 594, a century or two after
-the trap opens, founded by fourteen to twenty-one houses across every country. The largest
-founder names it — the Stanwick Ledger, the Whitscar Ledger — and every founder stakes in
+In the seven worlds with borders it happens between years 418 and 596, a century or two after
+the trap opens, founded by six to twenty-one houses across every country — the ones that would
+carry their countries' trade on it: every state large enough to have a market house of its own,
+and the capital for the rest. The largest founder names it — the Wickport Ledger, the Whitscar
+Ledger — and every founder stakes in
 proportion to its business abroad, up to a point: no country's houses may hold more than three
 fifths of the stake, short of the two thirds that would finalise a block with nobody abroad
 signing. Nobody joins a ledger one of the others could keep alone, so the largest country takes
@@ -5773,8 +5775,9 @@ The standard is design principle five's: the mechanism is real and the resolutio
   client does: each header's parent, time and previous commit checked against the header before,
   its signing set checked against the one the header before handed over to, and more than two
   thirds of that set's stake checked to have signed it — never a transaction. On 0x11 at year
-  600 that is 2,077 headers in a second, against four for the full replay, and a forged header
-  or a set of strangers signing one is caught at its height (`chain::light`).
+  600 that is 2,196 headers in under half a second, against four seconds for the full replay,
+  and a forged header or a set of strangers signing one is caught at its height
+  (`chain::light`).
 - Anybody holding only a block's header can check that block: the header hashes to the block's
   name; its transactions hash up to the root it commits to and each is signed by the key it
   names; the validators and stake it commits to are the ones whose signatures make up more than
@@ -5828,27 +5831,28 @@ a year's payments — plus the coin they hold to pay fees with, a quarter of a y
 
 | seed | founded | founders | validators | height | most stake in one country | paying abroad without | with | on chain | refused | stalls | replayed |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| 0x11 | 428 | 15 in 2 | 15 | 3276 | 60% | 9.0% | 1.7% | 90% | 0 | 0 | ok in 6.7 s |
-| 0x21 | 565 | 21 in 3 | 21 | 1632 | 47% | 9.4% | 1.9% | 90% | 0 | 0 | ok in 7.9 s |
-| 0x221 | 541 | 17 in 5 | 20 | 1920 | 34% | 9.6% | 1.8% | 90% | 0 | 0 | ok in 16.7 s |
-| 0xbeef | 594 | 21 in 3 | 21 | 1284 | 43% | 9.8% | 2.0% | 89% | 0 | 0 | ok in 8.1 s |
-| 0x5eed | 559 | 14 in 2 | 14 | 1704 | 60% | 9.2% | 1.9% | 89% | 0 | 0 | ok in 5.3 s |
-| 0x7 | 517 | 21 in 3 | 21 | 2208 | 59% | 9.1% | 1.8% | 90% | 0 | 0 | ok in 13.3 s |
-| 0x1234 | 587 | 21 in 3 | 21 | 1368 | 48% | 8.8% | 1.9% | 88% | 0 | 0 | ok in 7.4 s |
+| 0x11 | 418 | 6 in 2 | 7 | 3396 | 57% | 9.0% | 1.7% | 90% | 0 | 0 | ok in 5.8 s |
+| 0x21 | 565 | 21 in 3 | 14 | 1632 | 59% | 9.4% | 1.8% | 90% | 0 | 0 | ok in 6.9 s |
+| 0x221 | 538 | 14 in 5 | 15 | 1956 | 48% | 9.6% | 1.8% | 90% | 0 | 0 | ok in 15.3 s |
+| 0xbeef | 596 | 21 in 3 | 16 | 1260 | 48% | 9.8% | 2.0% | 89% | 0 | 0 | ok in 7.2 s |
+| 0x5eed | 556 | 10 in 2 | 10 | 1740 | 60% | 9.2% | 1.9% | 89% | 0 | 0 | ok in 4.4 s |
+| 0x7 | 517 | 21 in 3 | 14 | 2208 | 49% | 9.1% | 1.8% | 90% | 0 | 0 | ok in 12.2 s |
+| 0x1234 | 587 | 21 in 3 | 15 | 1368 | 48% | 8.8% | 1.9% | 88% | 0 | 0 | ok in 7.2 s |
 
 Paying abroad falls from about nine per cent to under two. Nine tenths of it moves onto the
 chain, no chain has ever stalled, nothing any world has sent its chain has been refused, and
-every chain replays from its genesis. The cap on one country's stake binds in two worlds of
-seven, where the largest country's houses hold the three fifths they are allowed; elsewhere the
-founders' business is spread widely enough that it never comes to that, and in the five-country
-0x221 no country holds more than a third. Where a capital comes to do a twentieth of a chain's
-business and can afford the stake it buys a seat, which is how 0x221 ends with twenty validators
-from seventeen founders. A block of a two-country world carries about thirty-five transactions;
-of the five-country world, about two hundred. The token cycles: on 0x11 by year 620, 57.6
-trillion WENT minted and 56.4 trillion redeemed, and it is backed exactly one for one at the end
-of every block. And the coin trades against it: 9,457 swaps moved 838,021 coin, against fourteen
-transfers paid for over the counter, the first of them the issuer's first coin, bought before
-there were any tokens to buy it with.
+every chain replays from its genesis. No country's houses hold more of the stake than the three
+fifths they are allowed — in 0x5eed exactly that, in four worlds under half. And the validators
+come and go with the business: a house whose share of what the chain carries has averaged a
+twentieth over the years takes a seat, and one whose share has averaged under a hundredth gives
+its stake back, so long as four validators remain and no country is left over its cap. 0x221 has
+had six houses join and five leave since its founding; 0x11's six founders are seven validators,
+three having joined and two left. A block of a two-country world carries about thirty
+transactions; of the five-country world, about two hundred. The token cycles: on 0x11 by year
+620, 59.3 trillion WENT minted and 58.1 trillion redeemed, and it is backed exactly one for one
+at the end of every block. And the coin trades against it: 13,473 swaps moved 503,886 coin,
+against eight transfers paid for over the counter, the first of them the issuer's first coin,
+bought before there were any tokens to buy it with.
 
 One thing about that "with": payments settle towards the share of the cost they save, so the
 cost of paying abroad comes to rest near twice the chain's own cost rather than at it. That is a
@@ -5862,18 +5866,18 @@ world makes that crosses a border, by year 700, and its income:
 
 | seed | traded abroad, no chain | with the chain | borders free | of the way | income: no chain / chain / free |
 |---|---|---|---|---|---|
-| 0x11 | 3.00% | 3.83% | 4.19% | 70% | 181.6 / 181.1 / 180.2 |
-| 0x21 | 7.74% | 9.35% | 9.87% | 76% | 59.5 / 60.1 / 59.2 |
-| 0x221 | 5.79% | 7.07% | 7.65% | 69% | 76.6 / 76.5 / 75.7 |
-| 0xbeef | 9.00% | 10.74% | 11.27% | 77% | 45.1 / 45.1 / 44.9 |
-| 0x5eed | 2.91% | 3.50% | 3.84% | 63% | 58.9 / 58.6 / 57.0 |
+| 0x11 | 3.00% | 3.84% | 4.19% | 70% | 181.6 / 180.4 / 180.2 |
+| 0x21 | 7.74% | 9.34% | 9.87% | 75% | 59.5 / 59.5 / 59.2 |
+| 0x221 | 5.79% | 7.07% | 7.65% | 69% | 76.6 / 76.4 / 75.7 |
+| 0xbeef | 9.00% | 10.76% | 11.27% | 78% | 45.1 / 45.1 / 44.9 |
+| 0x5eed | 2.91% | 3.50% | 3.84% | 63% | 58.9 / 58.5 / 57.0 |
 | 0x7 | 8.26% | 9.72% | 10.39% | 69% | 96.4 / 95.6 / 95.9 |
-| 0x1234 | 7.87% | 9.41% | 9.93% | 75% | 49.0 / 49.0 / 49.8 |
+| 0x1234 | 7.87% | 9.39% | 9.93% | 74% | 49.0 / 48.8 / 49.8 |
 
 The chain raises trade across borders by eighteen to twenty-eight per cent, and gets between
 three fifths and four fifths of the way to borders that cost nothing — less early, while
 checking is still dear, and more as it gets cheap: thirty years after 0x11's founding it had
-gone a third of the way, and a century on 63 per cent, which a test holds it to. Income moves by
+gone a fifth of the way, and a century on 64 per cent, which a test holds it to. Income moves by
 under four per cent either way, and not in one direction. Trade abroad is two to ten per cent of
 what these worlds make, and widening it by a fifth does not show in what a head earns. Famines
 do not move at all: they come in the centuries before there is anything to found.
@@ -5948,6 +5952,18 @@ the mechanism was the wrong one.
   every signature was real, and the chain was still not what it said it was. Founders' stakes
   are now capped at three fifths per country, the excess going to the others in proportion, and
   a capital that buys a seat later is held to the same.
+- **Founders whose trade the chain never carried.** Once validators could leave a chain that no
+  longer did them any good, nine of 0x11's fifteen founders left within eighteen years of founding
+  it. They were the hubs of states too small to have a market house of their own, whose trade the
+  capital's house carried; founding asked every hub and settling asked only the market houses. The
+  founders are the market houses now, each credited with the trade it would carry.
+- **Seats taken and given up thirteen times.** Read afresh each year, a small state that merged
+  with its neighbour and split off again joined its chain's validators and left them thirteen
+  times in three centuries — §31.1's oscillation, in a place it had not been looked for. A house's
+  standing is now its share of the business averaged over about five years, with a seat taken at
+  a twentieth and given back under a hundredth. And two houses of one country joining in the same
+  year each found room under the cap and took it twice, which left one chain at 62 per cent: the
+  checks read the stake as it will be once everything sent that year has gone through.
 - **Sixty-five microseconds a signature.** With forty transactions and seventeen votes a block,
   checking dominated both running and replaying. The same few dozen keys sign everything, so a
   key seen twice now keeps a table of its multiples — one to eight times every power of 256, the

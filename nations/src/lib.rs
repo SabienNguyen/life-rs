@@ -228,6 +228,8 @@ pub enum Event {
     Issued { year: u64, network: usize, symbol: String },
     /// A house started validating.
     Joined { year: u64, network: usize, town: usize },
+    /// A house stopped: it had done no business on the chain for years, and unbonded its stake.
+    Left { year: u64, network: usize, town: usize },
     /// A block could not be finalised: more than a third of the stake was absent.
     Stalled { year: u64, network: usize, height: u64 },
 }
@@ -243,6 +245,7 @@ impl Event {
             | Event::Founded { year, .. }
             | Event::Issued { year, .. }
             | Event::Joined { year, .. }
+            | Event::Left { year, .. }
             | Event::Stalled { year, .. } => *year,
         }
     }

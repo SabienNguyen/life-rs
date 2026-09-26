@@ -177,6 +177,11 @@ pub fn describe(world: &Nations, event: &Event, first_money: bool) -> Option<Str
             town_name(world, *town),
             world.networks[*network].name
         ),
+        Event::Left { network, town, .. } => format!(
+            "{} leaves the {}'s validators and takes its stake back, its business on the chain having dwindled",
+            town_name(world, *town),
+            world.networks[*network].name
+        ),
         Event::Stalled { network, height, .. } => format!(
             "the {} stalls at height {}: more than a third of its stake is absent",
             world.networks[*network].name, height

@@ -205,6 +205,34 @@ fn a_chain_is_founded_by_parties_who_distrust_each_other() {
     );
 }
 
+/// A chain's validators follow its business: a founder whose state no longer carries its own
+/// trade gives its stake back, and a house that has come to do a twentieth of the business takes
+/// a seat. Each comes or goes once — read off business averaged over years rather than afresh
+/// each year, a small state merging with its neighbour and splitting off again took a seat and
+/// gave it up thirteen times in three centuries.
+#[test]
+fn validators_come_and_go_with_the_business() {
+    let world = chained();
+    let mut changes: std::collections::BTreeMap<usize, usize> = std::collections::BTreeMap::new();
+    let (mut joined, mut left) = (0, 0);
+    for event in &world.history {
+        match event {
+            Event::Joined { town, .. } => {
+                joined += 1;
+                *changes.entry(*town).or_insert(0) += 1;
+            }
+            Event::Left { town, .. } => {
+                left += 1;
+                *changes.entry(*town).or_insert(0) += 1;
+            }
+            _ => {}
+        }
+    }
+    assert!(joined > 0 && left > 0, "{joined} joined and {left} left");
+    assert!(changes.values().all(|n| *n <= 2), "{changes:?}");
+    assert!(world.networks[0].validators().len() >= payments::FEWEST_FOUNDERS);
+}
+
 /// Nobody keeps it — in the strict sense: no country's houses hold the two thirds of the stake
 /// that would let them finalise a block with nobody abroad signing, although one country does
 /// most of the business. They were held to three fifths at the founding, and a capital that
