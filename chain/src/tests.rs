@@ -756,3 +756,221 @@ fn a_chain_replays_to_exactly_the_ledger_it_holds() {
         "a person who bonded enough became a validator"
     );
 }
+
+/// A chain with one of every kind of transaction on it: coin paid, a token issued, attested,
+/// minted, paid on and redeemed, coin swapped for tokens, stake bonded and unbonded, and a
+/// validator's two signatures at one height shown to the chain.
+fn every_kind() -> Fixture {
+    let mut world = found_with(&[25, 25, 25, 25]);
+    let (issuer, attestor, holder, staker) = (
+        world.people[0].clone(),
+        world.people[1].clone(),
+        world.people[2].clone(),
+        world.people[3].clone(),
+    );
+    let id = world.chain.id;
+    let fee = world.chain.params().min_fee;
+    let send = |world: &mut Fixture, key: &SigningKey, action: Action| {
+        let nonce = world.chain.next_nonce(&Address::of(&key.public()));
+        let tx = Transaction::signed(key, id, nonce, fee, action);
+        world.chain.submit(tx).expect("every one of these is valid");
+    };
+    for person in 1..4 {
+        world.pay(0, world.address(person), Asset::Coin, 20 * COIN).unwrap();
+    }
+    send(
+        &mut world,
+        &issuer,
+        Action::Issue {
+            symbol: "TIL".into(),
+            peg: "tilmark".into(),
+            attestor: Address::of(&attestor.public()),
+        },
+    );
+    world.everybody();
+    send(&mut world, &attestor, Action::Attest { token: 0, reserves: 100 * TOKEN_UNIT });
+    let to = Address::of(&holder.public());
+    send(&mut world, &issuer, Action::Mint { token: 0, to, amount: 50 * TOKEN_UNIT });
+    world.everybody();
+    world.pay(2, world.address(3), Asset::Token(0), 10 * TOKEN_UNIT).unwrap();
+    send(&mut world, &holder, Action::Redeem { token: 0, amount: 5 * TOKEN_UNIT });
+    // The holder buys a coin from the issuer with tokens, both legs at once.
+    let agreed = Swap::agreed(
+        &holder,
+        id,
+        Address::of(&issuer.public()),
+        world.chain.next_nonce(&to),
+        (Asset::Coin, COIN),
+        (Asset::Token(0), 2 * TOKEN_UNIT),
+    );
+    send(&mut world, &issuer, Action::Swap(Box::new(agreed)));
+    send(&mut world, &staker, Action::Bond { amount: 10 * COIN });
+    world.keys.insert(Address::of(&staker.public()), staker.clone());
+    world.everybody();
+    send(&mut world, &staker, Action::Unbond { amount: 10 * COIN });
+    let cheat = world.validators[1].clone();
+    let height = world.chain.height();
+    let first = Box::new(Vote::signed(&cheat, id, height, 0, Digest::of(b"one block")));
+    let second = Box::new(Vote::signed(&cheat, id, height, 0, Digest::of(b"another")));
+    send(&mut world, &issuer, Action::Evidence { first, second });
+    world.everybody();
+    world.everybody();
+    world
+}
+
+/// A chain written to a file reads back as itself — the same genesis and the same blocks, one
+/// of every kind of transaction among them — and writes back to the same bytes, because there
+/// is one way to write a chain down. What was read replays to the ledger the chain holds.
+#[test]
+fn a_chain_written_to_a_file_reads_back_as_itself() {
+    let world = every_kind();
+    let bytes = world.chain.export();
+    let (genesis, blocks) = file::read(&bytes).expect("a chain reads its own file");
+    assert_eq!(genesis, world.chain.genesis);
+    assert_eq!(blocks, world.chain.blocks);
+    assert_eq!(file::write(&genesis, &blocks), bytes);
+    let kinds: std::collections::BTreeSet<&str> = blocks
+        .iter()
+        .flat_map(|b| b.txs.iter().map(|t| t.action.label()))
+        .collect();
+    assert_eq!(kinds.len(), 9, "every kind of transaction: {kinds:?}");
+    assert_eq!(Chain::replay(&genesis, &blocks), Ok(world.chain.ledger.clone()));
+}
+
+/// And a file changed anywhere is not that chain. Cut short or run on, it does not read; one
+/// bit flipped — in the genesis, a header, a transaction or a vote — and it either does not
+/// read or does not replay. Nothing makes the reader do more than refuse: not noise, not noise
+/// behind the right tag, and not a count of blocks the bytes could never hold, which is
+/// refused before anything is set aside for it.
+#[test]
+fn a_chain_file_changed_anywhere_does_not_check() {
+    use crate::codec::{Malformed, Writer};
+    let world = every_kind();
+    let bytes = world.chain.export();
+    let mut longer = bytes.clone();
+    longer.push(0);
+    assert_eq!(file::read(&longer).err().map(|e| e.why), Some(Malformed::Trailing));
+    for cut in [0, 1, 7, bytes.len() / 3, bytes.len() - 1] {
+        assert!(file::read(&bytes[..cut]).is_err(), "cut at {cut}");
+    }
+
+    let step = (bytes.len() / 200).max(1);
+    let (mut unread, mut unreplayed) = (0, 0);
+    for at in (0..bytes.len()).step_by(step) {
+        let mut changed = bytes.clone();
+        changed[at] ^= 1;
+        match file::read(&changed) {
+            Err(_) => unread += 1,
+            Ok((genesis, blocks)) => {
+                assert!(
+                    Chain::replay(&genesis, &blocks).is_err(),
+                    "byte {at} of {} changed and the chain still replays",
+                    bytes.len()
+                );
+                unreplayed += 1;
+            }
+        }
+    }
+    assert!(unread > 0 && unreplayed > 0, "{unread} did not read, {unreplayed} did not replay");
+
+    let mut noise = 0x2545_f491_4f6c_dd1du64;
+    let mut next = move || {
+        noise ^= noise << 13;
+        noise ^= noise >> 7;
+        noise ^= noise << 17;
+        noise as u8
+    };
+    for len in [0usize, 1, 3, 40, 1_000, 20_000] {
+        let garbage: Vec<u8> = (0..len).map(|_| next()).collect();
+        assert!(file::read(&garbage).is_err());
+        let mut tagged = Writer::tagged("life-rs/chain/file/1").finish();
+        tagged.extend(&garbage);
+        assert!(file::read(&tagged).is_err());
+    }
+    let forged = Writer::tagged("life-rs/chain/file/1")
+        .var(&world.chain.genesis.encode())
+        .u32(u32::MAX)
+        .finish();
+    assert_eq!(file::read(&forged).err().map(|e| e.why), Some(Malformed::Short));
+}
+
+/// A genesis that could overflow a ledger is no genesis: one handing out more coin than a chain
+/// can count, one whose issuance could make more, one that would burn more than a stake.
+/// Founding, replaying and following all refuse it before a ledger is built. And nothing a
+/// transaction names overflows a ledger that began well: a reserve past `MAX_TOKENS` is refused,
+/// and two votes signed for the last height there is are judged like any others — without
+/// arithmetic past the end of a number.
+#[test]
+fn nothing_a_genesis_or_a_transaction_names_overflows_the_ledger() {
+    let key = SigningKey::from_seed([7; 32]);
+    let other = SigningKey::from_seed([8; 32]).public();
+    let genesis = |liquid: u128, issuance: u128, slash_permille: u64| Genesis {
+        params: Params {
+            issuance,
+            slash_permille,
+            ..monthly("large")
+        },
+        time: 0,
+        allocations: vec![(key.public(), liquid, 10 * COIN), (other, liquid, 10 * COIN)],
+    };
+    for (bad, what) in [
+        (genesis(u128::MAX / 2 + 1, 0, 50), "more than a u128 between them"),
+        (genesis(MAX_SUPPLY / 2, 0, 50), "more than the most a chain may hold"),
+        (genesis(COIN, u128::MAX / 3, 50), "issuance that could make more"),
+        (genesis(COIN, 50 * COIN, 1001), "a slash of more than the stake"),
+    ] {
+        let founded = Chain::found(bad.clone(), std::slice::from_ref(&key));
+        assert!(matches!(founded, Err(Invalid::BadGenesis(_))), "{what}");
+        assert!(matches!(Chain::replay(&bad, &[]), Err((0, Invalid::BadGenesis(_)))), "{what}");
+        assert!(matches!(light::follow(&bad, &[]), Err((0, Invalid::BadGenesis(_)))), "{what}");
+    }
+    assert_eq!(genesis(COIN, 50 * COIN, 50).check(), Ok(()));
+
+    let mut world = every_kind();
+    let id = world.chain.id;
+    let fee = world.chain.params().min_fee;
+    let attestor = world.people[1].clone();
+    let nonce = world.chain.next_nonce(&Address::of(&attestor.public()));
+    let too_much = Action::Attest {
+        token: 0,
+        reserves: MAX_TOKENS + 1,
+    };
+    let tx = Transaction::signed(&attestor, id, nonce, fee, too_much);
+    assert_eq!(world.chain.submit(tx), Err(Refusal::TooLarge));
+
+    let cheat = world.validators[2].clone();
+    let last = |block: &[u8]| Box::new(Vote::signed(&cheat, id, u64::MAX, u32::MAX, Digest::of(block)));
+    let accuser = world.people[0].clone();
+    let nonce = world.chain.next_nonce(&Address::of(&accuser.public()));
+    let evidence = Action::Evidence {
+        first: last(b"one"),
+        second: last(b"two"),
+    };
+    let tx = Transaction::signed(&accuser, id, nonce, fee, evidence);
+    assert!(world.chain.submit(tx).is_ok(), "two signatures at any one height are an offence");
+    world.everybody();
+    assert!(world.chain.ledger.account(&Address::of(&cheat.public())).unwrap().jailed);
+    assert_eq!(world.chain.ledger.broken_law(), None);
+    assert_eq!(world.chain.verify(), Ok(()));
+}
+
+/// A chain whose last validator takes its stake back has nobody left to propose or sign, so it
+/// commits nothing more — it stops, as it stops with half the stake absent, and does not fail —
+/// and what it committed still replays.
+#[test]
+fn a_chain_with_nobody_left_to_validate_stops() {
+    let mut world = found_with(&[25]);
+    let alone = world.validators[0].clone();
+    let tx = Transaction::signed(
+        &alone,
+        world.chain.id,
+        world.chain.next_nonce(&Address::of(&alone.public())),
+        world.chain.params().min_fee,
+        Action::Unbond { amount: 25 * COIN },
+    );
+    world.chain.submit(tx).unwrap();
+    world.everybody();
+    assert!(world.chain.rotation.is_empty());
+    assert_eq!(world.chain.step(world.time + MONTH, &world.keys, &|_, _| true, 8), None);
+    assert_eq!(world.chain.verify(), Ok(()));
+}

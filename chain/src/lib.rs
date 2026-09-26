@@ -46,6 +46,8 @@
 //! - `light` — following a chain by its headers alone, each commit checked against the set the
 //!   header before handed over to, for somebody who wants to believe a header without keeping
 //!   the ledger behind it.
+//! - `file` — a chain as a file, in the same canonical encoding and read back as strictly: its
+//!   genesis and every block, which is all anybody needs to replay it somewhere else.
 //!
 //! ## What is not
 //!
@@ -57,6 +59,7 @@ pub mod block;
 pub mod codec;
 pub mod consensus;
 pub mod ed25519;
+pub mod file;
 pub mod light;
 pub mod merkle;
 pub mod node;
@@ -69,7 +72,7 @@ pub use consensus::{Commit, ValidatorSet, Vote};
 pub use ed25519::{PublicKey, Signature, SigningKey};
 pub use light::LightBlock;
 pub use node::{Chain, Committed, Genesis, Invalid};
-pub use state::{Ledger, Params, Refusal, Token};
+pub use state::{Ledger, MAX_SUPPLY, MAX_TOKENS, Params, Refusal, Token};
 pub use tx::{Action, Address, Asset, COIN, Swap, TOKEN_UNIT, Transaction};
 
 /// Thirty-two bytes of SHA-256: the name of a block, of a transaction, or of a tree of either.

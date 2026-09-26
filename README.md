@@ -122,6 +122,8 @@ cargo run -p main -- --ages 500                       # half a gigayear, with pe
 cargo run -p main -- --seed 0x11 --nations 600        # towns to world economy, and a blockchain
 cargo run -p main -- --seed 0x11 --nations 600 --html > ledgers.html  # explore it
 cargo run -p main -- --seed 0x11 --nations 600 --without chain        # the same world, no ledger
+cargo run -p main -- --seed 0x11 --nations 600 --export-chain w.chain  # its chain, as a file
+cargo run -p main -- --verify-chain w.chain                            # checked with nothing else
 ```
 
 Every world is reproducible from its seed and genuinely different from every other one.
@@ -207,13 +209,14 @@ banking · the trap, and out
 
 SHA-2 · Ed25519 · Merkle ·
 BFT proof of stake · slashing ·
-swaps · a light client · stable
+swaps · a light client · a file
+anybody can check · stable
 tokens against attested reserves
 
 </td></tr>
 </table>
 
-**832 tests.** Most of them are about a claim rather than a function.
+**838 tests.** Most of them are about a claim rather than a function.
 
 ---
 
@@ -468,6 +471,11 @@ others bond what keeps every country within its three fifths of the stake. With 
 page shows all of it and checks the latest block in your own browser, with the browser's own
 SHA-256 and Ed25519. A world of one country never builds one — it has a house everybody can pay
 through.
+
+A chain is also a file. `--export-chain wickport.chain` writes a world's chain down — its
+genesis and every block, 22 MB for 0x11's six centuries — and `--verify-chain wickport.chain`
+checks one holding nothing else: read strictly, then every block replayed from its genesis.
+Change one bit of it anywhere and it does not check.
 
 ---
 

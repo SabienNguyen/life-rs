@@ -20,7 +20,7 @@
 //! is absent, or whose block honest validators refuse, simply fails, and the next round has a
 //! different proposer.
 
-use crate::codec::Writer;
+use crate::codec::{Malformed, Reader, Writer};
 use crate::merkle;
 use crate::tx::Address;
 use crate::{Digest, PublicKey, Signature, SigningKey};
@@ -65,6 +65,21 @@ impl Vote {
         bytes.extend_from_slice(&self.validator.0);
         bytes.extend_from_slice(&self.signature.0);
         bytes
+    }
+
+    /// `encode`, backwards.
+    pub fn decode(bytes: &[u8]) -> Result<Vote, Malformed> {
+        let mut r = Reader::tagged(bytes, "life-rs/chain/precommit/1")?;
+        let vote = Vote {
+            chain: Digest(r.fixed()?),
+            height: r.u64()?,
+            round: r.u32()?,
+            block: Digest(r.fixed()?),
+            validator: PublicKey(r.fixed()?),
+            signature: Signature(r.fixed()?),
+        };
+        r.done()?;
+        Ok(vote)
     }
 
     pub fn signature_holds(&self) -> bool {
@@ -202,6 +217,10 @@ impl ValidatorSet {
     /// one turn from where the last height left it, and every failed round is one more.
     pub fn at_round(&self, round: u32) -> (ValidatorSet, usize) {
         let mut set = self.clone();
+        // An empty set has nobody to turn to; whoever asks must check before indexing.
+        if set.members.is_empty() {
+            return (set, 0);
+        }
         let mut proposer = 0;
         for _ in 0..=round {
             proposer = set.turn();

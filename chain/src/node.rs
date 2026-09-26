@@ -11,10 +11,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::block::{Block, Header};
-use crate::codec::Writer;
+use crate::codec::{Malformed, Reader, Writer};
 use crate::consensus::{Commit, NoQuorum, ValidatorSet, Vote};
 use crate::light::LightBlock;
-use crate::state::{Account, Ledger, Params, Refusal, Token};
+use crate::state::{Account, Ledger, MAX_SUPPLY, Params, Refusal, Token};
 use crate::tx::{Address, Asset, Transaction};
 use crate::{Digest, PublicKey, SigningKey};
 
@@ -36,6 +36,49 @@ impl Genesis {
             w.fixed(&key.0).u128(*liquid).u128(*bonded);
         }
         w.finish()
+    }
+
+    /// `encode`, backwards.
+    pub fn decode(bytes: &[u8]) -> Result<Genesis, Malformed> {
+        let mut r = Reader::tagged(bytes, "life-rs/chain/genesis/1")?;
+        let params = Params::decode_from(&mut r)?;
+        let time = r.u64()?;
+        let n = r.count(32 + 16 + 16)?;
+        let mut allocations = Vec::with_capacity(n);
+        for _ in 0..n {
+            allocations.push((PublicKey(r.fixed()?), r.u128()?, r.u128()?));
+        }
+        r.done()?;
+        Ok(Genesis {
+            params,
+            time,
+            allocations,
+        })
+    }
+
+    /// Whether this can begin a chain at all: a share of stake to burn for signing twice that
+    /// is a share, and no more coin — what the genesis hands out, and every block's issuance
+    /// until it halves to nothing — than `MAX_SUPPLY`. A chain whose genesis passes this can
+    /// never overflow a balance, a stake or its supply, whatever its blocks do; one that does
+    /// not is refused before a ledger is built from it, by founding, replaying or following.
+    pub fn check(&self) -> Result<(), &'static str> {
+        if self.params.slash_permille > 1000 {
+            return Err("it would burn more than the stake");
+        }
+        let handed_out = self
+            .allocations
+            .iter()
+            .try_fold(0u128, |sum, (_, liquid, bonded)| sum.checked_add(*liquid)?.checked_add(*bonded));
+        // Issuance halves every `halving` blocks, so all of it is under twice one run of it.
+        let issued = self
+            .params
+            .issuance
+            .checked_mul(self.params.halving.max(1) as u128)
+            .and_then(|run| run.checked_mul(2));
+        match (handed_out, issued) {
+            (Some(a), Some(b)) if a.checked_add(b).is_some_and(|all| all <= MAX_SUPPLY) => Ok(()),
+            _ => Err("it could make more coin than a chain can count"),
+        }
     }
 
     /// The chain's id, which every transaction and vote on it carries.
@@ -61,7 +104,16 @@ pub enum Invalid {
     WrongStateRoot,
     Commit(NoQuorum),
     NotGenesis,
+    /// A genesis that cannot begin a chain (`Genesis::check`).
+    BadGenesis(&'static str),
+    /// A block claiming more rounds than `MOST_ROUNDS` at its height.
+    TooManyRounds,
 }
+
+/// The most rounds one height may take. A round is one proposer's chance, and a height that
+/// needs this many has had every validator absent a thousand times over; the bound is there so
+/// a block claiming more cannot make whoever checks it turn the rotation for ever.
+pub const MOST_ROUNDS: u32 = 1 << 16;
 
 /// What became of one height.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -105,6 +157,7 @@ pub struct Chain {
 impl Chain {
     /// Begin a chain, if enough of its founders sign its first block.
     pub fn found(genesis: Genesis, founders: &[SigningKey]) -> Result<Chain, Invalid> {
+        genesis.check().map_err(Invalid::BadGenesis)?;
         let id = genesis.id();
         let ledger = Ledger::genesis(id, genesis.params.clone(), &genesis.allocations);
         let rotation = ValidatorSet::after(&ValidatorSet::default(), &ledger.validators());
@@ -331,7 +384,11 @@ impl Chain {
         answering: &dyn Fn(&Address, u32) -> bool,
         max_rounds: u32,
     ) -> Option<Committed> {
-        for round in 0..max_rounds {
+        // Nobody left to propose: a chain whose every validator has gone never commits again.
+        if self.rotation.is_empty() {
+            return None;
+        }
+        for round in 0..max_rounds.min(MOST_ROUNDS) {
             let (rotation, at) = self.rotation.at_round(round);
             let proposer = rotation.members[at].address;
             if !answering(&proposer, round) || !keys.contains_key(&proposer) {
@@ -376,6 +433,7 @@ impl Chain {
     /// transaction and every vote, every root recomputed, every rule re-applied. Returns the
     /// ledger it arrives at, or the height of the first block that fails and why.
     pub fn replay(genesis: &Genesis, blocks: &[Block]) -> Result<Ledger, (u64, Invalid)> {
+        genesis.check().map_err(|why| (0, Invalid::BadGenesis(why)))?;
         let id = genesis.id();
         let mut ledger = Ledger::genesis(id, genesis.params.clone(), &genesis.allocations);
         let mut rotation = ValidatorSet::after(&ValidatorSet::default(), &ledger.validators());
@@ -426,6 +484,11 @@ impl Chain {
     /// Light blocks for every height, genesis first.
     pub fn light_blocks(&self) -> Vec<LightBlock> {
         (0..=self.height()).filter_map(|h| self.light_block(h)).collect()
+    }
+
+    /// The whole chain as a file: its genesis and every block (`file`).
+    pub fn export(&self) -> Vec<u8> {
+        crate::file::write(&self.genesis, &self.blocks)
     }
 
     /// Where a transaction is: the height of the block holding it.
@@ -498,6 +561,9 @@ fn next_state(
     }
     if header.validators != rotation.hash() {
         return Err(Invalid::WrongValidators);
+    }
+    if header.round > MOST_ROUNDS {
+        return Err(Invalid::TooManyRounds);
     }
     let (turned, at) = rotation.at_round(header.round);
     if rotation.is_empty() || header.proposer != turned.members[at].address {

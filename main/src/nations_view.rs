@@ -73,6 +73,81 @@ pub fn amount(value: f64) -> String {
     }
 }
 
+/// A number of bytes, the way a person reads one.
+pub fn size(bytes: usize) -> String {
+    match bytes {
+        b if b >= 1 << 20 => format!("{:.1} MB", b as f64 / (1 << 20) as f64),
+        b if b >= 1 << 10 => format!("{:.0} kB", b as f64 / (1 << 10) as f64),
+        b => format!("{b} bytes"),
+    }
+}
+
+/// Check a chain file with nothing but the file, as somebody would who was handed it: read it
+/// strictly — and ask that it is the one way there is to write what it holds — then replay every
+/// block from its genesis, every signature and root again, and say what the ledger comes to.
+/// The lines to print, and whether it holds.
+pub fn verify_file(bytes: &[u8]) -> (Vec<String>, bool) {
+    let mut out = Vec::new();
+    let (genesis, blocks) = match chain::file::read(bytes) {
+        Ok(read) => read,
+        Err(e) => {
+            out.push(match e.block {
+                Some(at) => format!("  it does not read as a chain: block {at} is not a block ({:?})", e.why),
+                None => format!("  it does not read as a chain ({:?})", e.why),
+            });
+            return (out, false);
+        }
+    };
+    let Some(last) = blocks.last() else {
+        out.push("  it holds a genesis and no blocks, not even the first".to_string());
+        return (out, false);
+    };
+    let (year, month) = when(last.header.time);
+    out.push(format!(
+        "  the {}: genesis {}…, {} blocks, the last at height {}, year {year} month {month}",
+        genesis.params.name,
+        genesis.id().short(),
+        blocks.len(),
+        last.header.height
+    ));
+    if chain::file::write(&genesis, &blocks) != bytes {
+        out.push("  it reads, but is not the one way of writing what it holds".to_string());
+        return (out, false);
+    }
+    let started = std::time::Instant::now();
+    match chain::Chain::replay(&genesis, &blocks) {
+        Ok(ledger) => {
+            out.push(format!(
+                "  replayed from its genesis: every signature and root checked, in {:.1}s — it holds",
+                started.elapsed().as_secs_f64()
+            ));
+            out.push(format!(
+                "  coin: {} in existence ({} at genesis, {} issued since, {} burned); {} validators, {} accounts",
+                grouped(ledger.coin_supply / COIN),
+                grouped(ledger.genesis_coin / COIN),
+                grouped(ledger.issued / COIN),
+                coin(ledger.slashed),
+                ledger.validators().len(),
+                ledger.accounts.len()
+            ));
+            for token in &ledger.tokens {
+                out.push(format!(
+                    "  {}: {} in circulation, {} held in reserve as its attestor last said",
+                    token.symbol,
+                    grouped(token.supply / TOKEN_UNIT),
+                    grouped(token.reserves / TOKEN_UNIT)
+                ));
+            }
+            out.push(format!("  its last state root: {}", chain::hex(&last.header.state.0)));
+            (out, true)
+        }
+        Err((height, why)) => {
+            out.push(format!("  it does not replay: at height {height}, {why:?}"));
+            (out, false)
+        }
+    }
+}
+
 /// A whole number with thousands separated, for base units and prices.
 fn grouped(value: u128) -> String {
     let digits = value.to_string();
@@ -1179,6 +1254,26 @@ mod tests {
         let checked = check(&world);
         assert_eq!(checked[0].ok, Ok(()));
         assert_eq!(checked[0].light, Ok(world.networks[0].chain.height()));
+    }
+
+    /// A chain written to a file is checked by somebody holding nothing else, and the same file
+    /// with one bit changed, or its last byte gone, is not.
+    #[test]
+    fn a_chain_file_checks_on_its_own() {
+        let mut world = Nations::found(sim_core::WorldSeed::from_u128(0x11));
+        while world.networks.is_empty() && world.year < 800 {
+            world.year();
+        }
+        world.run(2);
+        let bytes = world.networks[0].chain.export();
+        let (lines, holds) = verify_file(&bytes);
+        assert!(holds, "{lines:?}");
+        assert!(lines.iter().any(|l| l.contains("it holds")));
+        let mut changed = bytes.clone();
+        changed[bytes.len() / 2] ^= 1;
+        let (lines, holds) = verify_file(&changed);
+        assert!(!holds, "{lines:?}");
+        assert!(!verify_file(&bytes[..bytes.len() - 1]).1);
     }
 
     #[test]

@@ -5782,6 +5782,15 @@ The standard is design principle five's: the mechanism is real and the resolutio
   600 that is 2,196 headers in under half a second, against four seconds for the full replay,
   and a forged header or a set of strangers signing one is caught at its height
   (`chain::light`).
+- A chain is also a file, in the same canonical encoding: its genesis and every block, which is
+  everything anybody needs to check it (`chain::file`). Reading is as strict as signing —
+  whatever reads writes back to the same bytes — and `--verify-chain` checks a file with nothing
+  else: no world and no seed. 0x11's six centuries are a 22 MB file that replays in four
+  seconds; a test flips one bit at two hundred places through a written chain, and each time the
+  file either does not read or does not replay. Nor can anything in a file make its checker
+  overflow or spin: a genesis that could make more coin than `MAX_SUPPLY`, or burn more than a
+  stake, is no genesis; a reserve cannot be stated past `MAX_TOKENS`; and a block claiming more
+  than 65,536 rounds is refused before the rotation is turned for it (§49.7).
 - Anybody holding only a block's header can check that block: the header hashes to the block's
   name; its transactions hash up to the root it commits to and each is signed by the key it
   names; the validators and stake it commits to are the ones whose signatures make up more than
@@ -5800,7 +5809,7 @@ every node lives in one process and hears every message at once, so a validator 
 answering this round or it is not. That is where a partition would go.
 
 The primitives are checked against FIPS 180-4's and RFC 8032's vectors and against eight more
-signatures produced by OpenSSL, and the chain's forty tests are claims: nothing is spent
+signatures produced by OpenSSL, and the chain's forty-five tests are claims: nothing is spent
 twice; a swap moves both legs or neither; a changed amount fails the transaction root, patched
 to match fails the signature, and patched again fails the commit; the chain keeps going with a
 quarter of the stake absent and stops with half; a block holding a bad transaction is never
@@ -6037,6 +6046,15 @@ the mechanism was the wrong one.
   key seen twice now keeps a table of its multiples — one to eight times every power of 256, the
   reference implementation's layout for the base point — and verifies in about 27 µs. What is
   kept changes how fast a signature is checked, never whether it holds.
+- **A genesis that could crash whoever checked it.** The first test of the chain file flipped
+  bits through a written chain and replayed each result, and one flip, high in a genesis
+  allocation, made a sum overflow and the replay panic rather than refuse. It never needed a
+  damaged file: a genesis handing out that much coin, signed by its founders, would have crashed
+  every node that ever replayed it, and one naming a slash of more than a thousand per thousand
+  would have burned more stake than there was. `Genesis::check` now refuses both before a ledger
+  is built — by founding, replaying or following — a reserve is capped, token totals are
+  checked, heights saturate, and a block's reward is shared without the product that could
+  overflow. None of it changes a byte of any chain a world has kept.
 - **A jailing that left one country holding a chain.** The first way of mending a chain after a
   jailing (§49.6.2) was tried on its worst case by hand — 0x11's smaller country losing its one
   large validator, which left the larger holding the whole of the stake — and did two wrong

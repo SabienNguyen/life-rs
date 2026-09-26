@@ -1,8 +1,8 @@
 //! A block: a header everybody signs, the transactions it commits to, and the signatures.
 
 use crate::Digest;
-use crate::codec::Writer;
-use crate::consensus::Commit;
+use crate::codec::{Malformed, Reader, Writer};
+use crate::consensus::{Commit, Vote};
 use crate::tx::{Address, Transaction};
 
 /// What validators sign and what the next block names.
@@ -50,6 +50,27 @@ impl Header {
             .finish()
     }
 
+    /// `encode`, backwards.
+    pub fn decode(bytes: &[u8]) -> Result<Header, Malformed> {
+        let mut r = Reader::tagged(bytes, "life-rs/chain/header/1")?;
+        let header = Header {
+            chain: Digest(r.fixed()?),
+            height: r.u64()?,
+            round: r.u32()?,
+            time: r.u64()?,
+            parent: Digest(r.fixed()?),
+            last_commit: Digest(r.fixed()?),
+            txs: Digest(r.fixed()?),
+            tx_count: r.u32()?,
+            state: Digest(r.fixed()?),
+            validators: Digest(r.fixed()?),
+            next_validators: Digest(r.fixed()?),
+            proposer: Address(r.fixed()?),
+        };
+        r.done()?;
+        Ok(header)
+    }
+
     pub fn hash(&self) -> Digest {
         Digest::of(&self.encode())
     }
@@ -68,6 +89,45 @@ pub struct Block {
 impl Block {
     pub fn hash(&self) -> Digest {
         self.header.hash()
+    }
+
+    /// The whole block, as it is kept and handed on: the header, every transaction and the
+    /// votes that made it final, each in its own encoding.
+    pub fn encode(&self) -> Vec<u8> {
+        let mut w = Writer::tagged("life-rs/chain/block/1");
+        w.var(&self.header.encode()).u32(self.txs.len() as u32);
+        for tx in &self.txs {
+            w.var(&tx.encode());
+        }
+        w.u32(self.commit.round).u32(self.commit.votes.len() as u32);
+        for vote in &self.commit.votes {
+            w.var(&vote.encode());
+        }
+        w.finish()
+    }
+
+    /// `encode`, backwards. A block that reads is only a claim to be one; `Chain::replay`
+    /// checks the claim.
+    pub fn decode(bytes: &[u8]) -> Result<Block, Malformed> {
+        let mut r = Reader::tagged(bytes, "life-rs/chain/block/1")?;
+        let header = Header::decode(r.var()?)?;
+        let n = r.count(4)?;
+        let mut txs = Vec::with_capacity(n);
+        for _ in 0..n {
+            txs.push(Transaction::decode(r.var()?)?);
+        }
+        let round = r.u32()?;
+        let n = r.count(4)?;
+        let mut votes = Vec::with_capacity(n);
+        for _ in 0..n {
+            votes.push(Vote::decode(r.var()?)?);
+        }
+        r.done()?;
+        Ok(Block {
+            header,
+            txs,
+            commit: Commit { round, votes },
+        })
     }
 
     /// The Merkle root of some transactions, as a header commits to it.

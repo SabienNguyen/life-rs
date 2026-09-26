@@ -32,6 +32,7 @@ pub struct LightBlock {
 /// Follow a chain from its genesis through light blocks for every height from zero. Returns the
 /// height of the last header it can trust, or the first height that fails and why.
 pub fn follow(genesis: &Genesis, blocks: &[LightBlock]) -> Result<u64, (u64, Invalid)> {
+    genesis.check().map_err(|why| (0, Invalid::BadGenesis(why)))?;
     let id = genesis.id();
     let Some(first) = blocks.first() else {
         return Err((0, Invalid::NotGenesis));

@@ -20,7 +20,7 @@
 //!   the issuer honest is that the reserve and the supply are both on the ledger for anybody
 //!   to compare.
 
-use crate::codec::Writer;
+use crate::codec::{Malformed, Reader, Writer};
 use crate::consensus::Vote;
 use crate::{Digest, PublicKey, Signature, SigningKey};
 
@@ -176,6 +176,14 @@ fn encode_asset(w: &mut Writer, asset: Asset) {
     };
 }
 
+fn decode_asset(r: &mut Reader) -> Result<Asset, Malformed> {
+    match r.u8()? {
+        0 => Ok(Asset::Coin),
+        1 => Ok(Asset::Token(r.u32()?)),
+        _ => Err(Malformed::BadValue("an asset that is neither coin nor a token")),
+    }
+}
+
 impl Action {
     /// A word for what it is.
     pub fn label(&self) -> &'static str {
@@ -235,6 +243,49 @@ impl Action {
             }
         }
     }
+
+    /// `encode_into`, backwards.
+    fn decode_from(r: &mut Reader) -> Result<Action, Malformed> {
+        Ok(match r.u8()? {
+            0 => Action::Pay {
+                to: Address(r.fixed()?),
+                asset: decode_asset(r)?,
+                amount: r.u128()?,
+            },
+            1 => Action::Issue {
+                symbol: r.text()?,
+                peg: r.text()?,
+                attestor: Address(r.fixed()?),
+            },
+            2 => Action::Attest {
+                token: r.u32()?,
+                reserves: r.u128()?,
+            },
+            3 => Action::Mint {
+                token: r.u32()?,
+                to: Address(r.fixed()?),
+                amount: r.u128()?,
+            },
+            4 => Action::Redeem {
+                token: r.u32()?,
+                amount: r.u128()?,
+            },
+            5 => Action::Bond { amount: r.u128()? },
+            6 => Action::Unbond { amount: r.u128()? },
+            7 => Action::Evidence {
+                first: Box::new(Vote::decode(r.var()?)?),
+                second: Box::new(Vote::decode(r.var()?)?),
+            },
+            8 => Action::Swap(Box::new(Swap {
+                counterparty: PublicKey(r.fixed()?),
+                counterparty_nonce: r.u64()?,
+                give: (decode_asset(r)?, r.u128()?),
+                get: (decode_asset(r)?, r.u128()?),
+                consent: Signature(r.fixed()?),
+            })),
+            _ => return Err(Malformed::BadValue("a kind of transaction there is none of")),
+        })
+    }
 }
 
 /// A signed request.
@@ -282,6 +333,22 @@ impl Transaction {
         let mut bytes = self.body();
         bytes.extend_from_slice(&self.signature.0);
         bytes
+    }
+
+    /// `encode`, backwards, and as strict: the bytes of exactly one transaction and nothing
+    /// else. It says nothing about whether the signature holds — that is `signature_holds`.
+    pub fn decode(bytes: &[u8]) -> Result<Transaction, Malformed> {
+        let mut r = Reader::tagged(bytes, "life-rs/chain/tx/1")?;
+        let tx = Transaction {
+            chain: Digest(r.fixed()?),
+            signer: PublicKey(r.fixed()?),
+            nonce: r.u64()?,
+            fee: r.u128()?,
+            action: Action::decode_from(&mut r)?,
+            signature: Signature(r.fixed()?),
+        };
+        r.done()?;
+        Ok(tx)
     }
 
     /// What the transaction is known by.

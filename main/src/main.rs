@@ -55,6 +55,12 @@ options:
                    see what it did: chain (no ledger may be founded), borders
                    (paying abroad costs nothing), or trade (nothing moves
                    between towns). may be given more than once
+  --export-chain <path>
+                   with --nations, write the world's chain to a file: its
+                   genesis and every block, all anybody needs to check it
+  --verify-chain <path>
+                   check a chain file with nothing but the file: read it
+                   strictly, and replay every block from its genesis
   --grid <level>   how fine the planet's grid is (default: 4, ~450 km cells)
   --save <path>    write the world out so it can be opened again
   --load <path>    open a world written earlier, and carry on from there
@@ -79,6 +85,9 @@ struct Options {
     nations: Option<u64>,
     /// What a `--nations` run is to do without: `chain`, `borders` or `trade`.
     without: Vec<String>,
+    /// Where a `--nations` run writes its chain, and a chain file to check on its own.
+    export_chain: Option<String>,
+    verify_chain: Option<String>,
     grid: u8,
     save: Option<String>,
     load: Option<String>,
@@ -121,6 +130,8 @@ impl Default for Options {
             ages: None,
             nations: None,
             without: Vec::new(),
+            export_chain: None,
+            verify_chain: None,
             grid: 4,
             save: None,
             load: None,
@@ -155,6 +166,11 @@ fn main() -> ExitCode {
     if let Some(myr) = options.ages {
         run_ages(&options, myr);
         return ExitCode::SUCCESS;
+    }
+
+    // A chain file, checked by somebody holding nothing else: no world, no seed, no trust.
+    if let Some(path) = &options.verify_chain {
+        return run_verify_chain(path);
     }
 
     // The world at the scale of nations: every town a statistical population rather than
@@ -539,7 +555,42 @@ fn run_nations(options: &Options, years: u64) -> ExitCode {
         eprintln!("error: a chain did not replay from its genesis");
         return ExitCode::FAILURE;
     }
+    if let Some(path) = &options.export_chain {
+        // Said on stderr, so a page or data written to stdout stays only that.
+        let Some(network) = world.networks.first() else {
+            eprintln!("error: this world keeps no chain to write");
+            return ExitCode::FAILURE;
+        };
+        let bytes = network.chain.export();
+        if let Err(e) = std::fs::write(path, &bytes) {
+            eprintln!("error: could not write {path}: {e}");
+            return ExitCode::FAILURE;
+        }
+        eprintln!(
+            "wrote the {} to {path}: {} blocks, {} — check it with --verify-chain {path}",
+            network.name,
+            network.chain.blocks.len(),
+            nations_view::size(bytes.len())
+        );
+    }
     ExitCode::SUCCESS
+}
+
+/// Check a chain file with nothing but the file.
+fn run_verify_chain(path: &str) -> ExitCode {
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            eprintln!("error: could not read {path}: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    println!("chain file {path}: {}", nations_view::size(bytes.len()));
+    let (lines, holds) = nations_view::verify_file(&bytes);
+    for line in lines {
+        println!("{line}");
+    }
+    if holds { ExitCode::SUCCESS } else { ExitCode::FAILURE }
 }
 
 /// Run the lithosphere and render its history.
@@ -641,6 +692,8 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Option<Options>, Str
                 }
                 options.without.push(what);
             }
+            "--export-chain" => options.export_chain = Some(value()?),
+            "--verify-chain" => options.verify_chain = Some(value()?),
             "--ages" => {
                 let raw = value()?;
                 let myr: f64 = raw
@@ -813,6 +866,11 @@ mod tests {
         let without = parse(&["--nations", "600", "--without", "chain", "--without", "borders"]);
         assert_eq!(without.unwrap().unwrap().without, vec!["chain", "borders"]);
         assert!(parse(&["--nations", "600", "--without", "money"]).is_err(), "money is not a switch");
+        let files = parse(&["--nations", "600", "--export-chain", "a.chain"]).unwrap().unwrap();
+        assert_eq!(files.export_chain.as_deref(), Some("a.chain"));
+        let check = parse(&["--verify-chain", "a.chain"]).unwrap().unwrap();
+        assert_eq!(check.verify_chain.as_deref(), Some("a.chain"));
+        assert!(parse(&["--verify-chain"]).is_err(), "a file to check");
     }
 
     /// The markets page keeps the same contract as the others: one hole, a name, nothing

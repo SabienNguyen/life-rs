@@ -22,11 +22,22 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::codec::Writer;
+use crate::codec::{Malformed, Reader, Writer};
 use crate::consensus::Vote;
 use crate::merkle;
 use crate::tx::{Action, Address, Asset, COIN, Transaction};
 use crate::{Digest, PublicKey};
+
+/// The most coin a chain may ever hold, in base units — genesis and every block's issuance
+/// together: some seven hundred million million coins, far past anything issued here, and small
+/// enough that stake counted in whole coins, summed and doubled, stays inside the sixty-three
+/// bits the rotation's priorities have. A genesis that could pass it is not a genesis
+/// (`Genesis::check`), so no balance, stake or supply ever overflows.
+pub const MAX_SUPPLY: u128 = 1 << 86;
+
+/// The most any token's reserve may be stated at, in base units, so that neither its supply
+/// nor anything counted from it can overflow.
+pub const MAX_TOKENS: u128 = 1 << 100;
 
 /// The rules a chain is founded with. Part of what its id is a hash of, so they cannot be
 /// changed without making it a different chain.
@@ -59,6 +70,22 @@ pub struct Params {
 }
 
 impl Params {
+    /// `encode_into`, backwards.
+    pub(crate) fn decode_from(r: &mut Reader) -> Result<Params, Malformed> {
+        let count = |n: u64| usize::try_from(n).map_err(|_| Malformed::BadValue("a count too large"));
+        Ok(Params {
+            name: r.text()?,
+            issuance: r.u128()?,
+            halving: r.u64()?,
+            min_fee: r.u128()?,
+            max_txs: count(r.u64()?)?,
+            max_validators: count(r.u64()?)?,
+            min_bond: r.u128()?,
+            unbonding_blocks: r.u64()?,
+            slash_permille: r.u64()?,
+        })
+    }
+
     pub(crate) fn encode_into(&self, w: &mut Writer) {
         w.text(&self.name)
             .u128(self.issuance)
@@ -194,6 +221,9 @@ pub enum Refusal {
     StaleConsent { expected: u64, got: u64 },
     /// The counterparty cannot deliver its side.
     CounterpartyCannotAfford,
+    /// An amount past what the ledger counts: a reserve over `MAX_TOKENS`, or a token's
+    /// running total of what was ever minted or redeemed that would not fit.
+    TooLarge,
 }
 
 /// Everything, as of the last block.
@@ -219,13 +249,15 @@ impl Ledger {
     /// The ledger a chain starts from: some addresses with coin, some of it staked.
     pub fn genesis(chain: Digest, params: Params, allocations: &[(PublicKey, u128, u128)]) -> Ledger {
         let mut accounts: BTreeMap<Address, Account> = BTreeMap::new();
-        let mut total = 0;
+        // Saturating, so that even a genesis nobody checked cannot panic here; `Genesis::check`
+        // is what refuses one that would need to.
+        let mut total: u128 = 0;
         for (key, liquid, bonded) in allocations {
             let account = accounts.entry(Address::of(key)).or_default();
-            account.coin += liquid;
-            account.bonded += bonded;
+            account.coin = account.coin.saturating_add(*liquid);
+            account.bonded = account.bonded.saturating_add(*bonded);
             account.key = Some(*key);
-            total += liquid + bonded;
+            total = total.saturating_add(liquid.saturating_add(*bonded));
         }
         Ledger {
             chain,
@@ -339,10 +371,13 @@ impl Ledger {
                     return Err(Refusal::SelfAttested);
                 }
             }
-            Action::Attest { token, .. } => {
+            Action::Attest { token, reserves } => {
                 let known = self.tokens.get(*token as usize).ok_or(Refusal::UnknownToken)?;
                 if known.attestor != sender {
                     return Err(Refusal::NotTheAttestor);
+                }
+                if *reserves > MAX_TOKENS {
+                    return Err(Refusal::TooLarge);
                 }
             }
             Action::Mint { token, amount, .. } => {
@@ -353,23 +388,27 @@ impl Ledger {
                 if *amount == 0 {
                     return Err(Refusal::NothingToMove);
                 }
-                if known.supply.saturating_add(*amount) > known.reserves {
+                if known.supply.checked_add(*amount).is_none_or(|after| after > known.reserves) {
                     return Err(Refusal::BeyondReserves {
                         supply: known.supply,
                         reserves: known.reserves,
                         asked: *amount,
                     });
                 }
+                if known.minted.checked_add(*amount).is_none() {
+                    return Err(Refusal::TooLarge);
+                }
             }
             Action::Redeem { token, amount } => {
-                if self.tokens.get(*token as usize).is_none() {
-                    return Err(Refusal::UnknownToken);
-                }
+                let known = self.tokens.get(*token as usize).ok_or(Refusal::UnknownToken)?;
                 if *amount == 0 {
                     return Err(Refusal::NothingToMove);
                 }
                 if account.tokens.get(token).copied().unwrap_or(0) < *amount {
                     return Err(Refusal::CannotAfford);
+                }
+                if known.redeemed.checked_add(*amount).is_none() {
+                    return Err(Refusal::TooLarge);
                 }
             }
             Action::Bond { amount } => {
@@ -438,7 +477,7 @@ impl Ledger {
             account.key.get_or_insert(tx.signer);
         }
         self.accounts.entry(proposer).or_default().coin += fee;
-        self.fees_paid += fee;
+        self.fees_paid = self.fees_paid.saturating_add(fee);
 
         match &tx.action {
             Action::Pay { to, asset, amount } => match asset {
@@ -494,7 +533,7 @@ impl Ledger {
                 account.bonded += amount;
             }
             Action::Unbond { amount } => {
-                let release = self.height + 1 + self.params.unbonding_blocks;
+                let release = self.height.saturating_add(1).saturating_add(self.params.unbonding_blocks);
                 let account = self.accounts.get_mut(&sender).expect("sender exists");
                 account.bonded -= amount;
                 account.unbonding.push((release, *amount));
@@ -573,7 +612,7 @@ impl Ledger {
         }
         // Stake that has been released can no longer be reached; that is what the unbonding
         // period is for, and evidence older than it is evidence against nothing.
-        if first.height + self.params.unbonding_blocks < self.height {
+        if first.height.saturating_add(self.params.unbonding_blocks) < self.height {
             return Err(Refusal::TooLate);
         }
         match self.accounts.get(&offender) {
@@ -589,8 +628,11 @@ impl Ledger {
         let total: u64 = validators.iter().map(|(_, p)| p).sum();
         if reward > 0 && total > 0 {
             let mut paid = 0;
+            let total = total as u128;
             for (address, power) in validators {
-                let share = reward * *power as u128 / total as u128;
+                // reward · power / total, without the product: whole shares, then the part.
+                let power = *power as u128;
+                let share = reward / total * power + reward % total * power / total;
                 self.accounts.entry(*address).or_default().coin += share;
                 paid += share;
             }
