@@ -518,7 +518,11 @@ fn keep(nations: &mut Nations, at: usize) {
     };
     let wage = wage(nations);
     let size = payment_size(nations);
-    let reserve_level = nations.currencies[reserve].level.max(1e-9);
+    // What the chain counts in is its token's currency — the one the world invoiced in when the
+    // token was issued — whatever it invoices in since: the token stands for that currency and
+    // no other, so a payment abroad becomes so many of its units at that currency's price.
+    let counted_in = nations.networks[at].token.as_ref().map_or(reserve, |t| t.currency);
+    let reserve_level = nations.currencies[counted_in].level.max(1e-9);
 
     // Every country that trades abroad keeps an account through its capital's house, and so
     // does every state of it large enough to have a market house of its own.
@@ -1250,7 +1254,12 @@ fn mend(nations: &mut Nations, at: usize) {
     let Some((address, _, power)) = largest else {
         return;
     };
+    // Signed by the key the stake is bonded under, which is not the house's own if that was
+    // jailed.
     let Some(town) = network.town_of(&address) else {
+        return;
+    };
+    let Some(key) = network.keys_of(town).find(|k| Address::of(&k.public()) == address).cloned() else {
         return;
     };
     let amount = excess.min((power as u128).saturating_sub(min_bond as u128)) * COIN;
@@ -1259,7 +1268,7 @@ fn mend(nations: &mut Nations, at: usize) {
     if amount == 0 || network.chain.pending_balance(&address, Asset::Coin) < min_fee {
         return;
     }
-    let tx = sign(network, town, min_fee, Action::Unbond { amount });
+    let tx = sign_with(network, &key, min_fee, Action::Unbond { amount });
     if !submit(network, tx) {
         network.refused += 1;
     }

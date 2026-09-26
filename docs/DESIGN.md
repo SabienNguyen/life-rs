@@ -5690,8 +5690,8 @@ Nine seeds, seven hundred years each:
 
 Income is in multiples of bare subsistence; "trap opens" is the first year the world's income,
 averaged over the last ten, passes twice what it takes to eat. In no world has it come back. Of
-sixty-four more seeds run to year 700, one has not escaped at all: 0x33, three countries whose
-chain is never worth founding.
+sixty-four more seeds run to year 700, one has not escaped by then: 0x33, three countries, which
+escapes in year 804 and founds its chain in 876.
 
 **Money comes centuries before anybody is rich.** Every world trades in metal by year eighty
 and strikes its first coin by ninety-one; none escapes subsistence before year 288 — and across
@@ -5741,16 +5741,17 @@ as three conditions, and the answer is no until all three hold:
    what paying abroad costs says.
 
 In the seven worlds with borders it happens between years 418 and 596, eighty to a hundred years
-after the trap opens — and across seventy-nine chains measured since, between 347 and 641, never
-sooner than seventy-three years after it or later than a hundred. It is founded by six to
-twenty-one houses across every country (four to twenty-one across the seventy-nine) — the ones
-that would carry their countries' trade on it: every state large enough to have a market house
-of its own, and the capital for the rest. The largest founder names it — the Wickport Ledger,
-the Whitscar Ledger — and every founder stakes in proportion to its business abroad, up to a
-point: no country's houses may hold more than three fifths of the stake, short of the two thirds
-that would finalise a block with nobody abroad signing. Nobody joins a ledger one of the others
-could keep alone, so the largest country takes less stake than its business would give it
-(§49.7).
+after the trap opens — and across the hundred and twenty-eight chains measured since, run to seven
+hundred, eight hundred and a thousand years, between 347 and 793, and seventy-three to a hundred
+and thirteen years after it; the slowest world of all, 0x33, escapes only in 804 and founds its
+chain seventy-two years later. It is founded by six to twenty-one houses across every country
+(four to twenty-one across them all) — the ones that would carry their countries' trade on it:
+every state large enough to have a market house of its own, and the capital for the rest. The
+largest founder names it — the Wickport Ledger, the Whitscar Ledger — and every founder stakes in
+proportion to its business abroad, up to a point: no country's houses may hold more than three
+fifths of the stake, short of the two thirds that would finalise a block with nobody abroad
+signing. Nobody joins a ledger one of the others could keep alone, so the largest country takes
+less stake than its business would give it (§49.7).
 
 ### 49.5 The chain itself, and why it counts as one
 
@@ -5823,11 +5824,13 @@ every node lives in one process and hears every message at once, so a validator 
 answering this round or it is not. That is where a partition would go.
 
 The primitives are checked against FIPS 180-4's and RFC 8032's vectors and against eight more
-signatures produced by OpenSSL, and the chain's forty-five tests are claims: nothing is spent
+signatures produced by OpenSSL, and the chain's forty-six tests are claims: nothing is spent
 twice; a swap moves both legs or neither; a changed amount fails the transaction root, patched
 to match fails the signature, and patched again fails the commit; the chain keeps going with a
 quarter of the stake absent and stops with half; a block holding a bad transaction is never
-signed; a balance can be proved to somebody holding only a header.
+signed; a balance can be proved to somebody holding only a header; and whatever anybody sends,
+in whatever order — sixty blocks of transactions drawn at random, half of them sensible and half
+not — the conservation laws hold after every block and the chain replays to what it holds.
 
 ### 49.6 Keeping it
 

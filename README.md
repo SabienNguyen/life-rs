@@ -442,11 +442,11 @@ comparison below was measured with.
 
 Nothing below is scheduled:
 
-- **Money comes first.** Metal is in use by year eighty and coins by ninety — because trade
+- **Money comes first.** Metal is in use within a century and coins soon after — because trade
   got thick, not because anybody got rich.
-- **The trap holds, then opens.** For three to five centuries every gain becomes children.
-  Then ideas outrun mouths, the demographic transition follows, and farmers fall from four in
-  five to one in ten.
+- **The trap holds, then opens.** For two to six centuries, and in the slowest world eight,
+  every gain becomes children. Then ideas outrun mouths, the demographic transition follows,
+  and farmers fall from four in five to one in ten.
 - **Markets end famines.** The same world with nothing able to move between towns starves
   more than twice as often.
 - **Then a chain.** When houses in different countries have no keeper they all trust, at least
