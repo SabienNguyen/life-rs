@@ -5769,10 +5769,16 @@ The standard is design principle five's: the mechanism is real and the resolutio
 - A block is final when validators holding more than two thirds of the stake have signed it.
   The proposer rotates by stake, Tendermint's priority algorithm. A round whose proposer is not
   at its post fails and the next is tried; a height where more than a third of the stake is
-  absent stops rather than risk a fork.
-- Signing two blocks at one height is the one offence provable from outside: evidence of it
-  costs five per cent of the stake, and the key that signed never validates again. Unbonded
-  stake waits twelve blocks so there is time to show it. New coin is issued each block to validators by stake, halving every four
+  absent stops rather than risk a fork. A validator signs one block a height, whatever the
+  round, so a round that fails after some have signed hands the same block to the next
+  proposer, and it is final in a later round than it was put forward in; a commit from a round
+  before its block was put forward is none.
+- Signing two blocks at one height, in one round or two, is the one offence provable from
+  outside: evidence of it costs five per cent of the stake, and the key that signed never
+  validates again. Unbonded stake waits twelve blocks so there is time to show it. Two final
+  blocks at one height need more than a third of the stake to have signed both, and a light
+  client shown the two histories names every one of them, with the votes that prove it
+  (`light::fork`). New coin is issued each block to validators by stake, halving every four
   years.
 - A stable token can be minted only by its issuer and only against a reserve its attestor —
   never the issuer — has stated on the ledger. A shortfall can be stated, and then nothing more
@@ -5826,11 +5832,13 @@ every node lives in one process and hears every message at once, so a validator 
 answering this round or it is not. That is where a partition would go.
 
 The primitives are checked against FIPS 180-4's and RFC 8032's vectors and against eight more
-signatures produced by OpenSSL, and the chain's forty-six tests are claims: nothing is spent
+signatures produced by OpenSSL, and the chain's forty-eight tests are claims: nothing is spent
 twice; a swap moves both legs or neither; a changed amount fails the transaction root, patched
 to match fails the signature, and patched again fails the commit; the chain keeps going with a
 quarter of the stake absent and stops with half; a block holding a bad transaction is never
-signed; a balance can be proved to somebody holding only a header; and whatever anybody sends,
+signed; a block somebody signed is the block its height commits; a fork made across two rounds
+names the half of the stake that made it, and either side's chain burns them for it; a balance
+can be proved to somebody holding only a header; and whatever anybody sends,
 in whatever order — sixty blocks of transactions drawn at random, half of them sensible and half
 not — the conservation laws hold after every block and the chain replays to what it holds.
 
@@ -6098,6 +6106,28 @@ the mechanism was the wrong one.
   is built — by founding, replaying or following — a reserve is capped, token totals are
   checked, heights saturate, and a block's reward is shared without the product that could
   overflow. None of it changes a byte of any chain a world has kept.
+- **A fork nobody could be punished for.** `consensus` argued, rightly, that two final blocks at
+  one height need more than a third of the stake to have signed both, and called that exactly the
+  evidence the chain slashes. The evidence asked for two votes in the same round. Honest
+  validators signed whatever each round's proposer put forward, so after a round that failed
+  they signed a different block in the next — and a third of the stake that signed one block in
+  round zero with some of the rest, and another in round one with the others, made two final
+  blocks and not one pair of votes the chain would take. The argument was right and the rule was
+  narrower than the argument. A validator now signs one block a height: a round that fails after
+  anybody has signed hands the same block forward, and evidence is two blocks at one height in
+  any rounds. A test forks a chain across two rounds and burns the half that did it; another
+  forks 0x11's own chain a century after its founding, with the two of its five validators it
+  takes, and has a light client name them and a house show the chain. The worlds barely notice:
+  in eight centuries 0x11 had 32 blocks of 4,596 final in a later round than they were put
+  forward in, 0x4 had five and 0x2, 0x21 and 0x221 none, the 23-seed sweep reads the same to
+  the last column, and at year 600 0x11 has lost 56 rounds rather than 60 and its token ledger's
+  counts move by under half a per cent — 14,148 mints rather than 14,133, 12,364 swaps rather
+  than 12,419. What it costs is the other half of Tendermint's answer:
+  there, a validator bound to a block is freed by two thirds voting for another in a later round,
+  in a round of votes this chain does not have. Without it a proposer who showed different
+  validators different blocks in one round could bind them to two, neither of which could then
+  gather two thirds, and stop the height for good. It could not fork it; and here every node hears
+  every message at once, so nobody can show different validators different things.
 - **A country left with nobody to stake.** Sixty-four more seeds found two worlds, 0x4e and
   0x5f, ending with one country holding all of the stake. In each the smaller country's one house
   on the chain had been caught, and a jailed account can never bond again, so there was nobody
@@ -6118,7 +6148,10 @@ the mechanism was the wrong one.
   key (§49.6.2) — never for plotting: nobody signs two blocks to spend one coin twice, no third
   of the stake colludes, and there is no network to partition. Stalls could come only from
   hunger at a validator's town or bad luck, and none has. An issuer is honest by construction
-  and an attestor never lies.
+  and an attestor never lies. The tests attack it — a fork of 0x11's chain by the stake it takes
+  is named and burned (§49.7) — but the world never does, and nor does anybody reach back past
+  the unbonding period, where the evidence is too late and a light client's defence is a recent
+  checkpoint (`light::follow_from`) rather than the chain.
 - **A few validators are enough.** Nothing makes a house take a seat but its own business on the
   chain — not the fees a seat earns, nor wanting a chain that survives more faults than it does —
   so over the centuries the sets thin, to six or eight of the fourteen to twenty-one a chain may

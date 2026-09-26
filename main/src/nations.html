@@ -643,7 +643,7 @@ drawCountries();
       "<h2 style='margin-top:14px'>Its life, block by block</h2>" +
       "<svg id='life" + at + "' role='img' aria-label='transactions in every block since genesis'></svg>" +
       "<div class='legend'><span><i style='background:var(--chart1)'></i>transactions in the block</span>" +
-      "<span><i style='background:var(--fail);height:8px;width:8px;border-radius:50%'></i>a round lost to an absent proposer</span>" +
+      "<span><i style='background:var(--fail);height:8px;width:8px;border-radius:50%'></i>a block final only after a round was lost</span>" +
       (c.blocks.some(function (b) { return b[6] !== null && b[6] !== undefined; }) ?
         "<span><i style='background:var(--ink);height:8px;width:8px;transform:rotate(45deg)'></i>a validator caught signing twice</span>" : "") + "</div>" +
       "<h2 style='margin-top:14px'>Blocks</h2><p class='muted'>The latest " + c.recent.length + " blocks, in full. Pick one.</p>" +
@@ -991,7 +991,7 @@ async function checkYourself(at, tamper) {
   }
 }
 
-// Every block since genesis: how full it was, and where a round was lost.
+// Every block since genesis: how full it was, and which took more than one round to be final.
 function drawLife(at) {
   const c = WORLD.chains[at];
   const svg = $("life" + at);
@@ -1029,7 +1029,7 @@ function drawLife(at) {
     if (b[2] > 0) {
       const dot = el("circle", { cx: x(b[0]), cy: y(b[4]), r: 3, fill: "var(--fail)" }, svg);
       const label = el("title", {}, dot);
-      label.textContent = "block " + b[0] + ", " + monthLabel(b[1]) + ": committed in round " + b[2] + ", proposed by " + townName(b[3]);
+      label.textContent = "block " + b[0] + ", " + monthLabel(b[1]) + ": final in round " + b[2] + ", proposed by " + townName(b[3]);
     }
     // A block carrying evidence that a validator signed twice: a diamond along the top.
     if (b[6] !== null && b[6] !== undefined) {
@@ -1053,7 +1053,9 @@ function showBlock(at, i) {
     return esc(townName(v.by)) + " <span class='mono muted'>" + esc(v.signature) + "…</span>";
   }).join(" · ");
   $("block" + at).innerHTML =
-    "<div class='kv'><div>block</div><div>#" + b.height + ", " + monthLabel(b.month) + ", round " + b.round + ", proposed by " + esc(townName(b.proposer)) + "</div>" +
+    "<div class='kv'><div>block</div><div>#" + b.height + ", " + monthLabel(b.month) + ", " +
+      (b.proposedIn === b.round ? "round " + b.round : "put forward in round " + b.proposedIn + " and final in round " + b.round) +
+      ", proposed by " + esc(townName(b.proposer)) + "</div>" +
     "<div>hash</div><div class='mono'>" + esc(b.hash) + "</div>" +
     "<div>parent</div><div class='mono'>" + esc(b.parent) + "</div>" +
     "<div>transactions root</div><div class='mono'>" + esc(b.txRoot) + "</div>" +

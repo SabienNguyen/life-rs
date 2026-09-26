@@ -13,12 +13,16 @@
 //!
 //! Why two thirds is the whole argument, briefly. Two commits for different blocks at one
 //! height would each need more than two thirds of the power, so they would overlap in more
-//! than a third — and every validator in the overlap signed both, which is exactly the
-//! evidence `tx::Action::Evidence` slashes. So a fork cannot happen unless more than a third
-//! of the stake is willing to be destroyed, and a block, once committed, is final. And the
-//! chain keeps moving as long as more than two thirds are answering: a round whose proposer
-//! is absent, or whose block honest validators refuse, simply fails, and the next round has a
-//! different proposer.
+//! than a third — and every validator in the overlap signed both. That holds whatever rounds
+//! the two commits were made in, and so the offence is two blocks at one height, not two votes
+//! in one round: an honest validator signs one block a height (`Chain::step`), and
+//! `tx::Action::Evidence` slashes whoever signs a second, in the same round or a later one. So
+//! a fork cannot happen unless more than a third of the stake is willing to be destroyed, a
+//! block once committed is final, and anybody shown both sides of a fork can name who made it
+//! (`light::fork`). And the chain keeps moving as long as more than two thirds are answering: a
+//! round whose proposer is absent, or whose block too few are there to sign, simply fails, and
+//! the next round has a different proposer — who puts the same block forward again if anybody
+//! signed it.
 
 use crate::codec::{Malformed, Reader, Writer};
 use crate::merkle;

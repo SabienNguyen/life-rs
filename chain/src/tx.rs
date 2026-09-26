@@ -100,11 +100,14 @@ pub enum Action {
     Bond { amount: u128 },
     /// Unlock it again.
     Unbond { amount: u128 },
-    /// Two votes by one validator for two different blocks at the same height and round.
+    /// Two votes by one validator for two different blocks at the same height, in one round or
+    /// in two.
     ///
-    /// That is the one thing a validator can do that is provably dishonest from the outside,
-    /// and it is what makes stake worth staking: double-signing is how a chain is forked, so
-    /// it is what costs a validator their stake.
+    /// That is the one thing a validator can do that is provably dishonest from the outside —
+    /// an honest one signs one block a height, whatever the round (`Chain::step`) — and it is
+    /// what makes stake worth staking: two blocks final at one height need more than a third
+    /// of the stake to have signed both, so double-signing is how a chain is forked, and it is
+    /// what costs a validator their stake.
     Evidence { first: Box<Vote>, second: Box<Vote> },
     /// Two parties exchange two assets at once or not at all — delivery against payment. The
     /// sender gives `give` and gets `get` from `counterparty`, who has agreed to exactly these

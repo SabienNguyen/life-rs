@@ -1141,6 +1141,31 @@ pub(crate) fn votes_for(nations: &Nations, at: usize, block: Digest, of_country:
         .collect()
 }
 
+/// Everybody due to sign the next height: the town whose house each is, the key it signs with
+/// and its power — for tests that have them sign what they should not.
+#[cfg(test)]
+pub(crate) fn signers(nations: &Nations, at: usize) -> Vec<(usize, SigningKey, u64)> {
+    let network = &nations.networks[at];
+    network
+        .chain
+        .rotation
+        .members
+        .iter()
+        .filter_map(|v| {
+            let town = network.town_of(&v.address)?;
+            let key = network.keys_of(town).find(|k| k.public() == v.key)?;
+            Some((town, key.clone(), v.power))
+        })
+        .collect()
+}
+
+/// Every house's own key, by town — for tests that need somebody with coin to send something.
+#[cfg(test)]
+pub(crate) fn house_keys(nations: &Nations, at: usize) -> Vec<(usize, SigningKey)> {
+    let network = &nations.networks[at];
+    network.keys.iter().map(|(town, key)| (*town, key.clone())).collect()
+}
+
 /// Make a house sign the latest block it signed a second time, for no block, as `signed_twice`
 /// does by chance — for tests, which cannot wait on chance.
 #[cfg(test)]

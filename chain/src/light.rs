@@ -14,10 +14,15 @@
 //! or an account. What it cannot check itself, that the transactions inside were valid, it takes
 //! from the two thirds: to sign a bad block a forger needs that much of the stake, and signing
 //! two blocks at one height is evidence that costs a validator its stake.
+//!
+//! And if two histories both check, the light client has caught a fork, and `fork` says who made
+//! it. Both were signed by one set where they part, each block by more than two thirds of its
+//! power, so more than a third signed both — and every one of them is named, with the two votes
+//! that show it, as the chain takes them.
 
 use crate::block::Header;
-use crate::consensus::{Commit, ValidatorSet};
-use crate::node::{Genesis, Invalid, genesis_header_of};
+use crate::consensus::{Commit, ValidatorSet, Vote};
+use crate::node::{Genesis, Invalid, genesis_header_of, made_final};
 use crate::Digest;
 
 /// What a light client is handed for one height.
@@ -68,10 +73,7 @@ fn is_final(block: &LightBlock, id: Digest) -> Result<(), Invalid> {
     if block.validators.hash() != block.header.validators {
         return Err(Invalid::WrongValidators);
     }
-    block
-        .validators
-        .check(&block.commit, id, block.header.height, block.header.hash())
-        .map_err(Invalid::Commit)?;
+    made_final(&block.validators, &block.commit, &block.header)?;
     Ok(())
 }
 
@@ -98,4 +100,54 @@ fn follows(before: &LightBlock, next: &LightBlock, id: Digest) -> Result<(), Inv
         return Err(Invalid::WrongValidators);
     }
     is_final(next, id)
+}
+
+/// Where two histories part, and who parted them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Fork {
+    /// The first height at which they hold different blocks.
+    pub height: u64,
+    /// Everybody who signed both blocks there, each with a vote for either — which is what
+    /// `Action::Evidence` takes.
+    pub culprits: Vec<(Vote, Vote)>,
+    /// Their power, out of the set's.
+    pub power: u64,
+    pub total: u64,
+}
+
+/// Whether two histories that follow from one trusted header are one chain or two.
+///
+/// Each is followed on its own first, and one that does not follow is refused as `follow_from`
+/// refuses it: a forgery is nobody's fork, since nobody's signature makes it final. If both
+/// follow, they agree up to some height and hold different blocks there — both final, both
+/// signed by the one set the header before handed over to — and everybody in both commits is
+/// named. Returns `None` if one history is the other with less of it.
+pub fn fork(
+    trusted: &LightBlock,
+    one: &[LightBlock],
+    other: &[LightBlock],
+) -> Result<Option<Fork>, (u64, Invalid)> {
+    follow_from(trusted, one)?;
+    follow_from(trusted, other)?;
+    let Some((a, b)) = one.iter().zip(other).find(|(a, b)| a.header != b.header) else {
+        return Ok(None);
+    };
+    let set = &a.validators;
+    let mut culprits = Vec::new();
+    let mut power = 0;
+    for first in &a.commit.votes {
+        let Some(second) = b.commit.votes.iter().find(|v| v.validator == first.validator) else {
+            continue;
+        };
+        if let Some(at) = set.find(&first.validator) {
+            power += set.members[at].power;
+            culprits.push((first.clone(), second.clone()));
+        }
+    }
+    Ok(Some(Fork {
+        height: a.header.height,
+        culprits,
+        power,
+        total: set.total_power(),
+    }))
 }

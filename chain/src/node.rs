@@ -108,6 +108,8 @@ pub enum Invalid {
     BadGenesis(&'static str),
     /// A block claiming more rounds than `MOST_ROUNDS` at its height.
     TooManyRounds,
+    /// A commit from a round before the one its block was put forward in.
+    SignedBeforeProposed,
 }
 
 /// The most rounds one height may take. A round is one proposer's chance, and a height that
@@ -119,6 +121,8 @@ pub const MOST_ROUNDS: u32 = 1 << 16;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Committed {
     pub height: u64,
+    /// The round that committed it — later than the one it was put forward in, if a round
+    /// between failed after somebody had signed it.
     pub round: u32,
     pub txs: usize,
     pub proposer: Address,
@@ -126,6 +130,7 @@ pub struct Committed {
     pub signed_permille: u64,
 }
 
+#[derive(Clone)]
 pub struct Chain {
     pub genesis: Genesis,
     pub id: Digest,
@@ -148,6 +153,10 @@ pub struct Chain {
     pending: Ledger,
     /// Transactions whose signatures this node has already checked.
     checked: BTreeSet<Digest>,
+    /// The block validators have signed at the next height in a round that failed, and the
+    /// ledger and rotation it leads to: the only block they will sign there, and so the only one
+    /// any later round may put forward — this month or, if the height stalls, a later one.
+    signed: Option<(Block, Ledger, ValidatorSet)>,
     /// Rounds that ended without a block: an absent proposer, or too few answering.
     pub rounds_failed: u64,
     /// Transactions refused on arrival.
@@ -187,6 +196,7 @@ impl Chain {
             genesis,
             pool: Vec::new(),
             checked: BTreeSet::new(),
+            signed: None,
             rounds_failed: 0,
             refused: 0,
         })
@@ -333,9 +343,7 @@ impl Chain {
     /// Append a block whose commit is a quorum.
     pub fn accept(&mut self, block: Block) -> Result<(), Invalid> {
         let (ledger, rotation) = self.validate(&block)?;
-        self.rotation
-            .check(&block.commit, self.id, block.header.height, block.hash())
-            .map_err(Invalid::Commit)?;
+        made_final(&self.rotation, &block.commit, &block.header)?;
         self.install(block, ledger, rotation);
         Ok(())
     }
@@ -344,6 +352,7 @@ impl Chain {
         let included: BTreeSet<Digest> = block.txs.iter().map(|t| t.id()).collect();
         let height = block.header.height;
         let named = block.header.validators;
+        self.signed = None;
         self.blocks.push(block);
         self.ledger = ledger;
         self.signers = std::mem::replace(&mut self.rotation, rotation);
@@ -371,9 +380,17 @@ impl Chain {
     /// One height, however many rounds it takes.
     ///
     /// Each round the rotation names a proposer. If they are not answering, the round fails.
-    /// Otherwise they cut a block, it is validated, and every validator answering this round
-    /// signs it; with more than two thirds of the power signed it is final. `answering` is the
-    /// world's say in who is at their post — this function has none.
+    /// Otherwise they put a block forward, it is validated, and every validator answering this
+    /// round signs it; with more than two thirds of the power signed it is final. `answering` is
+    /// the world's say in who is at their post — this function has none.
+    ///
+    /// A validator signs one block a height, whatever the round. So a round that fails after
+    /// anybody has signed binds the rest of the height — the rounds after it here and, if the
+    /// height stalls, every call after this one until it commits: every later proposer puts
+    /// *that* block forward again rather than cutting one of their own, since nobody who signed
+    /// it would sign another. It is what makes a fork, in however many rounds, the work of
+    /// validators who signed two blocks at one height — which is what `Action::Evidence`
+    /// punishes.
     ///
     /// Returns `None` if no round in `max_rounds` commits, which happens exactly when more than
     /// a third of the power is absent: a BFT chain stops rather than risk being wrong.
@@ -395,10 +412,16 @@ impl Chain {
                 self.rounds_failed += 1;
                 continue;
             }
-            let block = self.propose(round, time);
-            let Ok((ledger, next)) = self.validate(&block) else {
-                self.rounds_failed += 1;
-                continue;
+            let (block, ledger, next) = match self.signed.take() {
+                Some(bound) => bound,
+                None => {
+                    let block = self.propose(round, time);
+                    let Ok((ledger, next)) = self.validate(&block) else {
+                        self.rounds_failed += 1;
+                        continue;
+                    };
+                    (block, ledger, next)
+                }
             };
             let hash = block.hash();
             let votes: Vec<Vote> = self
@@ -410,16 +433,18 @@ impl Chain {
                 .map(|key| Vote::signed(key, self.id, block.header.height, round, hash))
                 .collect();
             let commit = Commit { round, votes };
-            let Ok(signed) = self.rotation.check(&commit, self.id, block.header.height, hash) else {
+            let Ok(power) = self.rotation.check(&commit, self.id, block.header.height, hash) else {
                 self.rounds_failed += 1;
+                // The proposer signed it if nobody else did, so from here on it is the block.
+                self.signed = Some((block, ledger, next));
                 continue;
             };
             let committed = Committed {
                 height: block.header.height,
                 round,
                 txs: block.txs.len(),
-                proposer,
-                signed_permille: signed * 1000 / self.rotation.total_power().max(1),
+                proposer: block.header.proposer,
+                signed_permille: power * 1000 / self.rotation.total_power().max(1),
             };
             let mut block = block;
             block.commit = commit;
@@ -443,17 +468,13 @@ impl Chain {
         if first.header != genesis_header(genesis, id, &ledger, &rotation) || !first.txs.is_empty() {
             return Err((0, Invalid::NotGenesis));
         }
-        rotation
-            .check(&first.commit, id, 0, first.hash())
-            .map_err(|e| (0, Invalid::Commit(e)))?;
+        made_final(&rotation, &first.commit, &first.header).map_err(|e| (0, e))?;
         for pair in blocks.windows(2) {
             let (tip, block) = (&pair[0], &pair[1]);
             let height = block.header.height;
             let (next_ledger, next_rotation) =
                 next_state(&ledger, &rotation, tip, id, block, None).map_err(|e| (height, e))?;
-            rotation
-                .check(&block.commit, id, height, block.hash())
-                .map_err(|e| (height, Invalid::Commit(e)))?;
+            made_final(&rotation, &block.commit, &block.header).map_err(|e| (height, e))?;
             ledger = next_ledger;
             rotation = next_rotation;
         }
@@ -498,6 +519,17 @@ impl Chain {
             .find(|b| b.txs.iter().any(|t| t.id() == *id))
             .map(|b| b.header.height)
     }
+}
+
+/// Whether a commit makes a header final by a set: more than two thirds of its power signed
+/// exactly this block, at the header's chain and height, in a round no earlier than the one
+/// the block was put forward in. Returns the power that signed.
+pub(crate) fn made_final(set: &ValidatorSet, commit: &Commit, header: &Header) -> Result<u64, Invalid> {
+    if commit.round < header.round {
+        return Err(Invalid::SignedBeforeProposed);
+    }
+    set.check(commit, header.chain, header.height, header.hash())
+        .map_err(Invalid::Commit)
 }
 
 fn powers(rotation: &ValidatorSet) -> Vec<(Address, u64)> {

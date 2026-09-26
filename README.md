@@ -216,7 +216,7 @@ tokens against attested reserves
 </td></tr>
 </table>
 
-**841 tests.** Most of them are about a claim rather than a function.
+**844 tests.** Most of them are about a claim rather than a function.
 
 ---
 
@@ -467,7 +467,7 @@ Nothing below is scheduled:
 
 ── the Wickport Ledger ──
   founded in year 418 by Wickport, Stanwick, Haltor, Marlscar, Twyfell, Wenmouth
-  height 2196 · 7 validators · 60 rounds lost · 0 stalls · 0 transactions refused
+  height 2196 · 7 validators · 56 rounds lost · 0 stalls · 0 transactions refused
   WENT: 660,056,056,304 in circulation, 660,056,056,304 held in reserve and attested by Stanwick — backed 1.0000
   paying abroad costs 1.7% of the payment now, against 9.0% through houses alone
   replayed from genesis: 2197 blocks, every signature and root checked, in 4.0s — it holds
@@ -479,9 +479,11 @@ against the RFC vectors and OpenSSL; Byzantine-fault-tolerant proof of stake, wi
 final once two thirds of the stake has signed it; and a whole history that replays from
 genesis, every signature and root rechecked, before the report says a word about it — and that
 can be followed by its headers alone, as a light client follows a real chain. A validator
-caught signing a block twice loses a twentieth of its stake and that key's seat for good, comes
-back if at all under a key it keeps for staking, and the others bond what keeps every country
-within its three fifths of the stake. With `--html` the page shows all of it, checks the latest
+caught signing two blocks at one height, in one round or two, loses a twentieth of its stake and
+that key's seat for good, comes back if at all under a key it keeps for staking, and the others
+bond what keeps every country within its three fifths of the stake. Two final blocks at one
+height would take more than a third of the stake signing both, and a light client shown both
+names every one of them. With `--html` the page shows all of it, checks the latest
 block in your own browser with the browser's own SHA-256 and Ed25519, and follows the last
 forty-eight by their headers alone, as a light client would. A world of one country never
 builds one — it has a house everybody can pay through.
@@ -497,7 +499,7 @@ chain file wickport.chain: 22.1 MB
   replayed from its genesis: every signature and root checked, in 4.0s — it holds
   coin: 23,494 in existence (18,917 at genesis, 4,749 issued since, 172 burned); 7 validators, 25 accounts
   WENT: 660,056,056,304 in circulation, 660,056,056,304 held in reserve as its attestor last said
-  it carries 49,008 token payments, 14,133 mints, 12,419 swaps of coin for tokens, 5,902 redemptions, 4,332 attestations, 31 coin transfers, 4 stakes bonded, 3 stakes unbonded, 1 piece of evidence, 1 token issued
+  it carries 49,008 token payments, 14,148 mints, 12,364 swaps of coin for tokens, 5,885 redemptions, 4,328 attestations, 31 coin transfers, 4 stakes bonded, 3 stakes unbonded, 1 piece of evidence, 1 token issued
 ```
 
 ---

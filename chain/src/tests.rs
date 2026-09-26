@@ -1,6 +1,6 @@
 //! What a chain claims to be, checked as claims rather than as functions.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::state::monthly;
 use crate::*;
@@ -547,9 +547,11 @@ fn the_chain_stops_rather_than_split_when_half_are_absent() {
         .step(world.time, &world.keys, &|v, _| !gone.contains(v), 8);
     assert_eq!(outcome, None, "half the stake cannot finalise anything");
     assert_eq!(world.chain.height(), 0);
-    // They come back, and it carries on from where it stopped.
+    // They come back, and it carries on from where it stopped — with the block the half that
+    // stayed had already signed, put forward a month before, since they will sign no other.
     world.everybody();
     assert_eq!(world.chain.height(), 1);
+    assert_eq!(world.chain.tip().header.time, MONTH);
 }
 
 /// A proposer who puts a bad transaction in a block gets no signatures for it: the honest
@@ -658,6 +660,121 @@ fn a_validator_who_signs_twice_loses_stake_and_its_seat() {
     assert_eq!(world.chain.submit(same), Err(Refusal::BadEvidence));
     assert_eq!(world.chain.ledger.broken_law(), None);
     assert_eq!(world.chain.verify(), Ok(()));
+}
+
+/// A validator signs one block a height. So when a round fails after some have signed it — too
+/// few at their posts to make it final — the next proposer does not cut a block of their own,
+/// which those who signed could not sign; they put the same one forward again, and it is final
+/// in a later round than it was proposed in. A commit from a round before its block was put
+/// forward is no commit.
+#[test]
+fn a_block_somebody_signed_is_the_block_its_height_commits() {
+    let mut world = found_with(&[25, 25, 25, 25]);
+    world.everybody();
+    world.time += MONTH;
+    let first = world.chain.propose(0, world.time);
+    let proposer = first.header.proposer;
+    let other = world
+        .chain
+        .rotation
+        .members
+        .iter()
+        .map(|v| v.address)
+        .find(|a| *a != proposer)
+        .unwrap();
+    // In round zero only the proposer and one other are at their posts: half, not a quorum.
+    let there = |v: &Address, round: u32| round > 0 || *v == proposer || *v == other;
+    let committed = world
+        .chain
+        .step(world.time, &world.keys, &there, 8)
+        .expect("everybody is back for round one");
+    let tip = world.chain.tip();
+    assert_eq!(tip.header, first.header, "the block signed in round zero, not a new one");
+    assert_eq!((committed.round, tip.commit.round), (1, 1));
+    assert_eq!(committed.proposer, proposer, "still the round-zero proposer's block");
+    assert_eq!(world.chain.verify(), Ok(()));
+    assert_eq!(follow(&world.chain.genesis, &world.chain.light_blocks()), Ok(2));
+
+    // A block put forward in round one, and signed by everybody — once as if in round zero.
+    world.time += MONTH;
+    let late = world.chain.propose(1, world.time);
+    let (id, hash) = (world.chain.id, late.hash());
+    let signed_in = |round| Commit {
+        round,
+        votes: world
+            .validators
+            .iter()
+            .map(|k| Vote::signed(k, id, 3, round, hash))
+            .collect(),
+    };
+    let (mut early, mut on_time) = (late.clone(), late);
+    early.commit = signed_in(0);
+    on_time.commit = signed_in(1);
+    assert_eq!(world.chain.accept(early), Err(Invalid::SignedBeforeProposed));
+    assert_eq!(world.chain.accept(on_time), Ok(()));
+}
+
+/// A fork is more than a third of the stake caught in the act. Two validators with half the
+/// power sign two blocks at one height: one in round zero with an honest validator who saw only
+/// that, and another in round one with the other honest validator, who saw only that. Both are
+/// final, and each history is one a light client follows. Shown both, it names the two — not
+/// either honest validator — with the votes that prove it; and either side's chain, shown those
+/// votes, burns their stake, though they were cast in different rounds.
+#[test]
+fn a_fork_names_more_than_a_third_of_the_stake() {
+    let mut world = found_with(&[25, 25, 25, 25]);
+    world.everybody();
+    let trusted = world.chain.light_block(1).unwrap();
+    let (mut left, mut right) = (world.chain.clone(), world.chain.clone());
+    let (id, time) = (world.chain.id, 2 * MONTH);
+    let (cheats, honest) = world.validators.split_at(2);
+    let signed = |mut block: Block, round: u32, by: &[&SigningKey]| {
+        let hash = block.hash();
+        block.commit = Commit {
+            round,
+            votes: by.iter().map(|k| Vote::signed(k, id, 2, round, hash)).collect(),
+        };
+        block
+    };
+    let one = signed(left.propose(0, time), 0, &[&cheats[0], &cheats[1], &honest[0]]);
+    let two = signed(right.propose(1, time), 1, &[&cheats[0], &cheats[1], &honest[1]]);
+    assert_ne!(one.hash(), two.hash());
+    left.accept(one).expect("three quarters signed it");
+    right.accept(two).expect("and three quarters signed this");
+
+    let (one, two) = ([left.light_block(2).unwrap()], [right.light_block(2).unwrap()]);
+    assert_eq!(follow_from(&trusted, &one), Ok(2));
+    assert_eq!(follow_from(&trusted, &two), Ok(2));
+    assert_eq!(fork(&trusted, &one, &one), Ok(None), "a history is no fork of itself");
+    let fork = fork(&trusted, &one, &two).unwrap().expect("two blocks at height two");
+    assert_eq!(fork.height, 2);
+    let named: BTreeSet<PublicKey> = fork.culprits.iter().map(|(v, _)| v.validator).collect();
+    let guilty: BTreeSet<PublicKey> = cheats.iter().map(|k| k.public()).collect();
+    assert_eq!(named, guilty, "the two who signed both, and nobody who signed one");
+    assert!(3 * fork.power > fork.total, "{} of {} is not more than a third", fork.power, fork.total);
+
+    for side in [&mut left, &mut right] {
+        let accuser = world.people[0].clone();
+        for (first, second) in &fork.culprits {
+            assert_ne!(first.round, second.round);
+            let nonce = side.next_nonce(&Address::of(&accuser.public()));
+            let evidence = Action::Evidence {
+                first: Box::new(first.clone()),
+                second: Box::new(second.clone()),
+            };
+            side.submit(Transaction::signed(&accuser, id, nonce, COIN / 10_000, evidence))
+                .expect("two blocks at one height, in two rounds, is the offence");
+        }
+        side.step(3 * MONTH, &world.keys, &|_, _| true, 8).expect("still a quorum");
+        for cheat in cheats {
+            let account = side.ledger.account(&Address::of(&cheat.public())).unwrap();
+            assert!(account.jailed);
+            assert_eq!(account.bonded, 25 * COIN - 25 * COIN * 50 / 1000);
+            assert!(side.rotation.find(&cheat.public()).is_none());
+        }
+        assert_eq!(side.ledger.slashed, 2 * (25 * COIN * 50 / 1000));
+        assert_eq!(side.verify(), Ok(()));
+    }
 }
 
 #[test]
@@ -1076,9 +1193,10 @@ fn the_laws_hold_whatever_is_sent() {
                     // A validator's two signatures at some height: for two blocks, or one twice.
                     let cheat = &world.validators[draw(world.validators.len() as u64) as usize];
                     let height = draw(world.chain.height() + 1);
-                    let first = Box::new(Vote::signed(cheat, id, height, 0, Digest::of(b"one")));
+                    let rounds = (draw(3) as u32, draw(3) as u32);
+                    let first = Box::new(Vote::signed(cheat, id, height, rounds.0, Digest::of(b"one")));
                     let block: &[u8] = if sensible { b"two" } else { b"one" };
-                    let second = Box::new(Vote::signed(cheat, id, height, 0, Digest::of(block)));
+                    let second = Box::new(Vote::signed(cheat, id, height, rounds.1, Digest::of(block)));
                     Action::Evidence { first, second }
                 }
                 _ => Action::Pay {

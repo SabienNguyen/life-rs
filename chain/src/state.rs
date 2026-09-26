@@ -241,8 +241,9 @@ pub struct Ledger {
     pub issued: u128,
     pub slashed: u128,
     pub fees_paid: u128,
-    /// Offences already punished, so the same two votes cannot be shown twice.
-    punished: BTreeSet<(Address, u64, u32)>,
+    /// Offences already punished — who, and at which height — so one offence is punished once,
+    /// however many pairs of its votes are shown.
+    punished: BTreeSet<(Address, u64)>,
 }
 
 impl Ledger {
@@ -550,7 +551,7 @@ impl Ledger {
             }
             Action::Evidence { first, .. } => {
                 let offender = Address::of(&first.validator);
-                self.punished.insert((offender, first.height, first.round));
+                self.punished.insert((offender, first.height));
                 let permille = self.params.slash_permille;
                 let account = self.accounts.get_mut(&offender).expect("judged to exist");
                 let mut burned = 0;
@@ -594,20 +595,24 @@ impl Ledger {
         }
     }
 
-    /// Whether two votes prove a validator signed two blocks at once, and whether that is
+    /// Whether two votes prove a validator signed two blocks at one height, and whether that is
     /// still something the chain can punish.
+    ///
+    /// The rounds need not match. A validator signs one block a height, so signing another in a
+    /// later round is the same offence as signing it in the same one — and it has to be, or a
+    /// fork spread over two rounds would be made by more than a third of the stake with nothing
+    /// anybody could show against them.
     fn judge(&self, first: &Vote, second: &Vote) -> Result<(), Refusal> {
-        let same_slot = first.chain == self.chain
+        let two_blocks = first.chain == self.chain
             && second.chain == self.chain
             && first.validator == second.validator
             && first.height == second.height
-            && first.round == second.round
             && first.block != second.block;
-        if !same_slot || !first.signature_holds() || !second.signature_holds() {
+        if !two_blocks || !first.signature_holds() || !second.signature_holds() {
             return Err(Refusal::BadEvidence);
         }
         let offender = Address::of(&first.validator);
-        if self.punished.contains(&(offender, first.height, first.round)) {
+        if self.punished.contains(&(offender, first.height)) {
             return Err(Refusal::AlreadyPunished);
         }
         // Stake that has been released can no longer be reached; that is what the unbonding
@@ -690,8 +695,8 @@ impl Ledger {
             .u128(self.slashed)
             .u128(self.fees_paid)
             .u32(self.punished.len() as u32);
-        for (address, height, round) in &self.punished {
-            totals.fixed(&address.0).u64(*height).u32(*round);
+        for (address, height) in &self.punished {
+            totals.fixed(&address.0).u64(*height);
         }
         leaves.push(totals.finish());
         leaves

@@ -309,6 +309,111 @@ fn the_largest_country_cannot_finalise_a_block_alone() {
     assert!(network.chain.rotation.check(&everybody, id, height, block).is_ok());
 }
 
+/// What the report says forging the world's chain would take is what it takes. The validators
+/// with most stake — as few as can do it, so that the rest can be split into two sides that each
+/// make a quorum with them — sign two blocks at the next height, and each side of the rest signs
+/// one, having seen only that: two histories, both final. A light client shown both names exactly
+/// those who signed both, with more than a third of the power — never less than the report's
+/// figure — and the chain, shown what it names by any house at all, jails them and burns at least
+/// a twentieth of that.
+#[test]
+fn whoever_forks_the_worlds_chain_is_named_and_burned() {
+    use chain::{Action, Address, Asset, COIN, Commit, Transaction, Vote};
+    use std::collections::BTreeSet;
+
+    let world = chained();
+    let network = &world.networks[0];
+    let chain = &network.chain;
+    let mut rest = network::signers(world, 0);
+    rest.sort_by_key(|(_, key, power)| (std::cmp::Reverse(*power), key.public()));
+    let total: u64 = rest.iter().map(|(_, _, power)| power).sum();
+    assert_eq!(total, chain.rotation.total_power(), "every validator has a house");
+    let mut cheats = Vec::new();
+    let (one_side, other_side) = loop {
+        let power: u64 = cheats.iter().map(|(_, _, power)| power).sum();
+        let (mut one, mut other, mut a, mut b) = (Vec::new(), Vec::new(), 0, 0);
+        for signer in &rest {
+            if a <= b {
+                a += signer.2;
+                one.push(signer.clone());
+            } else {
+                b += signer.2;
+                other.push(signer.clone());
+            }
+        }
+        if 3 * (power + a.min(b)) > 2 * total {
+            break (one, other);
+        }
+        cheats.push(rest.remove(0));
+    };
+
+    let height = chain.height() + 1;
+    let time = chain.tip().header.time + 1;
+    let signed = |mut block: chain::Block, by: Vec<&(usize, chain::SigningKey, u64)>| {
+        let hash = block.hash();
+        block.commit = Commit {
+            round: 0,
+            votes: by.iter().map(|(_, key, _)| Vote::signed(key, chain.id, height, 0, hash)).collect(),
+        };
+        block
+    };
+    let (mut left, mut right) = (chain.clone(), chain.clone());
+    let one = signed(chain.propose(0, time), cheats.iter().chain(&one_side).collect());
+    let two = signed(chain.propose(0, time + 1), cheats.iter().chain(&other_side).collect());
+    left.accept(one).expect("one side's block is final");
+    right.accept(two).expect("and so is the other's");
+
+    let trusted = chain.light_block(chain.height()).unwrap();
+    let fork = chain::fork(
+        &trusted,
+        &[left.light_block(height).unwrap()],
+        &[right.light_block(height).unwrap()],
+    )
+    .unwrap()
+    .expect("two final blocks at one height");
+    let named: BTreeSet<_> = fork.culprits.iter().map(|(vote, _)| vote.validator).collect();
+    let guilty: BTreeSet<_> = cheats.iter().map(|(_, key, _)| key.public()).collect();
+    assert_eq!(named, guilty, "those who signed both, and nobody who signed one");
+    assert!(!one_side.is_empty() && !other_side.is_empty(), "honest validators on both sides");
+    assert!(3 * fork.power > fork.total);
+    assert!(fork.power as f64 >= (fork.total as f64 / 3.0).ceil(), "the report's figure is the least it takes");
+
+    let fee = left.params().min_fee;
+    let fees = fee * fork.culprits.len() as u128;
+    let (_, accuser) = network::house_keys(world, 0)
+        .into_iter()
+        .find(|(_, key)| {
+            !guilty.contains(&key.public())
+                && left.pending_balance(&Address::of(&key.public()), Asset::Coin) >= fees
+        })
+        .expect("a house with coin for the fees");
+    for (first, second) in &fork.culprits {
+        let nonce = left.next_nonce(&Address::of(&accuser.public()));
+        let evidence = Action::Evidence {
+            first: Box::new(first.clone()),
+            second: Box::new(second.clone()),
+        };
+        left.submit(Transaction::signed(&accuser, chain.id, nonce, fee, evidence))
+            .expect("what the fork names, the chain takes");
+    }
+    let keys = network::signers(world, 0)
+        .into_iter()
+        .map(|(_, key, _)| (Address::of(&key.public()), key))
+        .collect();
+    left.step(time + 30 * 86_400, &keys, &|_, _| true, 8).expect("everybody at their posts");
+    for (_, key, _) in &cheats {
+        assert!(left.ledger.account(&Address::of(&key.public())).unwrap().jailed);
+    }
+    let burned = left.ledger.slashed - chain.ledger.slashed;
+    assert!(
+        burned >= fork.power as u128 * COIN / 20,
+        "burned {} of a stake of {} coin",
+        burned / COIN,
+        fork.power
+    );
+    assert_eq!(left.ledger.broken_law(), None);
+}
+
 /// The cap moves stake from the country over it to the others in proportion to what they hold,
 /// and leaves a world where nobody is over it alone.
 #[test]

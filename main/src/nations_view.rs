@@ -636,11 +636,17 @@ fn ledger(world: &Nations, at: usize, network: &Network, checked: Option<&Checke
 
     let tip = chain.tip();
     let (year, month) = when(tip.header.time);
+    // A block put forward in one round can be final in a later one, when a round between failed
+    // after somebody had signed it (`Chain::step`).
+    let rounds = if tip.commit.round == tip.header.round {
+        format!("round {}", tip.commit.round)
+    } else {
+        format!("put forward in round {} and final in round {}", tip.header.round, tip.commit.round)
+    };
     out.push(format!(
-        "  the latest block, #{}, year {year} month {month}: proposed by {}, round {}, {} transactions, {} signatures",
+        "  the latest block, #{}, year {year} month {month}: proposed by {}, {rounds}, {} transactions, {} signatures",
         tip.header.height,
         holder(world, network, &tip.header.proposer),
-        tip.header.round,
         tip.txs.len(),
         tip.commit.votes.len()
     ));
@@ -989,7 +995,7 @@ fn network_json(world: &Nations, at: usize, network: &Network, checked: Option<&
             "[{},{},{},{},{},{},{convicted}]",
             b.header.height,
             b.header.time / 2_629_800,
-            b.header.round,
+            b.commit.round,
             address_town(&b.header.proposer),
             b.txs.len(),
             b.commit.votes.len()
@@ -1025,9 +1031,10 @@ fn network_json(world: &Nations, at: usize, network: &Network, checked: Option<&
             )
         }));
         format!(
-            "{{\"height\":{},\"month\":{},\"round\":{},\"proposer\":{},\"hash\":{},\"parent\":{},\"txRoot\":{},\"stateRoot\":{},\"validators\":{},\"lastCommit\":{},\"txs\":{txs},\"votes\":{votes}}}",
+            "{{\"height\":{},\"month\":{},\"round\":{},\"proposedIn\":{},\"proposer\":{},\"hash\":{},\"parent\":{},\"txRoot\":{},\"stateRoot\":{},\"validators\":{},\"lastCommit\":{},\"txs\":{txs},\"votes\":{votes}}}",
             b.header.height,
             b.header.time / 2_629_800,
+            b.commit.round,
             b.header.round,
             address_town(&b.header.proposer),
             quoted(&b.hash().to_string()),
