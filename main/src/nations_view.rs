@@ -502,6 +502,17 @@ fn ledger(world: &Nations, at: usize, network: &Network, checked: Option<&Checke
         grouped(network.coin_price.round().max(0.0) as u128),
         reserve.clone().unwrap_or_default()
     ));
+    // What forging would take: two final blocks at one height need more than a third of the
+    // stake to sign both, and the evidence burns a twentieth of whatever did.
+    if let Some(token) = network.token.as_ref() {
+        let third = chain.rotation.total_power() as f64 / 3.0;
+        let level = world.currencies[token.currency].level.max(1e-9);
+        out.push(format!(
+            "  to finalise two blocks at one height, validators with more than a third of the stake — {} coin, worth {} years of food — would have to sign both, and the evidence would burn a twentieth of it",
+            grouped(third.ceil() as u128),
+            amount(third * network.coin_price / level)
+        ));
+    }
     if let Some(token) = network.token.as_ref()
         && let Some(on_chain) = chain.token(token.id)
     {
