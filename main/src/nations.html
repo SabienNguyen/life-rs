@@ -5,101 +5,194 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Markets and Ledgers</title>
 <style>
+/* Ledger paper: a pale green sheet ruled in blue-grey, figures in a monospace that lines them up,
+   headings stamped in a condensed face, and the red double rule of a ledger's margin as the one
+   mark that means "look here" — validators, the moments that mattered, anything that fails. */
 :root {
-  --bg: #f6f3ec;
-  --panel: #fffdf8;
-  --ink: #23201a;
-  --muted: #6d665a;
-  --rule: #ddd5c6;
-  --gold: #a8741a;
-  --ember: #b3472e;
-  --sea: #cfdde3;
-  --land: #e7dfcc;
-  --chart1: #2f6690;
-  --chart2: #a8741a;
-  --chart3: #3a7d44;
-  --chart4: #b3472e;
+  --bg: #edf2e8;
+  --panel: #f7faf3;
+  --ink: #17231c;
+  --muted: #5b6a60;
+  --rule: #c3d0c4;
+  --ruled: #dbe4d7;
+  --mark: #b8322b;
+  --good: #2f7d46;
+  --fail: #b8322b;
+  --sea: #d4e1e6;
+  --land: #e1e4cf;
+  --chart1: #2f5f8a;
+  --chart2: #9a6a14;
+  --chart3: #3d8a55;
+  --chart4: #b8322b;
+  --display: "Bahnschrift", "DIN Alternate", "DIN Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --figures: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #15171a;
-    --panel: #1d2024;
-    --ink: #ece7dc;
-    --muted: #a39c8f;
-    --rule: #33373d;
-    --gold: #e0a84a;
-    --ember: #e07a5f;
-    --sea: #1f2d36;
-    --land: #2c2a25;
-    --chart1: #6aa7d8;
-    --chart2: #e0a84a;
-    --chart3: #7cc48a;
-    --chart4: #e07a5f;
+    color-scheme: dark;
+    --bg: #0e1411;
+    --panel: #151d18;
+    --ink: #e3ebe2;
+    --muted: #93a396;
+    --rule: #2c3a31;
+    --ruled: #1c261f;
+    --mark: #e5675e;
+    --good: #6cc28a;
+    --fail: #e5675e;
+    --sea: #13212a;
+    --land: #25302a;
+    --chart1: #7aa7d1;
+    --chart2: #d9a441;
+    --chart3: #6cc28a;
+    --chart4: #e5675e;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #15171a;
-  --panel: #1d2024;
-  --ink: #ece7dc;
-  --muted: #a39c8f;
-  --rule: #33373d;
-  --gold: #e0a84a;
-  --ember: #e07a5f;
-  --sea: #1f2d36;
-  --land: #2c2a25;
-  --chart1: #6aa7d8;
-  --chart2: #e0a84a;
-  --chart3: #7cc48a;
-  --chart4: #e07a5f;
+  color-scheme: dark;
+  --bg: #0e1411;
+  --panel: #151d18;
+  --ink: #e3ebe2;
+  --muted: #93a396;
+  --rule: #2c3a31;
+  --ruled: #1c261f;
+  --mark: #e5675e;
+  --good: #6cc28a;
+  --fail: #e5675e;
+  --sea: #13212a;
+  --land: #25302a;
+  --chart1: #7aa7d1;
+  --chart2: #d9a441;
+  --chart3: #6cc28a;
+  --chart4: #e5675e;
 }
 * { box-sizing: border-box; }
 body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  font: 15px/1.5 Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+  font: 15px/1.55 var(--body);
 }
-header, main { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
-header { padding-top: 28px; }
-h1 { font-size: 30px; margin: 0 0 4px; font-weight: normal; letter-spacing: 0.01em; }
-h2 { font-size: 19px; font-weight: normal; margin: 0 0 10px; border-bottom: 1px solid var(--rule); padding-bottom: 6px; }
-.sub { color: var(--muted); margin: 0 0 18px; }
-.strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 20px; }
-.stat { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 10px 12px; }
-.stat b { display: block; font-size: 21px; font-weight: normal; }
-.stat span { color: var(--muted); font-size: 13px; }
-section { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 16px; margin-bottom: 18px; }
-.two { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 18px; }
-@media (max-width: 860px) { .two { grid-template-columns: 1fr; } }
+/* The margin of a ledger page: two red rules down the left edge, inside the gutter. */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 7px;
+  width: 4px;
+  border-left: 1px solid var(--mark);
+  border-right: 1px solid var(--mark);
+  opacity: 0.5;
+  pointer-events: none;
+}
+header, main { max-width: 1180px; margin: 0 auto; padding-inline: 24px; }
+header { padding-block: 28px 4px; }
+h1 { font: 600 34px/1.1 var(--display); letter-spacing: 0.01em; margin: 0 0 6px; text-wrap: balance; }
+h2 {
+  font: 600 14px/1.3 var(--display);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  margin: 0 0 12px;
+  padding-bottom: 6px;
+  border-bottom: 3px double var(--rule);
+  text-wrap: balance;
+}
+h3 { font: 600 22px/1.2 var(--display); letter-spacing: 0.01em; margin: 4px 0 10px; text-wrap: balance; }
+.sub { color: var(--muted); margin: 0 0 18px; max-width: 70ch; }
+/* The totals line: one ruled row, a column per figure, as a ledger carries its totals. */
+.strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  background: var(--rule);
+  border-block: 1px solid var(--rule);
+  margin-bottom: 26px;
+}
+.stat { flex: 1 1 150px; background: var(--bg); padding: 10px 12px 12px; }
+.stat b { display: block; font: 500 22px/1.25 var(--figures); font-variant-numeric: tabular-nums; }
+.stat span { color: var(--muted); font-size: 12.5px; }
+section { padding-block: 4px 30px; }
+.two { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 30px; }
+@media (max-width: 860px) { .two { grid-template-columns: 1fr; gap: 0; } }
 svg { display: block; width: 100%; height: auto; }
-.legend { display: flex; flex-wrap: wrap; gap: 12px; color: var(--muted); font-size: 13px; margin-top: 6px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--muted); font-size: 12.5px; margin-top: 8px; }
 .legend i { display: inline-block; width: 12px; height: 3px; vertical-align: middle; margin-right: 5px; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
-th { text-align: left; color: var(--muted); font-weight: normal; border-bottom: 1px solid var(--rule); padding: 4px 6px; }
-td { border-bottom: 1px solid var(--rule); padding: 4px 6px; vertical-align: top; }
-td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
-tr.pick { cursor: pointer; }
-tr.pick:hover td, tr.on td { background: color-mix(in srgb, var(--gold) 12%, transparent); }
-.scroll { overflow-x: auto; }
-.events { max-height: 360px; overflow-y: auto; margin: 0; padding: 0; list-style: none; }
-.events li { padding: 4px 0; border-bottom: 1px dotted var(--rule); }
-.events .y { color: var(--gold); display: inline-block; min-width: 72px; font-variant-numeric: tabular-nums; }
-.mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px; word-break: break-all; }
-.muted { color: var(--muted); }
-.ok { color: var(--chart3); }
-.bad { color: var(--ember); }
-.blocks { display: flex; flex-wrap: wrap; gap: 3px; margin: 8px 0 12px; }
-.blocks button {
-  border: 1px solid var(--rule); background: var(--bg); color: var(--ink);
-  font: 12px ui-monospace, Menlo, monospace; padding: 3px 6px; border-radius: 4px; cursor: pointer;
+th {
+  text-align: left;
+  color: var(--muted);
+  font: 600 11.5px/1.3 var(--display);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  border-bottom: 1px solid var(--rule);
+  padding: 6px;
 }
-.blocks button.on { border-color: var(--gold); background: color-mix(in srgb, var(--gold) 18%, transparent); }
-.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 14px; font-size: 14px; }
-.kv div:nth-child(odd) { color: var(--muted); }
-.pill { display: inline-block; border: 1px solid var(--rule); border-radius: 999px; padding: 0 8px; font-size: 12px; color: var(--muted); }
-#tip { position: fixed; pointer-events: none; background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 6px 9px; font-size: 13px; display: none; max-width: 260px; }
-footer { color: var(--muted); font-size: 13px; text-align: center; padding: 10px 16px 30px; }
-.toggle { float: right; border: 1px solid var(--rule); background: var(--panel); color: var(--ink); border-radius: 6px; padding: 3px 9px; cursor: pointer; font: inherit; font-size: 13px; }
+td { border-bottom: 1px solid var(--ruled); padding: 5px 6px; vertical-align: top; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+td.n { font-family: var(--figures); font-size: 13px; }
+tr.pick { cursor: pointer; }
+tr.pick:hover td, tr.on td { background: color-mix(in srgb, var(--mark) 8%, transparent); }
+.scroll { overflow-x: auto; }
+.events { max-height: 380px; overflow-y: auto; margin: 0; padding: 0; list-style: none; }
+.events li { padding: 5px 0; border-bottom: 1px solid var(--ruled); }
+.events .y { color: var(--mark); display: inline-block; min-width: 78px; font: 13px var(--figures); font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--figures); font-size: 12.5px; word-break: break-all; }
+.muted { color: var(--muted); }
+.ok { color: var(--good); }
+.bad { color: var(--fail); }
+.blocks { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 12px; }
+.blocks button {
+  border: 1px solid var(--rule);
+  background: var(--panel);
+  color: var(--ink);
+  font: 12px var(--figures);
+  padding: 3px 6px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+.blocks button.on { border-color: var(--mark); color: var(--mark); background: color-mix(in srgb, var(--mark) 10%, var(--panel)); }
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 3px 16px; font-size: 14px; }
+.kv > div:nth-child(odd) { color: var(--muted); }
+.pill {
+  display: inline-block;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  padding: 0 7px;
+  font: 12px var(--figures);
+  color: var(--muted);
+  vertical-align: middle;
+  text-transform: none;
+  letter-spacing: 0;
+}
+#tip {
+  position: fixed;
+  pointer-events: none;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  padding: 6px 9px;
+  font-size: 13px;
+  display: none;
+  max-width: 260px;
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--ink) 14%, transparent);
+}
+footer { color: var(--muted); font-size: 13px; text-align: center; padding: 10px 16px 34px; }
+.toggle {
+  float: right;
+  border: 1px solid var(--rule);
+  background: var(--panel);
+  color: var(--ink);
+  border-radius: 2px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font: 12.5px var(--body);
+}
+button:focus-visible, input:focus-visible, tr.pick:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; }
+@media (max-width: 480px) {
+  header, main { padding-inline: 18px; }
+  h1 { font-size: 28px; }
+}
 </style>
 </head>
 <body>
@@ -119,7 +212,7 @@ footer { color: var(--muted); font-size: 13px; text-align: center; padding: 10px
         <span><i style="background:var(--chart2)"></i>people (log)</span>
         <span><i style="background:var(--chart3)"></i>farmers</span>
         <span><i style="background:var(--chart4)"></i>payments abroad on a chain</span>
-        <span><i style="background:var(--gold);width:3px;height:10px"></i>money, the trap, a chain</span>
+        <span><i style="background:var(--mark);width:3px;height:10px"></i>money, the trap, a chain</span>
       </div>
       <p class="muted" style="font-size:13px;margin:6px 0 0">Income and people on log scales, each running from its least to its most; the shares from none to all.</p>
     </section>
@@ -253,7 +346,7 @@ function drawChart() {
   // The moments that mattered, as ticks along the top, each saying what it was.
   WORLD.events.forEach(function (e) {
     if (!/strikes|trap opens|found the|first money/.test(e.text)) return;
-    const tick = el("line", { x1: x(e.year), y1: 4, x2: x(e.year), y2: T - 4, stroke: "var(--gold)", "stroke-width": 3 }, svg);
+    const tick = el("line", { x1: x(e.year), y1: 4, x2: x(e.year), y2: T - 4, stroke: "var(--mark)", "stroke-width": 3 }, svg);
     const label = el("title", {}, tick);
     label.textContent = "year " + e.year + ": " + e.text;
   });
@@ -276,14 +369,14 @@ drawChart();
 })();
 
 // ---- the map ---------------------------------------------------------------------------
-const PALETTE = ["#2f6690", "#a8741a", "#3a7d44", "#b3472e", "#6b4c9a", "#1f8a8a", "#8a6d1f", "#9a3b6b", "#4c6b1f", "#5a5a5a"];
+const PALETTE = ["#2f6690", "#a8741a", "#3a7d44", "#7b4f9e", "#1f8a8a", "#a44f7a", "#6b7f22", "#8a6d1f", "#56606b", "#4c6bb3"];
 function countryColour(c) { return PALETTE[c % PALETTE.length]; }
 let pickedCountry = null;
 function drawMap() {
   const svg = $("map");
   while (svg.firstChild) svg.removeChild(svg.firstChild);
   const W = 720, H = 360;
-  el("rect", { x: 0, y: 0, width: W, height: H, fill: "var(--sea)", rx: 8 }, svg);
+  el("rect", { x: 0, y: 0, width: W, height: H, fill: "var(--sea)", rx: 2 }, svg);
   // Centre on the towns: whatever longitude is opposite the widest stretch without one goes in
   // the middle, so a world that straddles the date line is not cut in two.
   const lons = WORLD.towns.map(function (t) { return t.lon; }).sort(function (a, b) { return a - b; });
@@ -376,7 +469,7 @@ function drawMap() {
     const r = 2.5 + 6.5 * Math.sqrt(t.people / most);
     const dim = pickedCountry !== null && pickedCountry !== t.country;
     const x = px(t.lon), y = py(t.lat);
-    if (validators.has(i)) el("circle", { cx: x, cy: y, r: r + 4, fill: "none", stroke: "var(--gold)", "stroke-width": 1.6, "stroke-dasharray": "3 2", opacity: dim ? 0.3 : 1 }, svg);
+    if (validators.has(i)) el("circle", { cx: x, cy: y, r: r + 4, fill: "none", stroke: "var(--mark)", "stroke-width": 1.6, "stroke-dasharray": "3 2", opacity: dim ? 0.3 : 1 }, svg);
     const isHub = WORLD.states[t.state] && WORLD.states[t.state].hub === i;
     if (isHub) el("circle", { cx: x, cy: y, r: r + 1.8, fill: "none", stroke: countryColour(t.country), "stroke-width": 1.2, opacity: dim ? 0.2 : 0.95 }, svg);
     const circle = el("circle", { cx: x, cy: y, r: r, fill: countryColour(t.country),
@@ -389,14 +482,14 @@ function drawMap() {
         "<br>state of " + esc(hub.name) + ", " + esc(c.name) +
         "<br>farmers " + pct(t.shares[0]) + ", reckoners " + pct(t.shares[3]) +
         (t.money ? "<br>trading in " + esc(t.money.medium) + " since year " + t.money.year : "<br>still bartering") +
-        (validators.has(i) ? "<br><span style='color:var(--gold)'>validates a chain</span>" : ""));
+        (validators.has(i) ? "<br><span style='color:var(--mark)'>validates a chain</span>" : ""));
     });
     circle.addEventListener("mouseleave", hideTip);
     circle.addEventListener("click", function () { pickCountry(t.country); });
   });
   $("maplegend").innerHTML = WORLD.countries.map(function (c, i) {
     return '<span><i style="background:' + countryColour(i) + ';height:10px;width:10px;border-radius:50%"></i>' + esc(c.name) + "</span>";
-  }).join("") + (validators.size ? '<span><i style="border:1px dashed var(--gold);height:10px;width:10px;border-radius:50%;background:none"></i>validators</span>' : "") +
+  }).join("") + (validators.size ? '<span><i style="border:1px dashed var(--mark);height:10px;width:10px;border-radius:50%;background:none"></i>validators</span>' : "") +
     "<span>ringed: a state's hub · lines: each town to its hub · size: people</span>";
 }
 (function () {
@@ -490,7 +583,7 @@ drawCountries();
       return "<tr><td>" + esc(townName(a.town)) + "</td><td class='n'>" + a.coin + "</td><td class='n'>" + a.staked + "</td><td class='n'>" + a.tokens + "</td></tr>";
     }).join("");
     return "<div style='margin-bottom:20px'>" +
-      "<h2>The " + esc(c.name) + " <span class='pill'>height " + c.height + "</span></h2>" +
+      "<h3>The " + esc(c.name) + " <span class='pill'>height " + c.height + "</span></h3>" +
       "<p>Founded in year " + c.founded + " by the houses of " + esc(founders) + ". " + verdict + "</p>" +
       "<div class='two'><div>" +
       "<div class='kv'><div>chain id</div><div class='mono'>" + esc(c.id) + "</div>" +
@@ -509,7 +602,7 @@ drawCountries();
       "<h2 style='margin-top:14px'>Its life, block by block</h2>" +
       "<svg id='life" + at + "' role='img' aria-label='transactions in every block since genesis'></svg>" +
       "<div class='legend'><span><i style='background:var(--chart1)'></i>transactions in the block</span>" +
-      "<span><i style='background:var(--ember);height:8px;width:8px;border-radius:50%'></i>a round lost to an absent proposer</span></div>" +
+      "<span><i style='background:var(--fail);height:8px;width:8px;border-radius:50%'></i>a round lost to an absent proposer</span></div>" +
       "<h2 style='margin-top:14px'>Blocks</h2><p class='muted'>The latest " + c.recent.length + " blocks, in full. Pick one.</p>" +
       "<div class='blocks' id='blocks" + at + "'></div><div id='block" + at + "'></div>" +
       "<h2 style='margin-top:14px'>Check it yourself</h2>" +
@@ -739,7 +832,10 @@ function drawLife(at) {
   c.blocks.forEach(function (b, i) {
     const year = yearOf(b);
     if (year % every === 0 && (i === 0 || yearOf(c.blocks[i - 1]) !== year)) {
-      const label = el("text", { x: x(b[0]), y: H - 6, "text-anchor": "middle", "font-size": 11, fill: "var(--muted)" }, svg);
+      // Anchored so the first and last labels stay inside the drawing.
+      const at = x(b[0]);
+      const anchor = at < L + 30 ? "start" : at > W - R - 30 ? "end" : "middle";
+      const label = el("text", { x: at, y: H - 6, "text-anchor": anchor, "font-size": 11, fill: "var(--muted)" }, svg);
       label.textContent = "year " + year;
     }
   });
@@ -747,7 +843,7 @@ function drawLife(at) {
   el("path", { d: d, fill: "none", stroke: "var(--chart1)", "stroke-width": 1.2 }, svg);
   c.blocks.forEach(function (b) {
     if (b[2] > 0) {
-      const dot = el("circle", { cx: x(b[0]), cy: y(b[4]), r: 3, fill: "var(--ember)" }, svg);
+      const dot = el("circle", { cx: x(b[0]), cy: y(b[4]), r: 3, fill: "var(--fail)" }, svg);
       const label = el("title", {}, dot);
       label.textContent = "block " + b[0] + ", " + monthLabel(b[1]) + ": committed in round " + b[2] + ", proposed by " + townName(b[3]);
     }
