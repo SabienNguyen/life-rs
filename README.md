@@ -216,7 +216,7 @@ tokens against attested reserves
 </td></tr>
 </table>
 
-**840 tests.** Most of them are about a claim rather than a function.
+**841 tests.** Most of them are about a claim rather than a function.
 
 ---
 
@@ -490,6 +490,15 @@ A chain is also a file. `--export-chain wickport.chain` writes a world's chain d
 genesis and every block, 22 MB for 0x11's six centuries — and `--verify-chain wickport.chain`
 checks one holding nothing else: read strictly, then every block replayed from its genesis.
 Change one bit of it anywhere and it does not check.
+
+```
+chain file wickport.chain: 22.1 MB
+  the Wickport Ledger: genesis d78fb6b57ee0…, 2197 blocks, the last at height 2196, year 600 month 12
+  replayed from its genesis: every signature and root checked, in 4.0s — it holds
+  coin: 23,494 in existence (18,917 at genesis, 4,749 issued since, 172 burned); 7 validators, 25 accounts
+  WENT: 660,056,056,304 in circulation, 660,056,056,304 held in reserve as its attestor last said
+  it carries 49,008 token payments, 14,133 mints, 12,419 swaps of coin for tokens, 5,902 redemptions, 4,332 attestations, 31 coin transfers, 4 stakes bonded, 3 stakes unbonded, 1 piece of evidence, 1 token issued
+```
 
 ---
 

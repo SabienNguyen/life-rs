@@ -5751,7 +5751,9 @@ largest founder names it — the Wickport Ledger, the Whitscar Ledger — and ev
 proportion to its business abroad, up to a point: no country's houses may hold more than three
 fifths of the stake, short of the two thirds that would finalise a block with nobody abroad
 signing. Nobody joins a ledger one of the others could keep alone, so the largest country takes
-less stake than its business would give it (§49.7).
+less stake than its business would give it (§49.7). A test tries it rather than counting it: the
+largest country's validators sign a block of their own at the next height, and their signatures
+alone do not make it final, where everybody's would.
 
 ### 49.5 The chain itself, and why it counts as one
 

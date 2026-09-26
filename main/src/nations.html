@@ -536,7 +536,7 @@ function drawCountries() {
     return '<tr class="pick' + (pickedCountry === i ? " on" : "") + '" data-c="' + i + '">' +
       "<td><span style='color:" + countryColour(i) + "'>●</span> " + esc(c.name) + "</td>" +
       '<td class="n">' + amount(c.people) + "</td>" +
-      '<td class="n">' + (c.product / Math.max(1, c.people)).toFixed(1) + "</td>" +
+      '<td class="n">' + Number(c.income).toFixed(1) + "</td>" +
       '<td class="n">' + c.towns.length + "</td>" +
       '<td class="n">' + c.states.length + "</td>" +
       "<td>" + moneyText + "</td>" +

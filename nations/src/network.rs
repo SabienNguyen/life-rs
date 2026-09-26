@@ -1119,6 +1119,28 @@ fn accuse(nations: &mut Nations, at: usize, town: usize, first: Vote, second: Vo
     }
 }
 
+/// The votes the validators due to sign the next height would give a block — all of them, or
+/// only those of one country — for tests that show what a country cannot do by itself.
+#[cfg(test)]
+pub(crate) fn votes_for(nations: &Nations, at: usize, block: Digest, of_country: Option<usize>) -> Vec<Vote> {
+    let network = &nations.networks[at];
+    let height = network.chain.height() + 1;
+    network
+        .chain
+        .rotation
+        .members
+        .iter()
+        .filter_map(|v| {
+            let town = network.town_of(&v.address)?;
+            if of_country.is_some_and(|c| nations.towns[town].country != c) {
+                return None;
+            }
+            let key = network.keys_of(town).find(|k| k.public() == v.key)?;
+            Some(Vote::signed(key, network.chain.id, height, 0, block))
+        })
+        .collect()
+}
+
 /// Make a house sign the latest block it signed a second time, for no block, as `signed_twice`
 /// does by chance — for tests, which cannot wait on chance.
 #[cfg(test)]

@@ -73,6 +73,17 @@ pub fn amount(value: f64) -> String {
     }
 }
 
+/// Income a head across some towns, in years of food, weighed by who lives where — the measure
+/// the world's own reading takes, so a country's and a state's add up to the world's.
+fn income_of(world: &Nations, towns: &[usize]) -> f64 {
+    let people: f64 = towns.iter().map(|t| world.towns[*t].people).sum();
+    towns
+        .iter()
+        .map(|t| world.towns[*t].people * world.towns[*t].income)
+        .sum::<f64>()
+        / people.max(1.0)
+}
+
 /// A number of bytes, the way a person reads one.
 pub fn size(bytes: usize) -> String {
     match bytes {
@@ -137,6 +148,13 @@ pub fn verify_file(bytes: &[u8]) -> (Vec<String>, bool) {
                     grouped(token.supply / TOKEN_UNIT),
                     grouped(token.reserves / TOKEN_UNIT)
                 ));
+            }
+            let carried: Vec<String> = tally_blocks(&blocks)
+                .into_iter()
+                .map(|(what, n)| format!("{} {what}", grouped(n as u128)))
+                .collect();
+            if !carried.is_empty() {
+                out.push(format!("  it carries {}", carried.join(", ")));
             }
             out.push(format!("  its last state root: {}", chain::hex(&last.header.state.0)));
             (out, true)
@@ -405,7 +423,7 @@ pub fn report(world: &Nations, checked: &[Checked]) -> Vec<String> {
             "  {:<14} {:>8} {:>7.1} {:>6} {:>6}  {:<22} {:>14} {:>9} {:>10} {:>9}",
             country.name,
             amount(country.people),
-            country.product / country.people.max(1.0),
+            income_of(world, &country.towns),
             country.towns.len(),
             country.states.len(),
             money,
@@ -424,6 +442,7 @@ pub fn report(world: &Nations, checked: &[Checked]) -> Vec<String> {
     out.push(String::new());
 
     out.push("── states ──".to_string());
+    out.push("  each a market area, by its hub: towns, people, and income a head in years of food".to_string());
     for country in &world.countries {
         let states: Vec<String> = country
             .states
@@ -431,12 +450,14 @@ pub fn report(world: &Nations, checked: &[Checked]) -> Vec<String> {
             .map(|s| {
                 let state = &world.states[*s];
                 let people: f64 = state.towns.iter().map(|t| world.towns[*t].people).sum();
+                let income = income_of(world, &state.towns);
                 let towns = state.towns.len();
                 format!(
-                    "{} ({towns} {}, {})",
+                    "{} ({towns} {}, {}, {:.0}×)",
                     town_name(world, state.hub),
                     if towns == 1 { "town" } else { "towns" },
-                    amount(people)
+                    amount(people),
+                    income
                 )
             })
             .collect();
@@ -655,9 +676,14 @@ fn ledger(world: &Nations, at: usize, network: &Network, checked: Option<&Checke
 /// Every transaction a chain has carried since its genesis, by what it did: payments in its
 /// token, swaps of coin for it, mints, redemptions, attestations, and everything else.
 fn tally(network: &Network) -> Vec<(&'static str, usize)> {
+    tally_blocks(&network.chain.blocks)
+}
+
+/// The same for any blocks — a chain read from a file, with no world behind it.
+fn tally_blocks(blocks: &[chain::Block]) -> Vec<(&'static str, usize)> {
     let mut counts: std::collections::BTreeMap<(&'static str, &'static str), usize> =
         std::collections::BTreeMap::new();
-    for block in &network.chain.blocks {
+    for block in blocks {
         for tx in &block.txs {
             let kind = match &tx.action {
                 Action::Pay {
@@ -838,11 +864,12 @@ pub fn snapshot(world: &Nations, checked: &[Checked]) -> String {
     fields.push(format!("\"states\":{states}"));
     let countries = list(world.countries.iter().map(|c| {
         format!(
-            "{{\"name\":{},\"capital\":{},\"people\":{},\"product\":{},\"currency\":{},\"payCost\":{},\"variety\":{},\"exports\":{},\"towns\":{},\"states\":{}}}",
+            "{{\"name\":{},\"capital\":{},\"people\":{},\"product\":{},\"income\":{},\"currency\":{},\"payCost\":{},\"variety\":{},\"exports\":{},\"towns\":{},\"states\":{}}}",
             quoted(&c.name),
             c.capital,
             num(c.people),
             num(c.product),
+            num(income_of(world, &c.towns)),
             c.currency.map(|x| x.to_string()).unwrap_or_else(|| "null".to_string()),
             num(c.pay_cost),
             num(c.variety),
@@ -1352,6 +1379,13 @@ mod tests {
         let (lines, holds) = verify_file(&bytes);
         assert!(holds, "{lines:?}");
         assert!(lines.iter().any(|l| l.contains("it holds")));
+        // What it carries, read off the file alone, is what the world's own report says.
+        let carried = tally(&world.networks[0])
+            .into_iter()
+            .map(|(what, n)| format!("{} {what}", grouped(n as u128)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        assert!(lines.iter().any(|l| l.ends_with(&carried)), "{lines:?}");
         let mut changed = bytes.clone();
         changed[bytes.len() / 2] ^= 1;
         let (lines, holds) = verify_file(&changed);

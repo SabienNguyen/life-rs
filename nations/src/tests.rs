@@ -271,6 +271,44 @@ fn most_one_country_ever_held(world: &Nations) -> (f64, u64) {
         .fold((0.0, 0), |best, now| if now.0 > best.0 { now } else { best })
 }
 
+/// What the cap is for, tried rather than counted. The country whose houses hold the most stake
+/// cuts a block of its own at the next height — the real tip moved on, with a ledger that suits
+/// it better — and every one of its validators signs it: not final, because its stake is short of
+/// the two thirds. The same block signed by every validator would be; what refuses it is who
+/// signed, not what it looks like.
+#[test]
+fn the_largest_country_cannot_finalise_a_block_alone() {
+    let world = chained();
+    let network = &world.networks[0];
+    let (country, share) = network::largest_country_share(world, 0).expect("validators");
+    let tip = network.chain.tip();
+    let mut header = tip.header.clone();
+    header.height += 1;
+    header.parent = tip.hash();
+    header.state = chain::Digest::of(b"a ledger that suits us");
+    let block = header.hash();
+    let (id, height) = (network.chain.id, header.height);
+    let alone = chain::Commit {
+        round: 0,
+        votes: network::votes_for(world, 0, block, Some(country)),
+    };
+    assert!(!alone.votes.is_empty(), "the country has validators");
+    assert!(
+        matches!(
+            network.chain.rotation.check(&alone, id, height, block),
+            Err(chain::consensus::NoQuorum::TooLittlePower { .. })
+        ),
+        "{} holds {:.1}% and finalised a block by itself",
+        world.countries[country].name,
+        100.0 * share
+    );
+    let everybody = chain::Commit {
+        round: 0,
+        votes: network::votes_for(world, 0, block, None),
+    };
+    assert!(network.chain.rotation.check(&everybody, id, height, block).is_ok());
+}
+
 /// The cap moves stake from the country over it to the others in proportion to what they hold,
 /// and leaves a world where nobody is over it alone.
 #[test]
