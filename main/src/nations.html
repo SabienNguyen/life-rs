@@ -566,7 +566,8 @@ drawCountries();
     const founders = c.founders.map(townName).join(", ");
     const v = c.verified;
     const verdict = !v ? "" : v.ok ?
-      "<span class='ok'>Replayed from genesis — every signature and root of " + v.blocks + " blocks checked in " + Number(v.seconds).toFixed(1) + "s. It holds.</span>" :
+      "<span class='ok'>Replayed from genesis — every signature and root of " + v.blocks + " blocks checked in " + Number(v.seconds).toFixed(1) + "s. It holds." +
+        (v.light ? " Followed by its headers alone, as a light client does, in " + Number(v.lightSeconds).toFixed(1) + "s." : "") + "</span>" :
       "<span class='bad'>Replay failed: " + esc(v.why) + "</span>";
     const token = c.token ?
       "<div class='kv'><div>stable token</div><div><b>" + esc(c.token.symbol) + "</b>, standing for one " + esc(c.token.peg) + "</div>" +

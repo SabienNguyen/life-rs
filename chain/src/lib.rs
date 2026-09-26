@@ -43,6 +43,9 @@
 //! - `consensus`, `block` and `node` — validator sets, weighted proposer rotation, commits of
 //!   more than two thirds of the stake, and a chain that can be replayed from genesis by
 //!   anybody, with nothing taken on trust.
+//! - `light` — following a chain by its headers alone, each commit checked against the set the
+//!   header before handed over to, for somebody who wants to believe a header without keeping
+//!   the ledger behind it.
 //!
 //! ## What is not
 //!
@@ -54,6 +57,7 @@ pub mod block;
 pub mod codec;
 pub mod consensus;
 pub mod ed25519;
+pub mod light;
 pub mod merkle;
 pub mod node;
 pub mod sha2;
@@ -63,6 +67,7 @@ pub mod tx;
 pub use block::{Block, Header};
 pub use consensus::{Commit, ValidatorSet, Vote};
 pub use ed25519::{PublicKey, Signature, SigningKey};
+pub use light::LightBlock;
 pub use node::{Chain, Committed, Genesis, Invalid};
 pub use state::{Ledger, Params, Refusal, Token};
 pub use tx::{Action, Address, Asset, COIN, Swap, TOKEN_UNIT, Transaction};

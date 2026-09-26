@@ -106,6 +106,73 @@ fn the_signers_of_a_block_are_the_set_its_header_names() {
     }
 }
 
+/// Somebody holding only the genesis can follow the chain by its headers — each commit checked
+/// against the set the header before handed over to — without seeing a transaction, through a
+/// change of validators. A doctored header is caught at its height, and so is a header signed by
+/// a set of strangers who made up a validator set of their own to sign it.
+#[test]
+fn a_light_client_follows_the_chain_by_its_headers() {
+    let mut world = found_with(&[25, 25, 25, 25]);
+    world.everybody();
+    world.everybody();
+    // A newcomer stakes and joins, so the set that signs changes partway.
+    let joiner = world.people[0].clone();
+    let at = Address::of(&joiner.public());
+    let nonce = world.chain.next_nonce(&at);
+    let fee = world.chain.params().min_fee;
+    world
+        .chain
+        .submit(Transaction::signed(&joiner, world.chain.id, nonce, fee, Action::Bond { amount: 40 * COIN }))
+        .unwrap();
+    world.keys.insert(at, joiner);
+    for _ in 0..4 {
+        world.everybody();
+    }
+    let blocks = world.chain.light_blocks();
+    assert_eq!(blocks.len() as u64, world.chain.height() + 1);
+    assert!(
+        blocks.windows(2).any(|w| w[0].header.validators != w[1].header.validators),
+        "the set changed somewhere along the way"
+    );
+    assert_eq!(light::follow(&world.chain.genesis, &blocks), Ok(world.chain.height()));
+
+    // A header with a better state root than the one its validators signed.
+    let mut doctored = blocks.clone();
+    doctored[3].header.state = Digest::of(b"a richer me");
+    assert_eq!(
+        light::follow(&world.chain.genesis, &doctored),
+        Err((3, Invalid::Commit(consensus::NoQuorum::StrayVote)))
+    );
+
+    // Strangers sign a header of their own at height 3 with a set of their own, which it names.
+    let strangers: Vec<SigningKey> = (0..4).map(|i| SigningKey::from_seed([90 + i; 32])).collect();
+    let fake_set = consensus::ValidatorSet::after(
+        &consensus::ValidatorSet::default(),
+        &strangers
+            .iter()
+            .map(|k| (Address::of(&k.public()), k.public(), 100))
+            .collect::<Vec<_>>(),
+    );
+    let mut header = blocks[3].header.clone();
+    header.state = Digest::of(b"a richer me");
+    header.validators = fake_set.hash();
+    let votes = strangers
+        .iter()
+        .map(|k| Vote::signed(k, world.chain.id, 3, 0, header.hash()))
+        .collect();
+    let mut forged = blocks.clone();
+    forged[3] = LightBlock {
+        header,
+        commit: Commit { round: 0, votes },
+        validators: fake_set,
+    };
+    assert_eq!(
+        light::follow(&world.chain.genesis, &forged),
+        Err((3, Invalid::WrongValidators)),
+        "their set is not the one the header before handed over to"
+    );
+}
+
 #[test]
 fn a_payment_moves_what_it_says_and_the_laws_hold() {
     let mut world = found_with(&[25, 25, 25, 25]);

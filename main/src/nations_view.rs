@@ -4,11 +4,14 @@
 use chain::{Action, Address, Asset, COIN, TOKEN_UNIT};
 use nations::{Event, Nations, Network};
 
-/// What checking a chain from its genesis found, and how long it took.
+/// What checking a chain from its genesis found, and how long it took — replaying every block,
+/// and following its headers as a light client does.
 pub struct Checked {
     pub ok: Result<(), String>,
     pub seconds: f64,
     pub blocks: usize,
+    pub light: Result<u64, String>,
+    pub light_seconds: f64,
 }
 
 /// The same world run again from its seed with no chain allowed, as far as the world has gone:
@@ -35,10 +38,16 @@ pub fn check(world: &Nations) -> Vec<Checked> {
                 .chain
                 .verify()
                 .map_err(|(height, why)| format!("block {height}: {why:?}"));
+            let seconds = started.elapsed().as_secs_f64();
+            let started = std::time::Instant::now();
+            let light = chain::light::follow(&network.chain.genesis, &network.chain.light_blocks())
+                .map_err(|(height, why)| format!("block {height}: {why:?}"));
             Checked {
                 ok,
-                seconds: started.elapsed().as_secs_f64(),
+                seconds,
                 blocks: network.chain.blocks.len(),
+                light,
+                light_seconds: started.elapsed().as_secs_f64(),
             }
         })
         .collect()
@@ -476,6 +485,13 @@ fn ledger(world: &Nations, at: usize, network: &Network, checked: Option<&Checke
             ),
             Err(why) => format!("  replayed from genesis: FAILED at {why}"),
         });
+        out.push(match &checked.light {
+            Ok(height) => format!(
+                "  followed as a light client, by headers, commits and validator sets alone: to height {height} in {:.1}s, never a transaction",
+                checked.light_seconds
+            ),
+            Err(why) => format!("  followed as a light client: FAILED at {why}"),
+        });
     }
     out.push(String::new());
     out
@@ -858,11 +874,13 @@ fn network_json(world: &Nations, at: usize, network: &Network, checked: Option<&
     );
     let verified = match checked {
         Some(c) => format!(
-            "{{\"ok\":{},\"why\":{},\"seconds\":{},\"blocks\":{}}}",
+            "{{\"ok\":{},\"why\":{},\"seconds\":{},\"blocks\":{},\"light\":{},\"lightSeconds\":{}}}",
             c.ok.is_ok(),
             quoted(c.ok.as_ref().err().map(|s| s.as_str()).unwrap_or("")),
             num(c.seconds),
-            c.blocks
+            c.blocks,
+            c.light.is_ok(),
+            num(c.light_seconds)
         ),
         None => "null".to_string(),
     };
@@ -1053,6 +1071,10 @@ mod tests {
         }
         let page = check_it_yourself(&world.networks[0]);
         assert!(page.contains(&chain::hex(&it.header)));
+        // And the whole chain, by its headers alone, as the report follows it.
+        let checked = check(&world);
+        assert_eq!(checked[0].ok, Ok(()));
+        assert_eq!(checked[0].light, Ok(world.networks[0].chain.height()));
     }
 
     #[test]

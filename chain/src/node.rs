@@ -13,6 +13,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::block::{Block, Header};
 use crate::codec::Writer;
 use crate::consensus::{Commit, NoQuorum, ValidatorSet, Vote};
+use crate::light::LightBlock;
 use crate::state::{Ledger, Params, Refusal, Token};
 use crate::tx::{Address, Asset, Transaction};
 use crate::{Digest, PublicKey, SigningKey};
@@ -85,6 +86,9 @@ pub struct Chain {
     /// Who signed the last block: the set its header names, and the one a light client holding
     /// that header checks its commit against.
     pub signers: ValidatorSet,
+    /// Every set that has signed a block, from the height it first did, with its hash: what a
+    /// node hands a light client beside each header.
+    sets: Vec<(u64, Digest, ValidatorSet)>,
     /// Transactions waiting for a block, in the order they arrived.
     pool: Vec<Transaction>,
     /// The ledger with the pool applied, which is what a new arrival is checked against — so a
@@ -125,6 +129,7 @@ impl Chain {
             pending: ledger.clone(),
             ledger,
             signers: rotation.clone(),
+            sets: vec![(0, rotation.hash(), rotation.clone())],
             rotation,
             genesis,
             pool: Vec::new(),
@@ -274,9 +279,14 @@ impl Chain {
 
     fn install(&mut self, block: Block, ledger: Ledger, rotation: ValidatorSet) {
         let included: BTreeSet<Digest> = block.txs.iter().map(|t| t.id()).collect();
+        let height = block.header.height;
+        let named = block.header.validators;
         self.blocks.push(block);
         self.ledger = ledger;
         self.signers = std::mem::replace(&mut self.rotation, rotation);
+        if self.sets.last().map(|(_, hash, _)| *hash) != Some(named) {
+            self.sets.push((height, named, self.signers.clone()));
+        }
         // What is still waiting is re-checked against the new ledger; anything the block made
         // impossible — a second spend of the same coin, a nonce already used — falls out.
         let waiting = std::mem::take(&mut self.pool);
@@ -391,6 +401,23 @@ impl Chain {
         Ok(())
     }
 
+    /// What a light client is handed for one height: its header, the commit that made it final,
+    /// and the set that signed it.
+    pub fn light_block(&self, height: u64) -> Option<LightBlock> {
+        let block = self.blocks.get(height as usize)?;
+        let (_, _, validators) = self.sets.iter().rev().find(|(from, _, _)| *from <= height)?;
+        Some(LightBlock {
+            header: block.header.clone(),
+            commit: block.commit.clone(),
+            validators: validators.clone(),
+        })
+    }
+
+    /// Light blocks for every height, genesis first.
+    pub fn light_blocks(&self) -> Vec<LightBlock> {
+        (0..=self.height()).filter_map(|h| self.light_block(h)).collect()
+    }
+
     /// Where a transaction is: the height of the block holding it.
     pub fn find(&self, id: &Digest) -> Option<u64> {
         self.blocks
@@ -402,6 +429,14 @@ impl Chain {
 
 fn powers(rotation: &ValidatorSet) -> Vec<(Address, u64)> {
     rotation.members.iter().map(|v| (v.address, v.power)).collect()
+}
+
+/// The first header of the chain a genesis begins, which anybody holding the genesis can build.
+pub(crate) fn genesis_header_of(genesis: &Genesis) -> Header {
+    let id = genesis.id();
+    let ledger = Ledger::genesis(id, genesis.params.clone(), &genesis.allocations);
+    let rotation = ValidatorSet::after(&ValidatorSet::default(), &ledger.validators());
+    genesis_header(genesis, id, &ledger, &rotation)
 }
 
 fn genesis_header(genesis: &Genesis, id: Digest, ledger: &Ledger, rotation: &ValidatorSet) -> Header {
