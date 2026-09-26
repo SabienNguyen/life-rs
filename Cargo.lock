@@ -178,6 +178,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "nations"
+version = "0.1.0"
+dependencies = [
+ "chain",
+ "commerce",
+ "culture",
+ "geo",
+ "settlement",
+ "sim",
+ "sim-core",
+ "society",
+]
+
+[[package]]
 name = "observer"
 version = "0.1.0"
 dependencies = [

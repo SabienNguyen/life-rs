@@ -14,6 +14,7 @@ members = [
     "geo",
     "life",
     "main",
+    "nations",
     "ocean",
     "observer",
     "person",

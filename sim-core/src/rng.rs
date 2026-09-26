@@ -89,6 +89,9 @@ pub enum Domain {
     Weather = 11,
     /// Deliberate luck: accidents, windfalls, chance meetings.
     Chance = 12,
+    /// Markets, money and ledgers at the scale of nations — including the keys a world's houses
+    /// sign with, so a chain founded from a seed signs the same history every time.
+    Commerce = 13,
 }
 
 const GOLDEN: u64 = 0x9e37_79b9_7f4a_7c15;

@@ -36,6 +36,11 @@ impl Writer {
         self
     }
 
+    pub fn u128(&mut self, value: u128) -> &mut Writer {
+        self.0.extend_from_slice(&value.to_le_bytes());
+        self
+    }
+
     pub fn i64(&mut self, value: i64) -> &mut Writer {
         self.0.extend_from_slice(&value.to_le_bytes());
         self

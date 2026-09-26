@@ -1,0 +1,15 @@
+[package]
+name = "nations"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+chain = { path = "../chain" }
+commerce = { path = "../commerce" }
+culture = { path = "../culture" }
+geo = { path = "../geo" }
+settlement = { path = "../settlement" }
+sim = { path = "../sim" }
+sim-core = { path = "../sim-core" }
+society = { path = "../society" }

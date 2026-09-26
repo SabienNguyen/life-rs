@@ -114,16 +114,20 @@ pub fn discoveries(thinking: &[f64; 4], technique: &[f64; 4]) -> [f64; 4] {
     out
 }
 
-/// How fast a country catches up with a frontier somebody else holds, per year, at full
-/// openness. Technique travels by contact (§29.5.1): what a people trade, they learn.
-const CATCHING_UP: f64 = 0.05;
+/// How fast a country closes the gap to a frontier somebody it trades with holds, per year, at
+/// full contact: two per cent, the "iron law" of convergence that shows up in almost every
+/// cross-country sample. Technique travels by contact (§29.5.1), and contact is not only
+/// goods — it is merchants, letters and people moving — so any trade at all brings a quarter of
+/// it, and trade worth a twentieth of a country's product brings all of it.
+const CATCHING_UP: f64 = 0.02;
 
 /// A country's technique in a trade after a year of contact with the best it trades with.
 pub fn catch_up(own: f64, best_in_contact: f64, openness: f64) -> f64 {
     if best_in_contact <= own {
         return own;
     }
-    own + CATCHING_UP * openness.clamp(0.0, 1.0) * (best_in_contact - own)
+    let contact = (0.25 + 5.0 * openness.max(0.0)).min(1.0);
+    own + CATCHING_UP * contact * (best_in_contact - own)
 }
 
 /// How much of a town moves to a richer town in the same country in a year, per unit of the
@@ -206,9 +210,9 @@ mod tests {
     }
 
     #[test]
-    fn a_people_catches_up_only_with_what_it_is_in_touch_with() {
-        assert_eq!(catch_up(2.0, 5.0, 0.0), 2.0);
-        assert!(catch_up(2.0, 5.0, 1.0) > 2.0);
+    fn a_people_catches_up_faster_the_more_it_trades() {
+        assert!(catch_up(2.0, 5.0, 0.0) > 2.0, "any contact teaches something");
+        assert!(catch_up(2.0, 5.0, 1.0) > catch_up(2.0, 5.0, 0.0), "and more contact more");
         assert_eq!(catch_up(5.0, 2.0, 1.0), 5.0, "nobody unlearns by trading");
     }
 }

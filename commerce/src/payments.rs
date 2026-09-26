@@ -122,13 +122,22 @@ pub fn cheapest_route(trust: &[Vec<f64>], from: usize, to: usize, fx: f64) -> (f
     best
 }
 
-/// What a payment of `size` costs on a chain with `validators` checking it, as a share of it:
-/// minting and redeeming the stable token, changing into and out of the currency it is pegged
-/// to where the two ends use another, and the fee that pays for every validator to check it.
-pub fn chain_cost(size: f64, validators: usize, technique: f64, wage: f64, changes: usize) -> f64 {
-    let checking = validators.max(1) as f64 * check_cost(technique) * wage.max(0.0);
+/// What a payment of `size` costs on a chain whose validators have these reckoning
+/// techniques, as a share of it: minting and redeeming the stable token, changing into and out
+/// of the currency it is pegged to where the two ends use another, and the fee that pays for
+/// every validator to check it — each at its own technique, since each checks everything.
+pub fn chain_cost(size: f64, validators: &[f64], wage: f64, changes: usize) -> f64 {
+    let checking: f64 = validators.iter().map(|t| check_cost(*t)).sum::<f64>() * wage.max(0.0);
     2.0 * TOKEN_SPREAD + changes as f64 * VEHICLE_SPREAD + checking / size.max(1e-9)
 }
+
+/// How close to the best reckoning among them a party has to be to validate: a validator that
+/// checks slowly makes every payment dearer for everybody, since everybody's payment waits on
+/// it. Seven tenths of the best.
+pub const CAPABLE: f64 = 0.7;
+
+/// The least share of the business a party must do to found a chain: a hundredth.
+pub const SMALLEST: f64 = 0.01;
 
 /// A party that might found a chain: a house, with the country it is in, how much reckoning it
 /// can do in a year (in reckoners), and how much it pays and is paid abroad.
@@ -166,43 +175,81 @@ pub enum NotYet {
     NotWorthIt,
 }
 
-/// Whether a chain is worth founding among these parties, given how much they trust each other,
-/// what their payments cost now, and what they would cost on a chain.
+/// Whether a chain is worth founding among these parties, given how much they trust each other
+/// and what their payments cost now.
 ///
-/// `checks_a_year` is how many signatures each validator would have to check in a year at the
-/// cadence the chain would keep; `bank_cost` and `chain_cost` are the average shares of a
-/// payment each way costs.
+/// The founders are, first, every country's most capable house, for every country that does a
+/// hundredth of the business — a ledger for payments across a border is no use to a country
+/// with nobody among its keepers — and then every other house that can keep up and reckons
+/// within `CAPABLE` of the best, largest business first, to twenty-one in all. A house can keep
+/// up if it has the clerks to check a year of blocks. What the chain would cost a payment is
+/// what *those* founders would charge to check it, each at its own reckoning, so a country that
+/// lags makes the chain dearer for everybody and the chain waits until it can be afforded. It is
+/// worth founding when what every party would save comes to `WORTH_THE_TROUBLE` times what the
+/// founders would spend checking.
+///
+/// `checks_a_year` is how many signatures each validator would check in a year; `bank_cost` the
+/// average share of a payment that paying through houses costs; `size` the typical payment.
 pub fn worth_founding(
     candidates: &[Candidate],
     trust: &dyn Fn(usize, usize) -> f64,
     checks_a_year: f64,
     bank_cost: f64,
-    chain_cost: f64,
+    size: f64,
     wage: f64,
 ) -> Result<Founding, NotYet> {
-    // Anybody who could check the chain at all, largest business first.
-    let mut able: Vec<usize> = (0..candidates.len())
-        .filter(|i| candidates[*i].volume > 0.0)
-        .collect();
-    if able.len() < FEWEST_FOUNDERS {
+    let volume: f64 = candidates.iter().map(|c| c.volume.max(0.0)).sum();
+    if candidates.iter().filter(|c| c.volume > 0.0).count() < FEWEST_FOUNDERS || volume <= 0.0 {
         return Err(NotYet::TooFew);
     }
-    able.retain(|i| {
-        let c = &candidates[*i];
-        c.reckoners >= checks_a_year * check_cost(c.technique)
-    });
-    if able.len() < FEWEST_FOUNDERS {
+    let keeps_up = |c: &Candidate| c.volume > 0.0 && c.reckoners >= checks_a_year * check_cost(c.technique);
+
+    // Every country's champion: its best reckoner among the houses that can keep up.
+    let mut by_country: std::collections::BTreeMap<usize, (f64, Option<usize>)> =
+        std::collections::BTreeMap::new();
+    for (i, c) in candidates.iter().enumerate() {
+        let entry = by_country.entry(c.country).or_insert((0.0, None));
+        entry.0 += c.volume.max(0.0);
+        if keeps_up(c) && entry.1.is_none_or(|b| candidates[b].technique < c.technique) {
+            entry.1 = Some(i);
+        }
+    }
+    let mut founders: Vec<usize> = by_country
+        .values()
+        .filter(|(business, _)| *business >= SMALLEST * volume)
+        .filter_map(|(_, champion)| *champion)
+        .collect();
+    let best = candidates
+        .iter()
+        .filter(|c| keeps_up(c))
+        .map(|c| c.technique)
+        .fold(0.0f64, f64::max);
+    let mut others: Vec<usize> = (0..candidates.len())
+        .filter(|i| !founders.contains(i))
+        .filter(|i| {
+            let c = &candidates[*i];
+            keeps_up(c) && c.volume >= SMALLEST * volume && c.technique >= CAPABLE * best
+        })
+        .collect();
+    others.sort_by(|a, b| candidates[*b].volume.total_cmp(&candidates[*a].volume).then(a.cmp(b)));
+    for i in others {
+        if founders.len() >= MOST_FOUNDERS {
+            break;
+        }
+        founders.push(i);
+    }
+    founders.sort_by(|a, b| candidates[*b].volume.total_cmp(&candidates[*a].volume).then(a.cmp(b)));
+    founders.truncate(MOST_FOUNDERS);
+    if founders.len() < FEWEST_FOUNDERS {
         return Err(NotYet::CannotCheck);
     }
-    able.sort_by(|a, b| candidates[*b].volume.total_cmp(&candidates[*a].volume).then(a.cmp(b)));
-    able.truncate(MOST_FOUNDERS);
 
-    let first_country = candidates[able[0]].country;
-    if able.iter().all(|i| candidates[*i].country == first_country) {
+    let first_country = candidates[founders[0]].country;
+    if founders.iter().all(|i| candidates[*i].country == first_country) {
         return Err(NotYet::OneCountry);
     }
-    for keeper in &able {
-        if able
+    for keeper in &founders {
+        if founders
             .iter()
             .filter(|h| *h != keeper)
             .all(|h| trust(*h, *keeper) >= TRUSTED)
@@ -211,18 +258,18 @@ pub fn worth_founding(
         }
     }
 
-    let volume: f64 = able.iter().map(|i| candidates[*i].volume).sum();
-    let saving = volume * (bank_cost - chain_cost).max(0.0);
-    let technique = able
+    let techniques: Vec<f64> = founders.iter().map(|i| candidates[*i].technique).collect();
+    let chain = chain_cost(size, &techniques, wage, 1);
+    let saving = volume * (bank_cost - chain).max(0.0);
+    let cost: f64 = techniques
         .iter()
-        .map(|i| candidates[*i].technique)
-        .fold(f64::MAX, f64::min);
-    let cost = able.len() as f64 * checks_a_year * check_cost(technique) * wage;
+        .map(|t| checks_a_year * check_cost(*t) * wage)
+        .sum();
     if saving <= WORTH_THE_TROUBLE * cost || saving <= 0.0 {
         return Err(NotYet::NotWorthIt);
     }
     Ok(Founding {
-        founders: able,
+        founders,
         saving,
         cost,
     })
@@ -313,7 +360,7 @@ mod tests {
 
     #[test]
     fn distrustful_parties_found_a_chain_when_checking_is_cheap() {
-        let founding = worth_founding(&four_strangers(), &|_, _| 0.3, 1000.0, 0.08, 0.01, 1.0)
+        let founding = worth_founding(&four_strangers(), &|_, _| 0.3, 1000.0, 0.08, 100.0, 1.0)
             .expect("four strangers with cheap checking and dear banking");
         assert_eq!(founding.founders.len(), 4);
         assert!(founding.saving > founding.cost);
@@ -323,7 +370,7 @@ mod tests {
     fn a_keeper_everybody_trusts_is_used_instead() {
         let trusted = |_: usize, keeper: usize| if keeper == 2 { 0.9 } else { 0.3 };
         assert_eq!(
-            worth_founding(&four_strangers(), &trusted, 1000.0, 0.08, 0.01, 1.0),
+            worth_founding(&four_strangers(), &trusted, 1000.0, 0.08, 100.0, 1.0),
             Err(NotYet::TrustedKeeper(2))
         );
     }
@@ -332,7 +379,7 @@ mod tests {
     fn three_is_too_few_and_one_country_is_one_bookkeeper() {
         let three = &four_strangers()[..3];
         assert_eq!(
-            worth_founding(three, &|_, _| 0.3, 1000.0, 0.08, 0.01, 1.0),
+            worth_founding(three, &|_, _| 0.3, 1000.0, 0.08, 100.0, 1.0),
             Err(NotYet::TooFew)
         );
         let mut home = four_strangers();
@@ -340,7 +387,7 @@ mod tests {
             c.country = 0;
         }
         assert_eq!(
-            worth_founding(&home, &|_, _| 0.3, 1000.0, 0.08, 0.01, 1.0),
+            worth_founding(&home, &|_, _| 0.3, 1000.0, 0.08, 100.0, 1.0),
             Err(NotYet::OneCountry)
         );
     }
@@ -354,8 +401,45 @@ mod tests {
             c.reckoners = 1_000.0;
         }
         assert_eq!(
-            worth_founding(&clerks, &|_, _| 0.3, 1000.0, 0.08, 0.01, 1.0),
+            worth_founding(&clerks, &|_, _| 0.3, 1000.0, 0.08, 100.0, 1.0),
             Err(NotYet::CannotCheck)
+        );
+    }
+
+    /// A laggard makes the chain dearer for everybody, so the capable found it without them —
+    /// unless the laggard is its country's best, in which case the chain waits for it.
+    #[test]
+    fn the_slowest_checker_is_left_out_unless_its_country_has_nobody_better() {
+        let mut parties = four_strangers();
+        parties.push(Candidate {
+            country: 1,
+            reckoners: 1e6,
+            technique: 2.0,
+            volume: 1e6,
+        });
+        let founding = worth_founding(&parties, &|_, _| 0.3, 1000.0, 0.08, 100.0, 1.0).unwrap();
+        assert!(!founding.founders.contains(&4));
+
+        // Two capable houses in one country and two laggards in the other: the laggards' best
+        // still founds, and a third capable house makes the four.
+        let mut lagging = four_strangers();
+        for c in lagging.iter_mut().filter(|c| c.country == 1) {
+            c.technique = 1.5;
+        }
+        lagging.push(Candidate {
+            country: 0,
+            reckoners: 1e6,
+            technique: 10.0,
+            volume: 1e6,
+        });
+        let founding = worth_founding(&lagging, &|_, _| 0.3, 1000.0, 0.08, 1e6, 1.0).unwrap();
+        assert!(
+            founding.founders.iter().any(|i| lagging[*i].country == 1),
+            "a country's best house is among the founders however far it lags"
+        );
+        assert!(
+            chain_cost(100.0, &[10.0, 2.0], 1.0, 1) > 10.0 * chain_cost(100.0, &[10.0], 1.0, 1) - 0.1,
+            "one slow checker dominates what a payment costs"
         );
     }
 

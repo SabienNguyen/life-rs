@@ -34,20 +34,20 @@ use crate::{Digest, PublicKey};
 pub struct Params {
     pub name: String,
     /// Coin created per block at first, in base units.
-    pub issuance: u64,
+    pub issuance: u128,
     /// Blocks after which issuance halves. A fixed eventual supply, as bitcoin's, rather than
     /// a perpetual inflation — so that what the coin is worth is a question about demand and
     /// not about a schedule.
     pub halving: u64,
     /// The least fee any transaction may pay, in base units: what stops a free ledger being
     /// filled with nothing.
-    pub min_fee: u64,
+    pub min_fee: u128,
     /// The most transactions in one block.
     pub max_txs: usize,
     /// The most validators at once.
     pub max_validators: usize,
     /// The least stake worth counting as a validator, in base units.
-    pub min_bond: u64,
+    pub min_bond: u128,
     /// How long unbonded stake stays at risk before it is released, in blocks.
     ///
     /// Without it a validator could sign two blocks and unbond in the same breath, and be gone
@@ -61,12 +61,12 @@ pub struct Params {
 impl Params {
     pub(crate) fn encode_into(&self, w: &mut Writer) {
         w.text(&self.name)
-            .u64(self.issuance)
+            .u128(self.issuance)
             .u64(self.halving)
-            .u64(self.min_fee)
+            .u128(self.min_fee)
             .u64(self.max_txs as u64)
             .u64(self.max_validators as u64)
-            .u64(self.min_bond)
+            .u128(self.min_bond)
             .u64(self.unbonding_blocks)
             .u64(self.slash_permille);
     }
@@ -78,13 +78,13 @@ pub struct Account {
     /// How many transactions it has signed. The next must carry exactly this.
     pub nonce: u64,
     /// Coin it can spend.
-    pub coin: u64,
+    pub coin: u128,
     /// Coin it has staked.
-    pub bonded: u64,
+    pub bonded: u128,
     /// Coin on its way out of stake: (the height it is released at, how much).
-    pub unbonding: Vec<(u64, u64)>,
+    pub unbonding: Vec<(u64, u128)>,
     /// Stable tokens, by token id. Never holds a zero.
-    pub tokens: BTreeMap<u32, u64>,
+    pub tokens: BTreeMap<u32, u128>,
     /// The key that signs for it, once it has signed anything.
     pub key: Option<PublicKey>,
     /// Caught signing two blocks at once. A jailed account never validates again.
@@ -92,23 +92,23 @@ pub struct Account {
 }
 
 impl Account {
-    fn at_stake(&self) -> u64 {
-        self.bonded + self.unbonding.iter().map(|(_, a)| a).sum::<u64>()
+    fn at_stake(&self) -> u128 {
+        self.bonded + self.unbonding.iter().map(|(_, a)| a).sum::<u128>()
     }
 
     fn encode(&self, address: &Address) -> Vec<u8> {
         let mut w = Writer::tagged("life-rs/chain/account/1");
         w.fixed(&address.0)
             .u64(self.nonce)
-            .u64(self.coin)
-            .u64(self.bonded)
+            .u128(self.coin)
+            .u128(self.bonded)
             .u32(self.unbonding.len() as u32);
         for (release, amount) in &self.unbonding {
-            w.u64(*release).u64(*amount);
+            w.u64(*release).u128(*amount);
         }
         w.u32(self.tokens.len() as u32);
         for (token, amount) in &self.tokens {
-            w.u32(*token).u64(*amount);
+            w.u32(*token).u128(*amount);
         }
         match &self.key {
             Some(key) => w.u8(1).fixed(&key.0),
@@ -128,12 +128,12 @@ pub struct Token {
     pub issuer: Address,
     pub attestor: Address,
     /// Held by everybody, in base units.
-    pub supply: u64,
+    pub supply: u128,
     /// The reserve as last attested, in base units of the peg.
-    pub reserves: u64,
+    pub reserves: u128,
     /// Everything ever minted and ever redeemed, for reading.
-    pub minted: u64,
-    pub redeemed: u64,
+    pub minted: u128,
+    pub redeemed: u128,
 }
 
 impl Token {
@@ -144,10 +144,10 @@ impl Token {
             .text(&self.peg)
             .fixed(&self.issuer.0)
             .fixed(&self.attestor.0)
-            .u64(self.supply)
-            .u64(self.reserves)
-            .u64(self.minted)
-            .u64(self.redeemed)
+            .u128(self.supply)
+            .u128(self.reserves)
+            .u128(self.minted)
+            .u128(self.redeemed)
             .finish()
     }
 
@@ -179,7 +179,7 @@ pub enum Refusal {
     SelfAttested,
     BadSymbol,
     /// Minting past what the attestor last said was held.
-    BeyondReserves { supply: u64, reserves: u64, asked: u64 },
+    BeyondReserves { supply: u128, reserves: u128, asked: u128 },
     NotBonded,
     Jailed,
     BadEvidence,
@@ -197,18 +197,18 @@ pub struct Ledger {
     /// The height of the last block applied. Genesis is height zero.
     pub height: u64,
     /// All coin in existence, in every state.
-    pub coin_supply: u64,
-    pub genesis_coin: u64,
-    pub issued: u64,
-    pub slashed: u64,
-    pub fees_paid: u64,
+    pub coin_supply: u128,
+    pub genesis_coin: u128,
+    pub issued: u128,
+    pub slashed: u128,
+    pub fees_paid: u128,
     /// Offences already punished, so the same two votes cannot be shown twice.
     punished: BTreeSet<(Address, u64, u32)>,
 }
 
 impl Ledger {
     /// The ledger a chain starts from: some addresses with coin, some of it staked.
-    pub fn genesis(chain: Digest, params: Params, allocations: &[(PublicKey, u64, u64)]) -> Ledger {
+    pub fn genesis(chain: Digest, params: Params, allocations: &[(PublicKey, u128, u128)]) -> Ledger {
         let mut accounts: BTreeMap<Address, Account> = BTreeMap::new();
         let mut total = 0;
         for (key, liquid, bonded) in allocations {
@@ -241,7 +241,7 @@ impl Ledger {
         self.accounts.get(address).map(|a| a.nonce).unwrap_or(0)
     }
 
-    pub fn balance(&self, address: &Address, asset: Asset) -> u64 {
+    pub fn balance(&self, address: &Address, asset: Asset) -> u128 {
         let Some(account) = self.accounts.get(address) else {
             return 0;
         };
@@ -253,9 +253,9 @@ impl Ledger {
 
     /// Coin created by the block at a height: halving on schedule, and nothing once it has
     /// halved to zero.
-    pub fn issuance_at(&self, height: u64) -> u64 {
+    pub fn issuance_at(&self, height: u64) -> u128 {
         let halvings = height / self.params.halving.max(1);
-        if halvings >= 64 {
+        if halvings >= 128 {
             0
         } else {
             self.params.issuance >> halvings
@@ -463,8 +463,8 @@ impl Ledger {
                 let permille = self.params.slash_permille;
                 let account = self.accounts.get_mut(&offender).expect("judged to exist");
                 let mut burned = 0;
-                let cut = |stake: &mut u64| {
-                    let taken = (*stake as u128 * permille as u128 / 1000) as u64;
+                let cut = |stake: &mut u128| {
+                    let taken = *stake * permille as u128 / 1000;
                     *stake -= taken;
                     taken
                 };
@@ -480,7 +480,7 @@ impl Ledger {
         Ok(())
     }
 
-    fn take_tokens(&mut self, from: &Address, token: u32, amount: u64) {
+    fn take_tokens(&mut self, from: &Address, token: u32, amount: u128) {
         let account = self.accounts.get_mut(from).expect("holder exists");
         let held = account.tokens.get_mut(&token).expect("checked above");
         *held -= amount;
@@ -524,7 +524,7 @@ impl Ledger {
         if reward > 0 && total > 0 {
             let mut paid = 0;
             for (address, power) in validators {
-                let share = (reward as u128 * *power as u128 / total as u128) as u64;
+                let share = reward * *power as u128 / total as u128;
                 self.accounts.entry(*address).or_default().coin += share;
                 paid += share;
             }
@@ -539,7 +539,7 @@ impl Ledger {
             }
             let (due, waiting): (Vec<_>, Vec<_>) =
                 account.unbonding.iter().partition(|(release, _)| *release <= height);
-            account.coin += due.iter().map(|(_, a)| a).sum::<u64>();
+            account.coin += due.iter().map(|(_, a)| a).sum::<u128>();
             account.unbonding = waiting;
         }
         self.height = height;
@@ -552,7 +552,10 @@ impl Ledger {
             .accounts
             .iter()
             .filter(|(_, a)| !a.jailed && a.bonded >= self.params.min_bond.max(COIN))
-            .filter_map(|(address, a)| a.key.map(|key| (*address, key, a.bonded / COIN)))
+            .filter_map(|(address, a)| {
+                a.key
+                    .map(|key| (*address, key, (a.bonded / COIN).min(u64::MAX as u128) as u64))
+            })
             .collect();
         eligible.sort_by(|a, b| b.2.cmp(&a.2).then(a.0.cmp(&b.0)));
         eligible.truncate(self.params.max_validators);
@@ -573,11 +576,11 @@ impl Ledger {
         let mut totals = Writer::tagged("life-rs/chain/totals/1");
         totals
             .u64(self.height)
-            .u64(self.coin_supply)
-            .u64(self.genesis_coin)
-            .u64(self.issued)
-            .u64(self.slashed)
-            .u64(self.fees_paid)
+            .u128(self.coin_supply)
+            .u128(self.genesis_coin)
+            .u128(self.issued)
+            .u128(self.slashed)
+            .u128(self.fees_paid)
             .u32(self.punished.len() as u32);
         for (address, height, round) in &self.punished {
             totals.fixed(&address.0).u64(*height).u32(*round);
@@ -609,7 +612,7 @@ impl Ledger {
 
     /// The three conservation laws, checked. `None` when they hold; otherwise which broke.
     pub fn broken_law(&self) -> Option<String> {
-        let held: u64 = self
+        let held: u128 = self
             .accounts
             .values()
             .map(|a| a.coin + a.at_stake())
@@ -621,7 +624,7 @@ impl Ledger {
             return Some("coin appeared or vanished outside issuance and slashing".to_string());
         }
         for (id, token) in self.tokens.iter().enumerate() {
-            let held: u64 = self
+            let held: u128 = self
                 .accounts
                 .values()
                 .map(|a| a.tokens.get(&(id as u32)).copied().unwrap_or(0))

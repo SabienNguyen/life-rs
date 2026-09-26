@@ -23,7 +23,7 @@ pub struct Genesis {
     pub params: Params,
     pub time: u64,
     /// A key, the coin it holds liquid, and the coin it has staked.
-    pub allocations: Vec<(PublicKey, u64, u64)>,
+    pub allocations: Vec<(PublicKey, u128, u128)>,
 }
 
 impl Genesis {
@@ -32,7 +32,7 @@ impl Genesis {
         self.params.encode_into(&mut w);
         w.u64(self.time).u32(self.allocations.len() as u32);
         for (key, liquid, bonded) in &self.allocations {
-            w.fixed(&key.0).u64(*liquid).u64(*bonded);
+            w.fixed(&key.0).u128(*liquid).u128(*bonded);
         }
         w.finish()
     }
@@ -142,7 +142,7 @@ impl Chain {
         &self.ledger.params
     }
 
-    pub fn balance(&self, address: &Address, asset: Asset) -> u64 {
+    pub fn balance(&self, address: &Address, asset: Asset) -> u128 {
         self.ledger.balance(address, asset)
     }
 
@@ -157,12 +157,23 @@ impl Chain {
     }
 
     /// What an address will hold once everything waiting has gone through.
-    pub fn pending_balance(&self, address: &Address, asset: Asset) -> u64 {
+    pub fn pending_balance(&self, address: &Address, asset: Asset) -> u128 {
         self.pending.balance(address, asset)
     }
 
     pub fn waiting(&self) -> usize {
         self.pool.len()
+    }
+
+    /// A token as it will stand once everything waiting has gone through — including one
+    /// registered by a transaction still in the pool.
+    pub fn pending_token(&self, id: u32) -> Option<&Token> {
+        self.pending.tokens.get(id as usize)
+    }
+
+    /// How many tokens there will be once everything waiting has gone through.
+    pub fn pending_tokens(&self) -> usize {
+        self.pending.tokens.len()
     }
 
     /// Hand a transaction to the chain. It is checked now — signature, then whether it would

@@ -89,11 +89,12 @@ const PULL: f64 = 4.0;
 /// that is. The low state — a few holders, mostly barter — exists only while
 /// `pull · (exchanged · saleability · share² − carrying · share) + trickle` has a root, which is
 /// while the share of income exchanged is below `pull · carrying² / (4 · saleability ·
-/// trickle)`. With metal's carrying cost that is two fifths of a market's income, which is
-/// where the historical record puts the monetisation of agrarian economies; with grain's it is
-/// past one, so grain never tips on its own. Above the line a market goes over within a
-/// lifetime.
-const HOARDING: f64 = 0.001;
+/// trickle)`. With metal's carrying cost that is a quarter of a market's income: a town where a
+/// quarter of what is earned changes hands is a town that comes to use coin, which puts money
+/// in the agrarian world long before anything like growth — where the record has it. With
+/// grain's carrying cost it is past one, so grain never tips on its own. Above the line a market
+/// goes over within a lifetime.
+const HOARDING: f64 = 0.0016;
 
 /// How much of each market's trade uses each medium.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -204,6 +205,16 @@ pub fn worth_of_reckoning(friction: f64, exchanged: f64, reckoning: f64) -> f64 
     friction * THROUGHPUT * exchanged * exchanged / (denominator * denominator)
 }
 
+/// The share of what is saved that never becomes anybody's capital when there is nobody to
+/// lend it: half. Without a house to take deposits and judge borrowers, savings are hoarded in
+/// a pot or lent to a cousin, and what is put by is mostly not put to work.
+///
+/// This is reckoning's second job and the one that grows with an economy: exchange needs
+/// somebody to keep count, and so does turning one person's saving into another's plough. It is
+/// the finance-and-growth link, at its simplest — the same saturating form as exchange, so a
+/// town's houses do both with the same clerks.
+pub const UNBANKED: f64 = 0.5;
+
 /// What a mint costs to run for a year, in years of food: the smiths and assayers and the
 /// guard on the door.
 pub const MINT_COST: f64 = 2_000.0;
@@ -218,6 +229,34 @@ pub fn worth_coining(acceptance: &Acceptance, exchanged_value: f64) -> bool {
     saving > MINT_COST
 }
 
+/// The share of the medium made in a year that goes into money rather than into use: a
+/// hundredth. Most metal becomes tools and pots; a little becomes coin.
+pub const MINTED: f64 = 0.01;
+
+/// How much of the coin in circulation is lost in a year to wear, clipping, loss and burial:
+/// half a per cent. Far less than holding the raw good costs — a coin is a small hard thing
+/// that people look after.
+pub const COIN_WEAR: f64 = 0.005;
+
+/// How fast commodity money grows in a year: what is newly minted from the year's making,
+/// against the money already out, less what is lost from circulation — wear for metal, and for
+/// grain the rot, since a grain money is a granary's receipts and the granary still rots.
+///
+/// Which is why commodity money deflates a fast-growing economy. The stock grows by a flow of
+/// new metal while trade can grow faster than that, and when it does, prices fall — the long
+/// deflations of every metallic standard, and the reason the houses that can manage a money
+/// eventually do.
+pub fn commodity_growth(medium: Medium, made: f64, money_in_food: f64) -> f64 {
+    if money_in_food <= 0.0 {
+        return 0.0;
+    }
+    let lost = match medium {
+        Medium::Metal => COIN_WEAR,
+        Medium::Grain => medium.carrying(),
+    };
+    MINTED * made.max(0.0) / money_in_food - lost
+}
+
 /// How much money people hold against what they buy: a quarter of a year's transactions.
 pub const HELD: f64 = 0.25;
 
@@ -227,6 +266,10 @@ pub const FIRST_UNIT: f64 = 0.01;
 
 /// The inflation a managed currency is aimed at.
 pub const TARGET_INFLATION: f64 = 0.02;
+
+/// How much of each year's news about trade people take into how much money they want to hold:
+/// a fifth. Money demand follows what people expect to be buying, not one harvest.
+const SMOOTHING: f64 = 0.2;
 
 /// A country's money.
 #[derive(Clone, Debug, PartialEq)]
@@ -244,8 +287,9 @@ pub struct Currency {
     pub managed: bool,
     /// What the level did last year.
     pub inflation: f64,
-    last_transactions: f64,
-    last_growth: f64,
+    /// Transactions as people expect them to run, and how fast that has been growing.
+    trend: f64,
+    trend_growth: f64,
 }
 
 impl Currency {
@@ -253,36 +297,39 @@ impl Currency {
     /// there is as much of it as people want to hold.
     pub fn mint(name: String, symbol: String, medium: Medium, year: u64, transactions: f64) -> Currency {
         let level = 1.0 / FIRST_UNIT;
+        let transactions = transactions.max(1.0);
         Currency {
             name,
             symbol,
             medium,
             minted: year,
-            money: HELD * transactions.max(1.0) * level,
+            money: HELD * transactions * level,
             level,
             managed: false,
             inflation: 0.0,
-            last_transactions: transactions.max(1.0),
-            last_growth: 0.0,
+            trend: transactions,
+            trend_growth: 0.0,
         }
     }
 
     /// A year of a currency. Commodity money grows with the medium it is made of; managed money
-    /// grows with what the house expects the economy to need — last year's growth — plus its
-    /// target, and misses by however much the year surprised it.
+    /// grows as fast as the house expects trade to — the trend, not last year — plus its target,
+    /// and misses by however much the trend turns.
     pub fn year(&mut self, transactions: f64, medium_growth: f64) {
         let transactions = transactions.max(1.0);
+        let before = self.trend;
+        self.trend += SMOOTHING * (transactions - self.trend);
         let growth = if self.managed {
-            self.last_growth + TARGET_INFLATION
+            self.trend_growth + TARGET_INFLATION
         } else {
             medium_growth
         };
         self.money *= 1.0 + growth.clamp(-0.5, 1.0);
-        let level = self.money / (HELD * transactions);
+        let level = self.money / (HELD * self.trend);
         self.inflation = level / self.level - 1.0;
         self.level = level;
-        self.last_growth = (transactions / self.last_transactions - 1.0).clamp(-0.5, 0.5);
-        self.last_transactions = transactions;
+        let grew = self.trend / before.max(1e-9) - 1.0;
+        self.trend_growth += SMOOTHING * (grew - self.trend_growth);
     }
 }
 
@@ -308,7 +355,7 @@ mod tests {
     /// metal takes over. Nothing in between is chosen.
     #[test]
     fn money_comes_when_trade_is_thick_enough_and_not_before() {
-        let thin = run(0.15, 500);
+        let thin = run(0.10, 500);
         assert!(thin.monetised() < 0.1, "{thin:?}");
         assert_eq!(thin.money(), None);
         let thick = run(0.7, 200);
@@ -368,8 +415,30 @@ mod tests {
         assert!((coin.level - 100.0).abs() < 1e-9);
         coin.year(1e6, 1.0);
         assert!((coin.inflation - 1.0).abs() < 1e-9);
+        // Twice the trade, for good, with the money following it: prices settle where they were.
         let mut steady = Currency::mint("Test".into(), "TST".into(), Medium::Metal, 0, 1e6);
-        steady.year(2e6, 1.0);
-        assert!(steady.inflation.abs() < 1e-9, "twice the money for twice the trade");
+        for _ in 0..60 {
+            steady.year(2e6, 0.0);
+        }
+        steady.money = 2.0 * HELD * 2e6 * 100.0 / 2.0;
+        steady.year(2e6, 0.0);
+        assert!((steady.level - 100.0).abs() < 1.0, "{}", steady.level);
+    }
+
+    /// A managed money does not chase a single year: a harvest that doubles trade for one year
+    /// moves prices by far less than it would if money demand followed the harvest.
+    #[test]
+    fn a_managed_money_is_steadier_than_the_harvest() {
+        let mut coin = Currency::mint("Test".into(), "TST".into(), Medium::Metal, 0, 1e6);
+        coin.managed = true;
+        let mut worst: f64 = 0.0;
+        for year in 0..100 {
+            let shock = if year % 2 == 0 { 1.3 } else { 0.8 };
+            coin.year(1e6 * shock, 0.0);
+            if year > 20 {
+                worst = worst.max(coin.inflation.abs());
+            }
+        }
+        assert!(worst < 0.2, "inflation swung by {worst}");
     }
 }

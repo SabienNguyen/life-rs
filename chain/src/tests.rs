@@ -17,12 +17,12 @@ struct Fixture {
 
 const MONTH: u64 = 30 * 86_400;
 
-fn found_with(stakes: &[u64]) -> Fixture {
+fn found_with(stakes: &[u128]) -> Fixture {
     let validators: Vec<SigningKey> = (0..stakes.len())
         .map(|i| SigningKey::from_seed([10 + i as u8; 32]))
         .collect();
     let people: Vec<SigningKey> = (0..4).map(|i| SigningKey::from_seed([50 + i; 32])).collect();
-    let mut allocations: Vec<(PublicKey, u64, u64)> = validators
+    let mut allocations: Vec<(PublicKey, u128, u128)> = validators
         .iter()
         .zip(stakes)
         .map(|(k, stake)| (k.public(), 100 * COIN, stake * COIN))
@@ -56,7 +56,7 @@ impl Fixture {
             .expect("everybody answering commits a block")
     }
 
-    fn pay(&mut self, from: usize, to: Address, asset: Asset, amount: u64) -> Result<Digest, Refusal> {
+    fn pay(&mut self, from: usize, to: Address, asset: Asset, amount: u128) -> Result<Digest, Refusal> {
         let key = self.people[from].clone();
         let nonce = self.chain.next_nonce(&Address::of(&key.public()));
         let tx = Transaction::signed(
@@ -249,7 +249,7 @@ fn a_stable_token_is_only_minted_against_an_attested_reserve() {
 fn history_cannot_be_rewritten_quietly() {
     let mut world = found_with(&[25, 25, 25, 25]);
     for month in 0..6 {
-        world.pay(0, world.address(1 + month % 3), Asset::Coin, (month as u64 + 1) * COIN).unwrap();
+        world.pay(0, world.address(1 + month % 3), Asset::Coin, (month as u128 + 1) * COIN).unwrap();
         world.everybody();
     }
     assert_eq!(world.chain.verify(), Ok(()));
@@ -488,9 +488,9 @@ fn issuance_halves_until_there_is_none() {
     assert_eq!(ledger.issuance_at(1), 50 * COIN);
     assert_eq!(ledger.issuance_at(48), 25 * COIN);
     assert_eq!(ledger.issuance_at(96), 12 * COIN + COIN / 2);
-    let ever: u64 = (1..48 * 64).map(|h| ledger.issuance_at(h)).sum();
+    let ever: u128 = (1..48 * 64).map(|h| ledger.issuance_at(h)).sum();
     assert!(ever < 48 * 100 * COIN, "a halving schedule converges: {ever}");
-    assert_eq!(ledger.issuance_at(48 * 64), 0);
+    assert_eq!(ledger.issuance_at(48 * 128), 0);
 }
 
 /// A holder can show anybody their balance with a proof against a block header, and that
@@ -548,7 +548,7 @@ fn a_chain_replays_to_exactly_the_ledger_it_holds() {
     world.pay(0, world.address(1), Asset::Coin, 200 * COIN).unwrap();
     for month in 0..30u64 {
         let to = world.address(1 + (month % 3) as usize);
-        world.pay(0, to, Asset::Coin, COIN + month).unwrap();
+        world.pay(0, to, Asset::Coin, COIN + month as u128).unwrap();
         if month % 7 == 3 {
             // Somebody new starts validating partway through.
             let joiner = world.people[1].clone();

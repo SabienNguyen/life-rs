@@ -26,11 +26,11 @@ use crate::{Digest, PublicKey, Signature, SigningKey};
 
 /// Base units in one coin. Eight decimal places, so that a fee can be a small fraction of a
 /// coin and still be an integer. Nothing on the ledger is ever a float.
-pub const COIN: u64 = 100_000_000;
+pub const COIN: u128 = 100_000_000;
 
 /// Base units in one unit of the currency a stable token stands for: six decimal places, as
 /// the large fiat-backed tokens use.
-pub const TOKEN_UNIT: u64 = 1_000_000;
+pub const TOKEN_UNIT: u128 = 1_000_000;
 
 /// Where value lives: the first twenty bytes of a hash of somebody's public key.
 ///
@@ -81,7 +81,7 @@ pub enum Action {
     Pay {
         to: Address,
         asset: Asset,
-        amount: u64,
+        amount: u128,
     },
     /// Register a stable token issued by the sender, standing for one unit of `peg`, whose
     /// reserve `attestor` will vouch for.
@@ -91,15 +91,15 @@ pub enum Action {
         attestor: Address,
     },
     /// The attestor's statement of what the issuer holds in reserve, in base units.
-    Attest { token: u32, reserves: u64 },
+    Attest { token: u32, reserves: u128 },
     /// The issuer creates tokens for somebody who has paid it the currency they stand for.
-    Mint { token: u32, to: Address, amount: u64 },
+    Mint { token: u32, to: Address, amount: u128 },
     /// A holder hands tokens back to be exchanged for their currency. They are destroyed.
-    Redeem { token: u32, amount: u64 },
+    Redeem { token: u32, amount: u128 },
     /// Lock coin as stake, to take a share of keeping the chain.
-    Bond { amount: u64 },
+    Bond { amount: u128 },
     /// Unlock it again.
-    Unbond { amount: u64 },
+    Unbond { amount: u128 },
     /// Two votes by one validator for two different blocks at the same height and round.
     ///
     /// That is the one thing a validator can do that is provably dishonest from the outside,
@@ -131,7 +131,7 @@ impl Action {
                     Asset::Coin => w.u8(0),
                     Asset::Token(id) => w.u8(1).u32(*id),
                 };
-                w.u64(*amount);
+                w.u128(*amount);
             }
             Action::Issue {
                 symbol,
@@ -141,19 +141,19 @@ impl Action {
                 w.u8(1).text(symbol).text(peg).fixed(&attestor.0);
             }
             Action::Attest { token, reserves } => {
-                w.u8(2).u32(*token).u64(*reserves);
+                w.u8(2).u32(*token).u128(*reserves);
             }
             Action::Mint { token, to, amount } => {
-                w.u8(3).u32(*token).fixed(&to.0).u64(*amount);
+                w.u8(3).u32(*token).fixed(&to.0).u128(*amount);
             }
             Action::Redeem { token, amount } => {
-                w.u8(4).u32(*token).u64(*amount);
+                w.u8(4).u32(*token).u128(*amount);
             }
             Action::Bond { amount } => {
-                w.u8(5).u64(*amount);
+                w.u8(5).u128(*amount);
             }
             Action::Unbond { amount } => {
-                w.u8(6).u64(*amount);
+                w.u8(6).u128(*amount);
             }
             Action::Evidence { first, second } => {
                 w.u8(7).var(&first.encode()).var(&second.encode());
@@ -171,14 +171,14 @@ pub struct Transaction {
     /// Must equal the signer's account nonce when applied.
     pub nonce: u64,
     /// In coin base units, to the validator who proposes the block it lands in.
-    pub fee: u64,
+    pub fee: u128,
     pub action: Action,
     pub signature: Signature,
 }
 
 impl Transaction {
     /// Write, and sign.
-    pub fn signed(key: &SigningKey, chain: Digest, nonce: u64, fee: u64, action: Action) -> Transaction {
+    pub fn signed(key: &SigningKey, chain: Digest, nonce: u64, fee: u128, action: Action) -> Transaction {
         let mut tx = Transaction {
             chain,
             signer: key.public(),
@@ -197,7 +197,7 @@ impl Transaction {
         w.fixed(&self.chain.0)
             .fixed(&self.signer.0)
             .u64(self.nonce)
-            .u64(self.fee);
+            .u128(self.fee);
         self.action.encode_into(&mut w);
         w.finish()
     }
