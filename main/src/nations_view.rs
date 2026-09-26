@@ -421,6 +421,12 @@ fn ledger(world: &Nations, at: usize, network: &Network, checked: Option<&Checke
         out.push(format!("  … and {} more", validators.len() - 12));
     }
 
+    let history: Vec<String> = tally(network)
+        .into_iter()
+        .map(|(kind, n)| format!("{} {kind}", grouped(n as u128)))
+        .collect();
+    out.push(format!("  since its genesis it has carried {}", history.join(", ")));
+
     let tip = chain.tip();
     let (year, month) = when(tip.header.time);
     out.push(format!(
@@ -451,6 +457,39 @@ fn ledger(world: &Nations, at: usize, network: &Network, checked: Option<&Checke
     }
     out.push(String::new());
     out
+}
+
+/// Every transaction a chain has carried since its genesis, by what it did: payments in its
+/// token, swaps of coin for it, mints, redemptions, attestations, and everything else.
+fn tally(network: &Network) -> Vec<(&'static str, usize)> {
+    let mut counts: std::collections::BTreeMap<(&'static str, &'static str), usize> =
+        std::collections::BTreeMap::new();
+    for block in &network.chain.blocks {
+        for tx in &block.txs {
+            let kind = match &tx.action {
+                Action::Pay {
+                    asset: Asset::Token(_),
+                    ..
+                } => ("token payment", "token payments"),
+                Action::Pay { .. } => ("coin transfer", "coin transfers"),
+                Action::Swap(_) => ("swap of coin for tokens", "swaps of coin for tokens"),
+                Action::Mint { .. } => ("mint", "mints"),
+                Action::Redeem { .. } => ("redemption", "redemptions"),
+                Action::Attest { .. } => ("attestation", "attestations"),
+                Action::Bond { .. } => ("stake bonded", "stakes bonded"),
+                Action::Unbond { .. } => ("stake unbonded", "stakes unbonded"),
+                Action::Issue { .. } => ("token issued", "tokens issued"),
+                Action::Evidence { .. } => ("piece of evidence", "pieces of evidence"),
+            };
+            *counts.entry(kind).or_insert(0) += 1;
+        }
+    }
+    let mut counts: Vec<(&'static str, usize)> = counts
+        .into_iter()
+        .map(|((one, many), n)| (if n == 1 { one } else { many }, n))
+        .collect();
+    counts.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
+    counts
 }
 
 /// The year and month a block's time falls in.
@@ -784,6 +823,11 @@ fn network_json(world: &Nations, at: usize, network: &Network, checked: Option<&
     };
     let ledger = &chain.ledger;
     let proof = check_it_yourself(network);
+    let history = list(
+        tally(network)
+            .into_iter()
+            .map(|(kind, n)| format!("[{},{n}]", quoted(kind))),
+    );
     let verified = match checked {
         Some(c) => format!(
             "{{\"ok\":{},\"why\":{},\"seconds\":{},\"blocks\":{}}}",
@@ -799,7 +843,7 @@ fn network_json(world: &Nations, at: usize, network: &Network, checked: Option<&
         None => "null".to_string(),
     };
     format!(
-        "{{\"name\":{},\"id\":{},\"founded\":{},\"founders\":{},\"largestCountry\":{largest},\"height\":{},\"stalls\":{},\"refused\":{},\"roundsLost\":{},\"coin\":{{\"supply\":{},\"genesis\":{},\"issued\":{},\"burned\":{},\"price\":{}}},\"carried\":{},\"fees\":{},\"cost\":{},\"token\":{token},\"validators\":{validators},\"accounts\":{accounts},\"blocks\":{summary},\"recent\":{full},\"proof\":{proof},\"verified\":{verified}}}",
+        "{{\"name\":{},\"id\":{},\"founded\":{},\"founders\":{},\"largestCountry\":{largest},\"height\":{},\"stalls\":{},\"refused\":{},\"roundsLost\":{},\"coin\":{{\"supply\":{},\"genesis\":{},\"issued\":{},\"burned\":{},\"price\":{}}},\"carried\":{},\"fees\":{},\"cost\":{},\"token\":{token},\"validators\":{validators},\"accounts\":{accounts},\"blocks\":{summary},\"recent\":{full},\"proof\":{proof},\"history\":{history},\"verified\":{verified}}}",
         quoted(&network.name),
         quoted(&chain.id.to_string()),
         network.founded,
@@ -828,6 +872,9 @@ struct Checkable {
     header: Vec<u8>,
     hash: chain::Digest,
     state_root: chain::Digest,
+    tx_root: chain::Digest,
+    /// Every transaction in the block, as the bytes whose hash is its id.
+    txs: Vec<Vec<u8>>,
     /// Signed bytes, key, signature.
     votes: Vec<(Vec<u8>, chain::PublicKey, chain::Signature)>,
     accounts: Vec<Proved>,
@@ -850,6 +897,8 @@ fn checkable(network: &Network) -> Checkable {
         header: tip.header.encode(),
         hash: tip.hash(),
         state_root: tip.header.state,
+        tx_root: tip.header.txs,
+        txs: tip.txs.iter().map(|tx| tx.encode()).collect(),
         votes: tip
             .commit
             .votes
@@ -894,12 +943,14 @@ fn check_it_yourself(network: &Network) -> String {
             list(a.path.iter().map(|d| quoted(&d.to_string())))
         )
     }));
+    let txs = list(it.txs.iter().map(|bytes| quoted(&chain::hex(bytes))));
     format!(
-        "{{\"height\":{},\"header\":{},\"hash\":{},\"stateRoot\":{},\"votes\":{votes},\"accounts\":{accounts}}}",
+        "{{\"height\":{},\"header\":{},\"hash\":{},\"stateRoot\":{},\"txRoot\":{},\"txs\":{txs},\"votes\":{votes},\"accounts\":{accounts}}}",
         it.height,
         quoted(&chain::hex(&it.header)),
         quoted(&it.hash.to_string()),
-        quoted(&it.state_root.to_string())
+        quoted(&it.state_root.to_string()),
+        quoted(&it.tx_root.to_string())
     )
 }
 
@@ -937,6 +988,13 @@ mod tests {
             assert!(key.verify(payload, signature));
             assert!(payload.windows(32).any(|w| w == it.hash.0), "a vote names its block");
         }
+        // The transactions: each hashes to its id, and the ids to the header's root.
+        let ids: Vec<chain::Digest> = it.txs.iter().map(|t| chain::merkle::leaf(&chain::Digest::of(t).0)).collect();
+        assert_eq!(chain::merkle::root(&ids), it.tx_root);
+        assert!(it.header.windows(32).any(|w| w == it.tx_root.0));
+        let tip = world.networks[0].chain.tip();
+        assert!(tip.txs.iter().all(|tx| tx.signature_holds()));
+        assert_eq!(it.txs.len(), tip.txs.len());
         assert!(it.accounts.len() > 4);
         for a in &it.accounts {
             assert!(

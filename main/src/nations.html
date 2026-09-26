@@ -737,6 +737,16 @@ async function addressOf(keyBytes) {
   const length = new Uint8Array([tag.length, 0, 0, 0]);
   return hexOf((await sha256(joined([length, tag, keyBytes]))).slice(0, 20));
 }
+// An RFC 6962 root over leaves already hashed: split at the largest power of two below the count.
+async function merkleRoot(leaves) {
+  if (leaves.length === 0) return sha256(new Uint8Array(0));
+  if (leaves.length === 1) return leaves[0];
+  let k = 1;
+  while (k * 2 < leaves.length) k *= 2;
+  const left = await merkleRoot(leaves.slice(0, k));
+  const right = await merkleRoot(leaves.slice(k));
+  return sha256(joined([new Uint8Array([1]), left, right]));
+}
 async function ed25519Holds(keyHex, signatureHex, messageHex) {
   const key = await crypto.subtle.importKey("raw", unhex(keyHex), { name: "Ed25519" }, false, ["verify"]);
   return crypto.subtle.verify({ name: "Ed25519" }, key, unhex(signatureHex), unhex(messageHex));
@@ -756,6 +766,15 @@ async function checkYourself(at, tamper) {
     const header = unhex(p.header);
     say(hexOf(await sha256(header)) === p.hash, "the header's " + header.length + " bytes hash to the block's name, " + p.hash.slice(0, 16) + "…");
     say(p.header.indexOf(p.stateRoot) >= 0, "the header commits to the state root " + p.stateRoot.slice(0, 16) + "…");
+    // The transactions: each one's id is the hash of its bytes, and the ids hash up to the root the
+    // header commits to — so these are the transactions the validators signed, no more and no fewer.
+    const ids = [];
+    for (let i = 0; i < p.txs.length; i++) {
+      const id = await sha256(unhex(p.txs[i]));
+      ids.push(await sha256(joined([new Uint8Array([0]), id])));
+    }
+    const txRoot = hexOf(await merkleRoot(ids));
+    say(txRoot === p.txRoot && p.header.indexOf(p.txRoot) >= 0, "its " + p.txs.length + " transactions hash up to the transaction root the header commits to, " + p.txRoot.slice(0, 16) + "…");
     // The votes: each names this block, is signed by the key it says, and that key is a validator's.
     const power = {};
     let total = 0;
@@ -779,9 +798,26 @@ async function checkYourself(at, tamper) {
         signed += power[address];
       }
     }
+    // And each transaction is signed by the key it names: the body is everything but the last
+    // sixty-four bytes, which are the signature, and the signer's key sits after the tag and the
+    // chain's id. A swap's second signature, its counterparty's, the chain checks as well.
+    let signedTxs = 0;
+    if (edOk) {
+      for (let i = 0; i < p.txs.length; i++) {
+        const tx = p.txs[i];
+        const signer = tx.slice(2 * (4 + 18 + 32), 2 * (4 + 18 + 64));
+        try {
+          if (await ed25519Holds(signer, tx.slice(tx.length - 128), tx.slice(0, tx.length - 128))) signedTxs += 1;
+        } catch (e) {
+          edOk = false;
+          break;
+        }
+      }
+    }
     if (!edOk) {
-      lines.push("<li class='muted'>This browser cannot check Ed25519 signatures, so the votes are left unchecked; every hash above and below still is.</li>");
+      lines.push("<li class='muted'>This browser cannot check Ed25519 signatures, so the votes and the transactions' signatures are left unchecked; every hash above and below still is.</li>");
     } else {
+      say(signedTxs === p.txs.length, signedTxs + " of " + p.txs.length + " transactions are signed by the key each names");
       say(3 * signed > 2 * total, good + " of " + p.votes.length + " votes are for this block and signed by a validator, holding " + pct(signed / Math.max(1, total)) + " of the stake — " + (3 * signed > 2 * total ? "more than two thirds, so the block is final" : "not two thirds"));
     }
     // Every house's account, proved into the state root the header holds.
