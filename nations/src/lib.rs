@@ -497,17 +497,22 @@ impl Nations {
             .map(|t| t.people.round().clamp(0.0, u32::MAX as f64) as u32)
             .collect();
         let found = self.cultures.countries(&souls, |a, b| self.within_reach(a, b));
-        // What paying abroad cost each country last year carries over to the country with the
-        // same key, since it is what this year's market is priced with: it is only worked out
-        // again once the year's trade is known. Redrawing the countries used to set it back to
-        // nothing, so for as long as the map was redrawn every year no border ever cost anything,
-        // and the chain lowered a number nothing read. A country new this year starts where the
-        // others stood on average.
-        let carried: BTreeMap<usize, f64> = self.countries.iter().map(|c| (c.key, c.pay_cost)).collect();
+        // What paying abroad cost each country last year, and what it sold abroad, carry over to
+        // the country with the same key: this year's market is priced with the one and this
+        // year's catching up is paced by the other, and neither is worked out again until the
+        // year's trade is known. Redrawing the countries used to set both back to nothing, so no
+        // border ever cost anything, trade never brought anybody's technique on, and the chain
+        // lowered a number nothing read. A country new this year starts where the others stood
+        // on average, and as if it had sold nothing.
+        let carried: BTreeMap<usize, (f64, f64)> = self
+            .countries
+            .iter()
+            .map(|c| (c.key, (c.pay_cost, c.exports)))
+            .collect();
         let usual = if carried.is_empty() {
             0.0
         } else {
-            carried.values().sum::<f64>() / carried.len() as f64
+            carried.values().map(|(cost, _)| cost).sum::<f64>() / carried.len() as f64
         };
         let mut countries: Vec<Country> = Vec::new();
         for c in found {
@@ -531,8 +536,8 @@ impl Nations {
                 currency: None,
                 people: 0.0,
                 product: 0.0,
-                exports: 0.0,
-                pay_cost: carried.get(&key).copied().unwrap_or(usual),
+                exports: carried.get(&key).map(|(_, sold)| *sold).unwrap_or(0.0),
+                pay_cost: carried.get(&key).map(|(cost, _)| *cost).unwrap_or(usual),
             });
         }
         // Largest first, then by key, so the order is stable.

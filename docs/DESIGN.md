@@ -5673,13 +5673,13 @@ Nine seeds, seven hundred years each:
 
 | seed | towns | countries | first money | first coin | trap opens | people | income | farmers | traded | famines |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 0x11 | 40 | 2 | 69 | 81 | 336 | 5.5B | 164 | 80% → 10% | 3.2% | 5 |
-| 0x21 | 36 | 3 | 73 | 82 | 478 | 10.0B | 55 | 81% → 11% | 8.9% | 15 |
-| 0x221 | 34 | 5 | 69 | 88 | 449 | 7.7B | 64 | 79% → 12% | 4.9% | 17 |
-| 0xbeef | 42 | 3 | 65 | 89 | 509 | 11.2B | 36 | 80% → 12% | 9.5% | 20 |
-| 0x5eed | 25 | 2 | 75 | 91 | 474 | 6.4B | 52 | 81% → 12% | 2.5% | 9 |
-| 0x7 | 45 | 3 | 72 | 88 | 422 | 9.5B | 86 | 81% → 10% | 9.3% | 7 |
-| 0x1234 | 34 | 3 | 69 | 91 | 499 | 9.8B | 41 | 81% → 12% | 8.5% | 10 |
+| 0x11 | 40 | 2 | 69 | 81 | 336 | 5.1B | 181 | 80% → 9% | 3.8% | 6 |
+| 0x21 | 36 | 3 | 73 | 82 | 478 | 9.6B | 60 | 80% → 10% | 9.3% | 12 |
+| 0x221 | 34 | 5 | 69 | 88 | 449 | 6.9B | 76 | 79% → 10% | 7.1% | 15 |
+| 0xbeef | 42 | 3 | 65 | 89 | 505 | 10.0B | 45 | 80% → 11% | 10.7% | 20 |
+| 0x5eed | 25 | 2 | 75 | 91 | 474 | 5.9B | 59 | 81% → 10% | 3.5% | 8 |
+| 0x7 | 45 | 3 | 72 | 88 | 422 | 8.8B | 96 | 81% → 10% | 9.7% | 6 |
+| 0x1234 | 34 | 3 | 69 | 91 | 496 | 8.9B | 49 | 81% → 11% | 9.4% | 10 |
 | 0x2b | 27 | 1 | 73 | 83 | 357 | 4.6B | 152 | 79% → 9% | — | 6 |
 | 0xc0ffee | 36 | 1 | 62 | 79 | 288 | 4.3B | 205 | 81% → 9% | — | 0 |
 
@@ -5697,17 +5697,19 @@ population has stopped growing in every world, with farmers down from four in fi
 ten.
 
 **Markets end famines.** The same world with nothing able to move between towns — one switch,
-`trade_is_possible` — has twenty famines in its first hundred and fifty years against eight with
-trade, and a tenth fewer people at the end. A bad harvest met from somebody else's good
+`trade_is_possible` — has nineteen famines in its first hundred and fifty years against eight
+with trade, and a tenth fewer people at the end. A bad harvest met from somebody else's good
 one is most of what a market is for, before it is for anything else.
 
-**The richest worlds are the ones with one country.** 0x2b and 0xc0ffee end at 152 and 205 times
-subsistence; the seven worlds with borders at 36 to 164. The obvious reading — a border costs
-nine per cent of every payment across it until a chain brings it to two, and a single country
-never pays it — is wrong, and measured to be: making every border free from the founding moves
-income by under three per cent in every one of the seven (§49.6.1). Whatever keeps the bordered
-worlds poorer, it is not what paying across a border costs. Fewer people and earlier escapes are
-part of it; the rest is not yet taken apart.
+**Two of the three richest worlds have one country.** 0xc0ffee and 0x2b end at 205 and 152 times
+subsistence; of the seven with borders only 0x11, at 181, reaches them, and the other six end at
+45 to 96. The obvious reading — a border costs nine per cent of every payment across it until a
+chain brings it to two, and a single country never pays it — is wrong, and measured to be:
+making every border free from the founding moves income by under four per cent in every one of
+the seven (§49.6.1). What crossing a border does cost is contact: a country behind the frontier
+catches up faster the more it trades, and when a bug had that switched off (§49.7) the bordered
+worlds ended nine to twenty-five per cent poorer than they do now. Fewer people and earlier
+escapes are part of what is left; the rest is not yet taken apart.
 
 ### 49.4 Three questions, asked every year
 
@@ -5730,9 +5732,9 @@ as three conditions, and the answer is no until all three hold:
    reckons thirty times better, and in between it is exactly as worth founding as the saving on
    what paying abroad costs says.
 
-In the seven worlds with borders it happens between years 442 and 587, a century or two after
-the trap opens, founded by thirteen to twenty-one houses across every country. The largest
-founder names it — the Stanwick Ledger, the Selcombe Ledger — and every founder stakes in
+In the seven worlds with borders it happens between years 428 and 594, a century or two after
+the trap opens, founded by fourteen to twenty-one houses across every country. The largest
+founder names it — the Stanwick Ledger, the Whitscar Ledger — and every founder stakes in
 proportion to its business abroad, up to a point: no country's houses may hold more than three
 fifths of the stake, short of the two thirds that would finalise a block with nobody abroad
 signing. Nobody joins a ledger one of the others could keep alone, so the largest country takes
@@ -5820,26 +5822,27 @@ a year's payments — plus the coin they hold to pay fees with, a quarter of a y
 
 | seed | founded | founders | validators | height | most stake in one country | paying abroad without | with | on chain | refused | stalls | replayed |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| 0x11 | 442 | 16 in 2 | 16 | 3108 | 60% | 9.0% | 1.7% | 90% | 0 | 0 | ok in 7.1 s |
-| 0x21 | 575 | 21 in 3 | 21 | 1512 | 49% | 9.4% | 1.9% | 90% | 0 | 0 | ok in 6.9 s |
-| 0x221 | 570 | 18 in 5 | 18 | 1572 | 60% | 9.7% | 1.9% | 89% | 0 | 0 | ok in 12.8 s |
-| 0xbeef | 587 | 13 in 3 | 13 | 1368 | 60% | 9.8% | 1.9% | 89% | 0 | 0 | ok in 7.9 s |
-| 0x5eed | 570 | 13 in 2 | 13 | 1572 | 60% | 9.2% | 1.9% | 89% | 0 | 0 | ok in 4.2 s |
-| 0x7 | 513 | 13 in 3 | 15 | 2256 | 60% | 8.9% | 1.7% | 90% | 0 | 0 | ok in 13.2 s |
-| 0x1234 | 584 | 14 in 3 | 16 | 1404 | 60% | 8.8% | 1.9% | 88% | 0 | 0 | ok in 8.3 s |
+| 0x11 | 428 | 15 in 2 | 15 | 3276 | 60% | 9.0% | 1.7% | 90% | 0 | 0 | ok in 6.7 s |
+| 0x21 | 565 | 21 in 3 | 21 | 1632 | 47% | 9.4% | 1.9% | 90% | 0 | 0 | ok in 7.9 s |
+| 0x221 | 541 | 17 in 5 | 20 | 1920 | 34% | 9.6% | 1.8% | 90% | 0 | 0 | ok in 16.7 s |
+| 0xbeef | 594 | 21 in 3 | 21 | 1284 | 43% | 9.8% | 2.0% | 89% | 0 | 0 | ok in 8.1 s |
+| 0x5eed | 559 | 14 in 2 | 14 | 1704 | 60% | 9.2% | 1.9% | 89% | 0 | 0 | ok in 5.3 s |
+| 0x7 | 517 | 21 in 3 | 21 | 2208 | 59% | 9.1% | 1.8% | 90% | 0 | 0 | ok in 13.3 s |
+| 0x1234 | 587 | 21 in 3 | 21 | 1368 | 48% | 8.8% | 1.9% | 88% | 0 | 0 | ok in 7.4 s |
 
 Paying abroad falls from about nine per cent to under two. Nine tenths of it moves onto the
 chain, no chain has ever stalled, nothing any world has sent its chain has been refused, and
-every chain replays from its genesis. In six worlds the largest country's houses hold exactly
-the three fifths they are allowed; in 0x21 two countries hold 49 and 48 per cent, so either can
-stop the chain and neither can finalise a block alone. Where a capital comes to do a twentieth
-of a chain's business and can afford the stake it buys a seat, which is how 0x7 and 0x1234 end
-with more validators than founders. A block of a two-country world carries about forty
-transactions; of the five-country world, about two hundred and thirty. The token cycles: on 0x11
-by year 620, 44.1 trillion WENT minted and 43.2 trillion redeemed, and it is backed exactly one
-for one at the end of every block. And the coin trades against it: 9,435 swaps moved 968,430
-coin, against ten transfers paid for over the counter, the first of them the issuer's first
-coin, bought before there were any tokens to buy it with.
+every chain replays from its genesis. The cap on one country's stake binds in two worlds of
+seven, where the largest country's houses hold the three fifths they are allowed; elsewhere the
+founders' business is spread widely enough that it never comes to that, and in the five-country
+0x221 no country holds more than a third. Where a capital comes to do a twentieth of a chain's
+business and can afford the stake it buys a seat, which is how 0x221 ends with twenty validators
+from seventeen founders. A block of a two-country world carries about thirty-five transactions;
+of the five-country world, about two hundred. The token cycles: on 0x11 by year 620, 57.6
+trillion WENT minted and 56.4 trillion redeemed, and it is backed exactly one for one at the end
+of every block. And the coin trades against it: 9,457 swaps moved 838,021 coin, against fourteen
+transfers paid for over the counter, the first of them the issuer's first coin, bought before
+there were any tokens to buy it with.
 
 One thing about that "with": payments settle towards the share of the cost they save, so the
 cost of paying abroad comes to rest near twice the chain's own cost rather than at it. That is a
@@ -5853,21 +5856,21 @@ world makes that crosses a border, by year 700, and its income:
 
 | seed | traded abroad, no chain | with the chain | borders free | of the way | income: no chain / chain / free |
 |---|---|---|---|---|---|
-| 0x11 | 2.59% | 3.25% | 3.52% | 71% | 163.8 / 163.7 / 163.0 |
-| 0x21 | 7.38% | 8.92% | 9.39% | 77% | 54.6 / 54.6 / 54.4 |
-| 0x221 | 4.06% | 4.92% | 5.60% | 56% | 63.3 / 64.4 / 62.7 |
-| 0xbeef | 8.04% | 9.49% | 10.15% | 69% | 36.7 / 35.7 / 35.4 |
-| 0x5eed | 1.99% | 2.46% | 2.69% | 67% | 52.1 / 52.3 / 52.0 |
-| 0x7 | 7.80% | 9.33% | 9.80% | 77% | 86.4 / 85.9 / 84.9 |
-| 0x1234 | 6.87% | 8.52% | 9.18% | 71% | 41.8 / 41.3 / 41.2 |
+| 0x11 | 3.00% | 3.83% | 4.19% | 70% | 181.6 / 181.1 / 180.2 |
+| 0x21 | 7.74% | 9.35% | 9.87% | 76% | 59.5 / 60.1 / 59.2 |
+| 0x221 | 5.79% | 7.07% | 7.65% | 69% | 76.6 / 76.5 / 75.7 |
+| 0xbeef | 9.00% | 10.74% | 11.27% | 77% | 45.1 / 45.1 / 44.9 |
+| 0x5eed | 2.91% | 3.50% | 3.84% | 63% | 58.9 / 58.6 / 57.0 |
+| 0x7 | 8.26% | 9.72% | 10.39% | 69% | 96.4 / 95.6 / 95.9 |
+| 0x1234 | 7.87% | 9.41% | 9.93% | 75% | 49.0 / 49.0 / 49.8 |
 
-The chain raises trade across borders by a fifth to a quarter, and gets between half and four
-fifths of the way to borders that cost nothing — less early, while checking is still dear, and
-more as it gets cheap: thirty years after 0x11's founding it had gone a quarter of the way, and a
-test holds it to more than half a century on. Income moves by under three per cent either way,
-and not in one direction. Trade abroad is two to ten per cent of what these worlds make, and
-widening it by a fifth does not show in what a head earns. Famines do not move at all: they come
-in the centuries before there is anything to found.
+The chain raises trade across borders by eighteen to twenty-eight per cent, and gets between
+three fifths and four fifths of the way to borders that cost nothing — less early, while
+checking is still dear, and more as it gets cheap: thirty years after 0x11's founding it had
+gone a third of the way, and a century on 63 per cent, which a test holds it to. Income moves by
+under four per cent either way, and not in one direction. Trade abroad is two to ten per cent of
+what these worlds make, and widening it by a fifth does not show in what a head earns. Famines
+do not move at all: they come in the centuries before there is anything to found.
 
 ### 49.7 What went wrong on the way
 
@@ -5921,13 +5924,18 @@ the mechanism was the wrong one.
 - **A chain that changed nothing.** The ablation above was first run to measure what a chain is
   worth, and with a chain, without one, and with free borders every world came out the same to
   the last digit. Redrawing the countries each year set what paying abroad cost back to nothing,
-  and the market and the trade in varieties both read it after the reset and before it was worked
-  out again — so the nine per cent and the two the report printed were computed and never used,
-  and the chain lowered a number nothing read. It carries over by the country's key now. The fix
-  showed a regression at once: the stable token's issuer, which pays its own fees before there are
-  any new tokens in a month, went back to buying its coin over the counter 265 times in thirty
-  years. The attestor and issuer now buy a month ahead with tokens minted for the purpose, and
-  never spend on coin the tokens they owe.
+  and the market and the trade in varieties both read it after the reset and before it was
+  worked out again — so the nine per cent and the two the report printed were computed and never
+  used, and the chain lowered a number nothing read. It was not alone: `learn`, which also comes
+  before the year's trade is known, read each country's exports to pace how fast it catches up,
+  and got the zero the redraw had left — so trade never brought anybody's technique on either.
+  Both carry over by the country's key now. With the second, the bordered worlds end nine to
+  twenty-five per cent richer, laggards field houses capable of validating, and chains are
+  founded by more of them and held more evenly. The first fix showed a regression at once: the
+  stable token's issuer, which pays its own fees before there are any new tokens in a month,
+  went back to buying its coin over the counter 265 times in thirty years. The attestor and
+  issuer now buy a month ahead with tokens minted for the purpose, and never spend on coin the
+  tokens they owe.
 - **A ledger one country kept.** Stake in proportion to business put 74 to 90 per cent of it
   with one country's houses in six worlds of seven — enough to finalise blocks with nobody abroad
   signing, which is a ledger one party keeps with extra steps. Every rule was being checked and
