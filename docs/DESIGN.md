@@ -5606,7 +5606,8 @@ chains and `nations/examples/what_the_chain_changes.rs` for the worlds around th
 - **A town** stands on each cell whose habitability reaches 0.22 — deep time's bar for
   settling new ground — best cells first, never next to another town, at most sixty-four. It is
   founded at three fifths of what its ground can feed, which is where two thousand years of
-  farming leave anybody. Twenty-five to forty-five towns on the level-3 grid.
+  farming leave anybody. Twenty-two to fifty-three towns on the level-3 grid, across ninety-six
+  seeds, in one to five countries.
 - **A state** is a market area. Every town is drawn to the largest market it can reach,
   weighted by the square of how near it is; a town drawn to itself is a hub. Reach is 2,500 km
   at bare technique and grows with the square root of making, so market areas widen and merge
@@ -5693,7 +5694,8 @@ sixty-four more seeds run to year 700, one has not escaped at all: 0x33, three c
 chain is never worth founding.
 
 **Money comes centuries before anybody is rich.** Every world trades in metal by year eighty
-and strikes its first coin by ninety-one; none escapes subsistence before year 288. Money comes
+and strikes its first coin by ninety-one; none escapes subsistence before year 288 — and across
+ninety-six seeds, metal by year eighty-three and no escape before 235. Money comes
 out of trade being thick, not out of wealth, which is where the record has it.
 
 **The trap holds and then opens.** For three to five centuries every gain in technique becomes
@@ -5738,15 +5740,17 @@ as three conditions, and the answer is no until all three hold:
    reckons thirty times better, and in between it is exactly as worth founding as the saving on
    what paying abroad costs says.
 
-In the seven worlds with borders it happens between years 418 and 596, a century or two after
-the trap opens, founded by six to twenty-one houses across every country — the ones that would
-carry their countries' trade on it: every state large enough to have a market house of its own,
-and the capital for the rest. The largest founder names it — the Wickport Ledger, the Whitscar
-Ledger — and every founder stakes in
-proportion to its business abroad, up to a point: no country's houses may hold more than three
-fifths of the stake, short of the two thirds that would finalise a block with nobody abroad
-signing. Nobody joins a ledger one of the others could keep alone, so the largest country takes
-less stake than its business would give it (§49.7).
+In the seven worlds with borders it happens between years 418 and 596, eighty to a hundred years
+after the trap opens — and across seventy-nine chains measured since, between 347 and 641, never
+sooner than seventy-three years after it or later than a hundred. It is founded by six to
+twenty-one houses across every country (four to twenty-one across the seventy-nine) — the ones
+that would carry their countries' trade on it: every state large enough to have a market house
+of its own, and the capital for the rest. The largest founder names it — the Wickport Ledger,
+the Whitscar Ledger — and every founder stakes in proportion to its business abroad, up to a
+point: no country's houses may hold more than three fifths of the stake, short of the two thirds
+that would finalise a block with nobody abroad signing. Nobody joins a ledger one of the others
+could keep alone, so the largest country takes less stake than its business would give it
+(§49.7).
 
 ### 49.5 The chain itself, and why it counts as one
 
@@ -5764,8 +5768,8 @@ The standard is design principle five's: the mechanism is real and the resolutio
   at its post fails and the next is tried; a height where more than a third of the stake is
   absent stops rather than risk a fork.
 - Signing two blocks at one height is the one offence provable from outside: evidence of it
-  costs five per cent of the stake and the seat. Unbonded stake waits twelve blocks so there is
-  time to show it. New coin is issued each block to validators by stake, halving every four
+  costs five per cent of the stake, and the key that signed never validates again. Unbonded
+  stake waits twelve blocks so there is time to show it. New coin is issued each block to validators by stake, halving every four
   years.
 - A stable token can be minted only by its issuer and only against a reserve its attestor —
   never the issuer — has stated on the ledger. A shortfall can be stated, and then nothing more
@@ -5864,9 +5868,9 @@ back, so long as four validators remain and no country is left over its cap. 0x2
 houses join and five leave since its founding; 0x11's six founders are seven validators, three
 houses having joined and two left, and two caught signing a block twice and back under keys they
 keep for staking (§49.6.2). A block of a two-country world carries about thirty transactions; of
-the five-country world, about two hundred. The token cycles: on 0x11 by year 620, 59.4 trillion
+the five-country world, about two hundred. The token cycles: on 0x11 by year 620, 59.3 trillion
 WENT minted and 58.1 trillion redeemed, and it is backed exactly one for one at the end of every
-block. And the coin trades against it: 13,184 swaps moved 503,034 coin, against eight transfers
+block. And the coin trades against it: 13,172 swaps moved 503,287 coin, against eight transfers
 paid for over the counter, the first of them the issuer's first coin, bought before there were any
 tokens to buy it with.
 
@@ -5948,8 +5952,8 @@ the best-standing house not validating whose country has room under its share ta
 house that checks slower than the rest is taken when nobody faster can do it: a slower chain is
 the price of one nobody keeps, as it was at the founding, which waited for the slowest country.
 The house just caught is placed like any other, and is often the best placed — on 0x11 it was
-Wickport itself that bonded the larger country back to its share, under its new key, the same
-year. Only if nobody can buy the coin does the country over its share give some up.
+Wickport itself, under its new key, that bonded what brought the smaller country back to its three
+fifths, the same year. Only if nobody can buy the coin does the country over its share give some up.
 
 Across thirty worlds with chains — the seven of §49.6's table to year 700, and twenty-three more
 to year 800 — thirty-eight validators were caught, none in ten of the worlds and at most four in
@@ -6056,6 +6060,16 @@ the mechanism was the wrong one.
   key seen twice now keeps a table of its multiples — one to eight times every power of 256, the
   reference implementation's layout for the base point — and verifies in about 27 µs. What is
   kept changes how fast a signature is checked, never whether it holds.
+- **A jailing that left one country holding a chain.** The first way of mending a chain after a
+  jailing (§49.6.2) was tried on its worst case by hand — 0x11's smaller country losing its one
+  large validator, which left the larger holding the whole of the stake — and did two wrong
+  things. It seated a house at a single coin, under the ten a validator needs, and so seated the
+  same house again every month; and, asking for a house that checked as fast as the rest, it
+  found none in the smaller country, whose best checked at six tenths of the fastest, and fell
+  back on the larger country giving up its excess — which unbonded its three validators down to
+  ten coin apiece without moving its share at all, since nobody else held any. A seat is now
+  never taken at less than a validator needs, a house that checks slower is taken when nobody
+  faster can do it, and giving stake up is left for when somebody else holds some.
 - **A genesis that could crash whoever checked it.** The first test of the chain file flipped
   bits through a written chain and replayed each result, and one flip, high in a genesis
   allocation, made a sum overflow and the replay panic rather than refuse. It never needed a
@@ -6072,16 +6086,6 @@ the mechanism was the wrong one.
   chain the operator would come back under a new key; now a house does, keeping its own account
   for everything else — which matters, since a token's issuer and attestor are addresses on the
   ledger, and a house that moved to a new account would have lost the right to mint or vouch.
-- **A jailing that left one country holding a chain.** The first way of mending a chain after a
-  jailing (§49.6.2) was tried on its worst case by hand — 0x11's smaller country losing its one
-  large validator, which left the larger holding the whole of the stake — and did two wrong
-  things. It seated a house at a single coin, under the ten a validator needs, and so seated the
-  same house again every month; and, asking for a house that checked as fast as the rest, it
-  found none in the smaller country, whose best checked at six tenths of the fastest, and fell
-  back on the larger country giving up its excess — which unbonded its three validators down to
-  ten coin apiece without moving its share at all, since nobody else held any. A seat is now
-  never taken at less than a validator needs, a house that checks slower is taken when nobody
-  faster can do it, and giving stake up is left for when somebody else holds some.
 
 ### 49.8 What this does not do
 
