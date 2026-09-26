@@ -593,6 +593,8 @@ drawCountries();
       "<div>a payment costs</div><div>" + pct(c.cost) + " of it on the chain" +
         (WORLD.throughHouses === null ? "" : ", " + pct(WORLD.throughHouses) + " through houses alone") + "</div>" +
       "<div>rounds lost · stalls · refused</div><div>" + c.roundsLost + " · " + c.stalls + " · " + c.refused + "</div>" +
+      (WORLD.withoutChain && at === 0 ? "<div>without any chain</div><div>" + pct(WORLD.withoutChain.traded) + " of what the world makes would cross a border, against " +
+        pct((WORLD.readings[WORLD.readings.length - 1] || [0, 0, 0, 0, 0])[4]) + " with it <span class='muted'>— the same world, run again from its seed with no chain allowed</span></div>" : "") +
       (c.largestCountry ? "<div>most stake in one country</div><div>" + esc(WORLD.countries[c.largestCountry.country].name) + ", " + pct(c.largestCountry.share) +
         " <span class='muted'>— a block needs two thirds, so it is always signed abroad too</span></div>" : "") + "</div>" +
       "<h2 style='margin-top:14px'>Validators</h2><div class='scroll'><table><tr><th>house</th><th>country</th><th class='n'>stake</th><th>address</th></tr>" + validators + "</table></div>" +

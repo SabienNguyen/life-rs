@@ -11,6 +11,19 @@ pub struct Checked {
     pub blocks: usize,
 }
 
+/// The same world run again from its seed with no chain allowed, as far as the world has gone:
+/// what it would have traded across its borders and earned without one. `None` for a world that
+/// has founded no chain, which has nothing to compare. Cheap — it is the chain that costs time.
+pub fn without_a_chain(world: &Nations) -> Option<nations::Reading> {
+    if world.networks.is_empty() {
+        return None;
+    }
+    let mut other = Nations::found(world.seed);
+    other.chains_are_possible = false;
+    other.run(world.year);
+    other.readings.last().cloned()
+}
+
 /// Replay every chain a world keeps from its genesis, with nothing taken on trust.
 pub fn check(world: &Nations) -> Vec<Checked> {
     world
@@ -390,6 +403,15 @@ fn ledger(world: &Nations, at: usize, network: &Network, checked: Option<&Checke
             percent(houses)
         ));
     }
+    if let (Some(without), Some(with)) = (without_a_chain(world), world.readings.last()) {
+        out.push(format!(
+            "  run again with no chain allowed, the same world trades {} of what it makes across its borders rather than {}, and a head makes {:.1} times subsistence rather than {:.1}",
+            percent(without.traded),
+            percent(with.traded),
+            without.income,
+            with.income
+        ));
+    }
 
     out.push(format!("  {:<14} {:<14} {:>11}  {:>6}", "validator", "country", "coin staked", "power"));
     let mut validators: Vec<(usize, u64)> = network
@@ -702,6 +724,12 @@ pub fn snapshot(world: &Nations, checked: &[Checked]) -> String {
             .map(|(at, n)| network_json(world, at, n, checked.get(at))),
     );
     fields.push(format!("\"chains\":{chains}"));
+    fields.push(format!(
+        "\"withoutChain\":{}",
+        without_a_chain(world)
+            .map(|r| format!("{{\"traded\":{},\"income\":{}}}", num(r.traded), num(r.income)))
+            .unwrap_or_else(|| "null".to_string())
+    ));
     fields.push(format!(
         "\"throughHouses\":{}",
         world.cost_through_houses().map(num).unwrap_or_else(|| "null".to_string())
