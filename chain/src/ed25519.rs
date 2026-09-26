@@ -935,10 +935,10 @@ mod measure {
         let key = SigningKey::from_seed([9; 32]);
         let message = [7u8; 120];
         let _ = key.sign(&message); // build the base table outside the timing
-        let n = 2000;
+        let n: u32 = 2000;
         let start = std::time::Instant::now();
         for i in 0..n {
-            let _ = key.sign(&[message.as_slice(), &(i as u32).to_le_bytes()].concat());
+            let _ = key.sign(&[message.as_slice(), &i.to_le_bytes()].concat());
         }
         let signing = start.elapsed() / n;
         let last = key.sign(&message);
@@ -950,7 +950,7 @@ mod measure {
         let verifying = start.elapsed() / n;
         let start = std::time::Instant::now();
         for i in 0..n {
-            let _ = crate::sha2::sha256(&[message.as_slice(), &(i as u32).to_le_bytes()].concat());
+            let _ = crate::sha2::sha256(&[message.as_slice(), &i.to_le_bytes()].concat());
         }
         let hashing = start.elapsed() / n;
         eprintln!("sign {signing:?}  verify {verifying:?}  sha256(124 B) {hashing:?}  ({ok})");

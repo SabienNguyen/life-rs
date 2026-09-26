@@ -36,6 +36,12 @@
 //! - `sha2` and `ed25519` — the two primitives, written out from their standards and checked
 //!   against the published vectors and against OpenSSL.
 //! - `merkle` — RFC 6962 trees, with inclusion proofs.
+//! - `codec` — one canonical encoding, with a domain tag on everything signed or hashed.
+//! - `tx` and `state` — an account ledger with a native coin and stable tokens that can only
+//!   be minted against an independently attested reserve.
+//! - `consensus`, `block` and `node` — validator sets, weighted proposer rotation, commits of
+//!   more than two thirds of the stake, and a chain that can be replayed from genesis by
+//!   anybody, with nothing taken on trust.
 //!
 //! ## What is not
 //!
@@ -43,11 +49,22 @@
 //! so there is no gossip, no latency and no partition — a validator is either answering this
 //! round or it is not. That is the coarse part, and it is where a partition would go.
 
+pub mod block;
+pub mod codec;
+pub mod consensus;
 pub mod ed25519;
 pub mod merkle;
+pub mod node;
 pub mod sha2;
+pub mod state;
+pub mod tx;
 
+pub use block::{Block, Header};
+pub use consensus::{Commit, ValidatorSet, Vote};
 pub use ed25519::{PublicKey, Signature, SigningKey};
+pub use node::{Chain, Committed, Genesis, Invalid};
+pub use state::{Ledger, Params, Refusal, Token};
+pub use tx::{Action, Address, Asset, COIN, TOKEN_UNIT, Transaction};
 
 /// Thirty-two bytes of SHA-256: the name of a block, of a transaction, or of a tree of either.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -94,9 +111,12 @@ pub fn hex(bytes: &[u8]) -> String {
 /// Hex back to bytes. Panics on anything that is not hex, because it is only ever handed
 /// literals.
 pub fn unhex(text: &str) -> Vec<u8> {
-    assert!(text.len() % 2 == 0, "hex has two digits a byte");
+    assert!(text.len().is_multiple_of(2), "hex has two digits a byte");
     (0..text.len())
         .step_by(2)
         .map(|at| u8::from_str_radix(&text[at..at + 2], 16).expect("hex digits"))
         .collect()
 }
+
+#[cfg(test)]
+mod tests;
