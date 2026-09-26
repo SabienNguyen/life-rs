@@ -4,8 +4,9 @@
 //! none of whom the rest would trust with the books, find that checking one costs less than
 //! the distrust it saves. So whether and when it happens is a measurement, and this is the
 //! instrument: one line per world on when money came, when growth did, when a chain was
-//! founded and by whom, and what paying abroad cost with it and without it — and then the
-//! chain replayed from its genesis, to say that what was kept can still be checked.
+//! founded and by whom, what paying abroad cost with it and without it, and how many of its
+//! validators were caught signing twice — and then the chain replayed from its genesis, to say
+//! that what was kept can still be checked.
 //!
 //! `SEEDS` is a comma-separated list of hex seeds, `YEARS` how long to run each.
 
@@ -27,9 +28,9 @@ fn main() {
         .unwrap_or(700);
 
     println!(
-        "{:>9} {:>5} {:>4} {:>6} {:>5} {:>7} {:>13} {:>5} {:>6} {:>6} {:>7} {:>7} {:>6} {:>7} {:>6}  replayed",
+        "{:>9} {:>5} {:>4} {:>6} {:>5} {:>7} {:>13} {:>5} {:>6} {:>6} {:>7} {:>7} {:>6} {:>7} {:>6} {:>6}  replayed",
         "seed", "towns", "ctry", "money", "trap", "founded", "founders", "vals", "height",
-        "stake", "houses", "now", "chain", "refused", "stalls"
+        "stake", "houses", "now", "chain", "refused", "stalls", "jailed"
     );
     for seed in seeds {
         let started = Instant::now();
@@ -71,8 +72,13 @@ fn main() {
                     Ok(()) => format!("ok in {:.1}s", checking.elapsed().as_secs_f64()),
                     Err((height, why)) => format!("FAILED at {height}: {why:?}"),
                 };
+                let jailed = world
+                    .history
+                    .iter()
+                    .filter(|e| matches!(e, Event::Slashed { .. }))
+                    .count();
                 println!(
-                    "{:>9} {:>5} {:>4} {:>6} {:>5} {:>7} {:>13} {:>5} {:>6} {:>6} {:>7} {:>7} {:>5.0}% {:>7} {:>6}  {verdict} ({ran:.1}s to run)",
+                    "{:>9} {:>5} {:>4} {:>6} {:>5} {:>7} {:>13} {:>5} {:>6} {:>6} {:>7} {:>7} {:>5.0}% {:>7} {:>6} {:>6}  {verdict} ({ran:.1}s to run)",
                     format!("{seed:#x}"),
                     world.towns.len(),
                     world.countries.len(),
@@ -88,10 +94,11 @@ fn main() {
                     100.0 * share,
                     network.refusals.values().sum::<u64>(),
                     network.stalls,
+                    jailed,
                 );
             }
             None => println!(
-                "{:>9} {:>5} {:>4} {:>6} {:>5} {:>7} {:>13} {:>5} {:>6} {:>6} {:>7} {:>7} {:>6} {:>7} {:>6}  no chain: {:?} ({ran:.1}s to run)",
+                "{:>9} {:>5} {:>4} {:>6} {:>5} {:>7} {:>13} {:>5} {:>6} {:>6} {:>7} {:>7} {:>6} {:>7} {:>6} {:>6}  no chain: {:?} ({ran:.1}s to run)",
                 format!("{seed:#x}"),
                 world.towns.len(),
                 world.countries.len(),
@@ -104,6 +111,7 @@ fn main() {
                 "—",
                 houses,
                 now,
+                "—",
                 "—",
                 "—",
                 "—",

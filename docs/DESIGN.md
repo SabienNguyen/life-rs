@@ -5660,11 +5660,13 @@ most and is trusted most, with a quarter's hysteresis so it does not flap.
 
 **Payments abroad** are the net trade the market ships, plus trade in varieties — countries'
 wares are not the same wares, so people buy some of each other's whatever the net position,
-Armington with an elasticity of five. Every one of them has to be paid through somebody.
-Trust between two countries' houses grows with the share of their business done together and is
-capped by distance and by whether they are one people; a payment goes directly, or through one
-intermediary both ends trust more, at a fee plus a risk premium for the distrust plus a spread
-for changing money. That comes to about nine per cent of a payment.
+Armington with an elasticity of five — and what buying from more than one country is worth to
+people who buy that way is read off the same shares (§49.6.1). Every one of those payments has
+to be made through somebody. Trust between two countries' houses grows with the share of their
+business done together and is capped by distance and by whether they are one people; a payment
+goes directly, or through one intermediary both ends trust more, at a fee plus a risk premium
+for the distrust plus a spread for changing money. That comes to about nine per cent of a
+payment.
 
 **And last**, whether any of that is worth a ledger nobody keeps (§49.4).
 
@@ -5797,7 +5799,7 @@ every node lives in one process and hears every message at once, so a validator 
 answering this round or it is not. That is where a partition would go.
 
 The primitives are checked against FIPS 180-4's and RFC 8032's vectors and against eight more
-signatures produced by OpenSSL, and the chain's thirty-eight tests are claims: nothing is spent
+signatures produced by OpenSSL, and the chain's forty tests are claims: nothing is spent
 twice; a swap moves both legs or neither; a changed amount fails the transaction root, patched
 to match fails the signature, and patched again fails the commit; the chain keeps going with a
 quarter of the stake absent and stops with half; a block holding a bad transaction is never
@@ -5830,30 +5832,30 @@ Payments move onto the chain at fifteen per cent a year of the gap to the share 
 saves, and the coin is worth the stake people want against what the chain carries — a fiftieth of
 a year's payments — plus the coin they hold to pay fees with, a quarter of a year's fees.
 
-| seed | founded | founders | validators | height | most stake in one country | paying abroad without | with | on chain | refused | stalls | replayed |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| 0x11 | 418 | 6 in 2 | 7 | 3396 | 57% | 9.0% | 1.7% | 90% | 0 | 0 | ok in 5.8 s |
-| 0x21 | 565 | 21 in 3 | 14 | 1632 | 59% | 9.4% | 1.8% | 90% | 0 | 0 | ok in 6.9 s |
-| 0x221 | 538 | 14 in 5 | 15 | 1956 | 48% | 9.6% | 1.8% | 90% | 0 | 0 | ok in 15.3 s |
-| 0xbeef | 596 | 21 in 3 | 16 | 1260 | 48% | 9.8% | 2.0% | 89% | 0 | 0 | ok in 7.2 s |
-| 0x5eed | 556 | 10 in 2 | 10 | 1740 | 60% | 9.2% | 1.9% | 89% | 0 | 0 | ok in 4.4 s |
-| 0x7 | 517 | 21 in 3 | 14 | 2208 | 49% | 9.1% | 1.8% | 90% | 0 | 0 | ok in 12.2 s |
-| 0x1234 | 587 | 21 in 3 | 15 | 1368 | 48% | 8.8% | 1.9% | 88% | 0 | 0 | ok in 7.2 s |
+| seed | founded | founders | validators | height | most stake in one country | paying abroad without | with | on chain | refused | stalls | jailed | replayed |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0x11 | 418 | 6 in 2 | 5 | 3396 | 60% | 9.0% | 1.7% | 90% | 0 | 0 | 2 | ok in 5.8 s |
+| 0x21 | 565 | 21 in 3 | 14 | 1632 | 59% | 9.4% | 1.8% | 90% | 0 | 0 | 1 | ok in 7.2 s |
+| 0x221 | 538 | 14 in 5 | 14 | 1956 | 44% | 9.6% | 1.8% | 90% | 0 | 0 | 1 | ok in 14.9 s |
+| 0xbeef | 596 | 21 in 3 | 16 | 1260 | 48% | 9.8% | 2.0% | 89% | 0 | 0 | 0 | ok in 7.2 s |
+| 0x5eed | 556 | 10 in 2 | 10 | 1740 | 60% | 9.2% | 1.9% | 89% | 0 | 0 | 0 | ok in 4.6 s |
+| 0x7 | 517 | 21 in 3 | 14 | 2208 | 49% | 9.1% | 1.8% | 90% | 0 | 0 | 0 | ok in 12.5 s |
+| 0x1234 | 587 | 21 in 3 | 15 | 1368 | 48% | 8.8% | 1.9% | 88% | 0 | 0 | 0 | ok in 7.1 s |
 
-Paying abroad falls from about nine per cent to under two. Nine tenths of it moves onto the
-chain, no chain has ever stalled, nothing any world has sent its chain has been refused, and
-every chain replays from its genesis. No country's houses hold more of the stake than the three
-fifths they are allowed — in 0x5eed exactly that, in four worlds under half. And the validators
-come and go with the business: a house whose share of what the chain carries has averaged a
-twentieth over the years takes a seat, and one whose share has averaged under a hundredth gives
-its stake back, so long as four validators remain and no country is left over its cap. 0x221 has
-had six houses join and five leave since its founding; 0x11's six founders are seven validators,
-three having joined and two left. A block of a two-country world carries about thirty
-transactions; of the five-country world, about two hundred. The token cycles: on 0x11 by year
-620, 59.3 trillion WENT minted and 58.1 trillion redeemed, and it is backed exactly one for one
-at the end of every block. And the coin trades against it: 13,473 swaps moved 503,886 coin,
-against eight transfers paid for over the counter, the first of them the issuer's first coin,
-bought before there were any tokens to buy it with.
+Paying abroad falls from about nine per cent to under two. Nine tenths of it moves onto the chain,
+no chain has ever stalled, nothing any world has sent its chain has been refused, and every chain
+replays from its genesis. No country's houses hold more of the stake than the three fifths they
+are allowed — in 0x11 and 0x5eed exactly that, in four worlds under half. And the validators come
+and go with the business: a house whose share of what the chain carries has averaged a twentieth
+over the years takes a seat, and one whose share has averaged under a hundredth gives its stake
+back, so long as four validators remain and no country is left over its cap. 0x221 has had six
+houses join and five leave since its founding; 0x11's six founders are five validators, three
+houses having joined, two left and two been jailed for signing a block twice (§49.6.2). A block of
+a two-country world carries about thirty transactions; of the five-country world, about two
+hundred. The token cycles: on 0x11 by year 620, 59.4 trillion WENT minted and 58.1 trillion
+redeemed, and it is backed exactly one for one at the end of every block. And the coin trades
+against it: 13,184 swaps moved 503,034 coin, against eight transfers paid for over the counter,
+the first of them the issuer's first coin, bought before there were any tokens to buy it with.
 
 One thing about that "with": payments settle towards the share of the cost they save, so the
 cost of paying abroad comes to rest near twice the chain's own cost rather than at it. That is a
@@ -5871,7 +5873,7 @@ one country, and what the chain is worth, counted that way, to a head of the sma
 |---|---|---|---|---|---|---|---|---|
 | 0x11 | 3.00% | 3.84% | 4.19% | 70% | 181.6 / 180.4 / 180.2 | 564.8 / 565.5 / 564.8 | 577.1 / 583.0 / 584.7 | Stanwick +5.9% |
 | 0x21 | 7.74% | 9.34% | 9.87% | 75% | 59.5 / 59.5 / 59.2 | 130.2 / 130.2 / 129.5 | 137.5 / 139.8 / 139.9 | Stanhaven +9.3% |
-| 0x221 | 5.79% | 7.07% | 7.65% | 69% | 76.6 / 76.4 / 75.7 | 181.1 / 181.3 / 180.2 | 188.9 / 192.2 / 192.6 | Fennhythe +4.7% |
+| 0x221 | 5.79% | 7.08% | 7.65% | 69% | 76.6 / 76.4 / 75.7 | 181.1 / 181.3 / 180.2 | 188.9 / 192.2 / 192.6 | Fennhythe +4.7% |
 | 0xbeef | 9.00% | 10.76% | 11.27% | 78% | 45.1 / 45.1 / 44.9 | 86.0 / 86.1 / 85.8 | 91.7 / 93.5 / 93.8 | Tilquay +3.3% |
 | 0x5eed | 2.91% | 3.50% | 3.84% | 63% | 58.9 / 58.5 / 57.0 | 127.5 / 127.5 / 126.1 | 129.8 / 130.6 / 129.7 | Grimquay +3.6% |
 | 0x7 | 8.26% | 9.72% | 10.39% | 69% | 96.4 / 95.6 / 95.9 | 254.8 / 254.5 / 254.5 | 271.7 / 276.4 / 278.9 | Whitmouth +9.0% |
@@ -5906,6 +5908,46 @@ more. 0x5eed with free borders ends below 0x5eed with a chain because by year 70
 different world — it consumes less even at one price — not because a chain beats a border that
 costs nothing. Famines do not move at all: they come in the centuries before there is anything
 to found.
+
+### 49.6.2 Two clerks at one key
+
+A house keeps a second clerk at its keys, so that one falling ill never costs it a round, and
+once in a long while both are at their posts: the one who has not seen the proposal in time
+signs the height for no block. Two machines holding one key is how validators on real chains
+are slashed, far more often than by plotting, and the chain has had the rule for it from the
+start (§49.5): two signatures by one key at one height and round, for different blocks, are
+evidence, which burns a twentieth of the stake and jails the key for good. `TWO_CLERKS` makes it
+happen to one signature in thirty thousand — chosen, not derived: about once in two and a half
+thousand years of a house validating. Every validator hears every vote, so the one that proposes
+next shows the chain both signatures, and the offender, which will never validate again, takes
+back what is left of its stake through the same twelve-block wait as anybody leaving.
+
+What a jailing leaves behind is the question. A chain can be left with fewer than four
+validators, or with one country's houses holding more than their three fifths: on 0x11 in year
+567 it was the largest validator of the larger country that was caught, which left the smaller
+one over its share. So every month, before anything else, the houses best placed mend it. While
+a country is over its share, the best-standing house of another country — one that validates
+already, or one that takes a seat — bonds what brings it back; while there are fewer than four,
+the best-standing house not validating whose country has room under its share takes a seat. A
+house that checks slower than the rest is taken when nobody faster can do it: a slower chain is
+the price of one nobody keeps, as it was at the founding, which waited for the slowest country.
+And only if nobody can buy the coin does the country over its share give some up.
+
+Across thirty worlds with chains — the seven of §49.6's table to year 700, and twenty-three more
+to year 800 — thirty-six validators were caught, none in ten of the worlds and at most three in
+any. Nothing any world sent its chain was refused, nothing stalled, no chain ended with fewer
+than four validators or with a country holding more than its three fifths, and every chain
+replays from its genesis. A test jails the worst case by hand — the smaller country's largest
+validator on 0x11, which left the larger holding the whole of the stake — and holds the chain,
+two years on, to a twentieth burned, the rest taken back, at least four validators, three fifths,
+nothing refused or stalled, and a history that replays and can be followed by its headers.
+
+Run on to year 1,500, four of those chains thin to between four and six validators — 0x221's
+fourteen of year 700 to six — and hold there: a house leaves when its own payments dwindle, few
+grow large enough to take a seat, and each jailing takes one away, three to five of them per chain
+by then. Nothing is refused, nothing stalls, no country passes its three fifths, and every chain
+replays. Four is the fewest the rule allows, and all this model gives a chain reason to keep
+(§49.8).
 
 ### 49.7 What went wrong on the way
 
@@ -5994,6 +6036,16 @@ the mechanism was the wrong one.
   key seen twice now keeps a table of its multiples — one to eight times every power of 256, the
   reference implementation's layout for the base point — and verifies in about 27 µs. What is
   kept changes how fast a signature is checked, never whether it holds.
+- **A jailing that left one country holding a chain.** The first way of mending a chain after a
+  jailing (§49.6.2) was tried on its worst case by hand — 0x11's smaller country losing its one
+  large validator, which left the larger holding the whole of the stake — and did two wrong
+  things. It seated a house at a single coin, under the ten a validator needs, and so seated the
+  same house again every month; and, asking for a house that checked as fast as the rest, it
+  found none in the smaller country, whose best checked at six tenths of the fastest, and fell
+  back on the larger country giving up its excess — which unbonded its three validators down to
+  ten coin apiece without moving its share at all, since nobody else held any. A seat is now
+  never taken at less than a validator needs, a house that checks slower is taken when nobody
+  faster can do it, and giving stake up is left for when somebody else holds some.
 
 ### 49.8 What this does not do
 
@@ -6003,9 +6055,14 @@ the mechanism was the wrong one.
 - **The two tiers do not meet.** The five quarters of the people-level world stand on the same
   planet, and nothing connects them to the towns here — no promotion or demotion in §6.1's sense,
   and nobody in a quarter knows the price of grain in the town on their cell.
-- **Nobody attacks a chain.** Slashing, evidence and jailing are built and tested in `chain`, and
-  no validator in any world has ever signed twice. Stalls come only from hunger at a validator's
-  town or bad luck. An issuer is honest by construction and an attestor never lies.
+- **Nobody attacks a chain.** Validators are caught only for carelessness — two clerks at one
+  key (§49.6.2) — never for plotting: nobody signs two blocks to spend one coin twice, no third
+  of the stake colludes, and there is no network to partition. Stalls could come only from
+  hunger at a validator's town or bad luck, and none has. An issuer is honest by construction
+  and an attestor never lies.
+- **Four validators are enough.** Nothing makes a house take a seat but its own business on the
+  chain — not the fees a seat earns, nor wanting a chain that survives two faults rather than one
+  — so over the centuries the sets thin towards the four that one fault needs (§49.6.2).
 - **One chain per world.** Nothing competes with the first, and there are no bridges.
 - **Trade balances.** Bilateral trade is balanced by construction — no capital flows, no
   current-account deficits — and the lumpy months only move payments within a year.

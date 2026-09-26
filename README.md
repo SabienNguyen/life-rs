@@ -205,13 +205,14 @@ banking · the trap, and out
 **A ledger nobody keeps**
 
 SHA-2 · Ed25519 · Merkle ·
-BFT proof of stake · stable
+BFT proof of stake · slashing ·
+swaps · a light client · stable
 tokens against attested reserves
 
 </td></tr>
 </table>
 
-**831 tests.** Most of them are about a claim rather than a function.
+**832 tests.** Most of them are about a claim rather than a function.
 
 ---
 
@@ -439,23 +440,29 @@ Nothing below is scheduled:
   the smallest country three to nine.
 
 ```
+── what happened ──
+  year  418  6 houses in 2 countries found the Wickport Ledger: Wickport, Stanwick, Haltor, Marlscar, Twyfell, Wenmouth
+  year  567  Wickport's house signs block 1790 of the Wickport Ledger twice — its second clerk, not having seen the block, signs for none — and Stanwick shows the chain both: 172 coin of its stake is burned and it never validates again
+
 ── the Wickport Ledger ──
   founded in year 418 by Wickport, Stanwick, Haltor, Marlscar, Twyfell, Wenmouth
-  height 2196 · 7 validators · 61 rounds lost · 0 stalls · 0 transactions refused
-  WENT: 660,063,130,121 in circulation, 660,063,130,121 held in reserve and attested by Stanwick — backed 1.0000
+  height 2196 · 6 validators · 62 rounds lost · 0 stalls · 0 transactions refused
+  WENT: 660,354,201,037 in circulation, 660,354,201,037 held in reserve and attested by Stanwick — backed 1.0000
   paying abroad costs 1.7% of the payment now, against 9.0% through houses alone
-  replayed from genesis: 2197 blocks, every signature and root checked, in 4.1s — it holds
+  replayed from genesis: 2197 blocks, every signature and root checked, in 3.6s — it holds
   followed as a light client, by headers, commits and validator sets alone: to height 2196 in 0.4s, never a transaction
 ```
 
 It is a real chain: SHA-256, Ed25519 and Merkle trees written from their standards and checked
-against the RFC vectors and OpenSSL; Byzantine-fault-tolerant proof of stake, with a block final
-once two thirds of the stake has signed it; and a whole history that replays from genesis, every
-signature and root rechecked, before the report says a word about it — and that can be followed
-by its headers alone, as a light client follows a real chain. With `--html` the page
-shows all of it and checks the latest block in your own browser, with the browser's own
-SHA-256 and Ed25519. A world of one country never builds one — it has a house everybody can
-pay through.
+against the RFC vectors and OpenSSL; Byzantine-fault-tolerant proof of stake, with a block
+final once two thirds of the stake has signed it; and a whole history that replays from
+genesis, every signature and root rechecked, before the report says a word about it — and that
+can be followed by its headers alone, as a light client follows a real chain. A validator
+caught signing a block twice loses a twentieth of its stake and its seat for good, and the
+others bond what keeps every country within its three fifths of the stake. With `--html` the
+page shows all of it and checks the latest block in your own browser, with the browser's own
+SHA-256 and Ed25519. A world of one country never builds one — it has a house everybody can pay
+through.
 
 ---
 

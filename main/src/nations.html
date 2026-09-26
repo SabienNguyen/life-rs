@@ -598,7 +598,8 @@ drawCountries();
       return "<tr><td>" + esc(town.name || "?") + "</td><td>" + esc(val.town === null ? "" : countryOfTown(val.town).name) + "</td><td class='n'>" + val.power.toLocaleString() + "</td><td class='mono'>" + esc(val.address.slice(0, 16)) + "…</td></tr>";
     }).join("");
     const accounts = c.accounts.map(function (a) {
-      return "<tr><td>" + esc(townName(a.town)) + "</td><td class='n'>" + a.coin + "</td><td class='n'>" + a.staked + "</td><td class='n'>" + a.tokens + "</td></tr>";
+      const staked = a.jailed ? "<span class='bad' title='caught signing a block twice; it never validates again'>jailed</span>" + (a.staked === "0" ? "" : " · " + a.staked) : a.staked;
+      return "<tr><td>" + esc(townName(a.town)) + "</td><td class='n'>" + a.coin + "</td><td class='n'>" + staked + "</td><td class='n'>" + a.tokens + "</td></tr>";
     }).join("");
     return "<div style='margin-bottom:20px'>" +
       "<h3>The " + esc(c.name) + " <span class='pill'>height " + c.height + "</span></h3>" +
@@ -623,7 +624,9 @@ drawCountries();
       "<h2 style='margin-top:14px'>Its life, block by block</h2>" +
       "<svg id='life" + at + "' role='img' aria-label='transactions in every block since genesis'></svg>" +
       "<div class='legend'><span><i style='background:var(--chart1)'></i>transactions in the block</span>" +
-      "<span><i style='background:var(--fail);height:8px;width:8px;border-radius:50%'></i>a round lost to an absent proposer</span></div>" +
+      "<span><i style='background:var(--fail);height:8px;width:8px;border-radius:50%'></i>a round lost to an absent proposer</span>" +
+      (c.blocks.some(function (b) { return b[6] !== null && b[6] !== undefined; }) ?
+        "<span><i style='background:var(--ink);height:8px;width:8px;transform:rotate(45deg)'></i>a validator caught signing twice</span>" : "") + "</div>" +
       "<h2 style='margin-top:14px'>Blocks</h2><p class='muted'>The latest " + c.recent.length + " blocks, in full. Pick one.</p>" +
       "<div class='blocks' id='blocks" + at + "'></div><div id='block" + at + "'></div>" +
       "<h2 style='margin-top:14px'>Check it yourself</h2>" +
@@ -909,6 +912,13 @@ function drawLife(at) {
       const dot = el("circle", { cx: x(b[0]), cy: y(b[4]), r: 3, fill: "var(--fail)" }, svg);
       const label = el("title", {}, dot);
       label.textContent = "block " + b[0] + ", " + monthLabel(b[1]) + ": committed in round " + b[2] + ", proposed by " + townName(b[3]);
+    }
+    // A block carrying evidence that a validator signed twice: a diamond along the top.
+    if (b[6] !== null && b[6] !== undefined) {
+      const cx = x(b[0]), cy = T + 5;
+      const mark = el("path", { d: "M" + cx + " " + (cy - 5) + "L" + (cx + 5) + " " + cy + "L" + cx + " " + (cy + 5) + "L" + (cx - 5) + " " + cy + "Z", fill: "var(--ink)" }, svg);
+      const label = el("title", {}, mark);
+      label.textContent = "block " + b[0] + ", " + monthLabel(b[1]) + ": evidence that " + townName(b[6]) + " signed a block twice — part of its stake burned, and it never validates again";
     }
   });
 }

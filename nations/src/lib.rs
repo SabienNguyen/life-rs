@@ -241,6 +241,17 @@ pub enum Event {
     /// A house stopped: its own payments on the chain had dwindled for years, and it unbonded its
     /// stake.
     Left { year: u64, network: usize, town: usize },
+    /// A validator's house signed one height twice, and another house showed the chain both
+    /// signatures: it burned part of the stake, in base units of coin, and jailed the house for
+    /// good.
+    Slashed {
+        year: u64,
+        network: usize,
+        town: usize,
+        by: usize,
+        height: u64,
+        burned: u128,
+    },
     /// A block could not be finalised: more than a third of the stake was absent.
     Stalled { year: u64, network: usize, height: u64 },
 }
@@ -257,6 +268,7 @@ impl Event {
             | Event::Issued { year, .. }
             | Event::Joined { year, .. }
             | Event::Left { year, .. }
+            | Event::Slashed { year, .. }
             | Event::Stalled { year, .. } => *year,
         }
     }

@@ -414,6 +414,66 @@ fn a_chain_widens_the_markets_it_touches() {
     assert!(with > 1.05 * without, "the smallest country's wares are worth {with:.3} with the chain, {without:.3} without");
 }
 
+/// Two clerks at one key, once, in the worst place: the largest validator of the smaller
+/// country, whose jailing leaves the larger one holding more than two thirds of the stake. The
+/// house that proposes next shows both signatures; the chain burns a twentieth of the stake and
+/// jails the house for good; the house takes back the rest; and the others bond what brings the
+/// larger country back to its three fifths, with nothing refused and nothing stalled.
+#[test]
+fn a_house_that_signs_twice_is_caught_and_the_chain_mended() {
+    let mut world = Nations::found(WorldSeed::from_u128(0x11));
+    while world.networks.is_empty() {
+        world.year();
+    }
+    world.run(20);
+    let smaller = world.countries.len() - 1;
+    let network = &world.networks[0];
+    let offender = network
+        .validators()
+        .into_iter()
+        .filter(|t| world.towns[*t].country == smaller)
+        .max_by_key(|t| {
+            let address = network.address_of(*t).expect("a validator has an account");
+            network.chain.ledger.account(&address).map(|a| a.bonded).unwrap_or(0)
+        })
+        .expect("the smaller country validates");
+    let address = network.address_of(offender).expect("an account");
+    let at_stake = network.chain.ledger.account(&address).expect("an account").bonded;
+    let slashed = network.chain.ledger.slashed;
+
+    network::sign_twice(&mut world, 0, offender);
+    world.run(2);
+
+    let network = &world.networks[0];
+    let burned = world
+        .history
+        .iter()
+        .find_map(|e| match e {
+            Event::Slashed { town, burned, .. } if *town == offender => Some(*burned),
+            _ => None,
+        })
+        .expect("the offence is in the world's history");
+    assert_eq!(burned, at_stake * 50 / 1000, "a twentieth of the stake");
+    assert_eq!(network.chain.ledger.slashed - slashed, burned);
+    let account = network.chain.ledger.account(&address).expect("an account");
+    assert!(account.jailed);
+    assert_eq!(account.bonded, 0, "it took back what was left");
+    assert!(!network.validators().contains(&offender));
+    assert!(network.validators().len() >= payments::FEWEST_FOUNDERS);
+    let (country, share) = network::largest_country_share(&world, 0).expect("validators");
+    assert!(
+        share <= network::ONE_COUNTRY_AT_MOST + 1e-3,
+        "{} holds {:.1}% of the stake",
+        world.countries[country].name,
+        100.0 * share
+    );
+    assert_eq!(network.refused, 0, "{:?}", network.refusals);
+    assert_eq!(network.stalls, 0);
+    assert_eq!(network.chain.verify(), Ok(()));
+    let light = chain::light::follow(&network.chain.genesis, &network.chain.light_blocks());
+    assert_eq!(light, Ok(network.chain.height()));
+}
+
 /// A world that is one country has a house everybody in it can pay through, and never builds a
 /// ledger nobody keeps.
 #[test]

@@ -25,7 +25,9 @@
 
 use std::collections::BTreeMap;
 
-use chain::{Action, Address, Asset, COIN, Chain, Genesis, SigningKey, Swap, TOKEN_UNIT, Transaction};
+use chain::{
+    Action, Address, Asset, COIN, Chain, Digest, Genesis, SigningKey, Swap, TOKEN_UNIT, Transaction, Vote,
+};
 use commerce::payments::{self, Candidate};
 use commerce::production::Sector;
 use sim_core::Domain;
@@ -58,6 +60,17 @@ const DOWNTIME: f64 = 0.01;
 
 /// A validator whose town is this short of food is not at its post.
 const TOO_HUNGRY: f64 = 0.3;
+
+/// The chance, each time a validator signs a block, that its house signs that height twice. A
+/// house keeps two clerks at its keys, so that one of them falling ill never costs it a round;
+/// once in a long while both are at their posts, and the one who has not seen the proposal in
+/// time signs for no block. Two machines holding one key is how validators on real chains are
+/// slashed, far more often than by plotting. Chosen, not derived: about once in two and a half
+/// thousand years of a house validating.
+const TWO_CLERKS: f64 = 1.0 / 30_000.0;
+
+/// Where the draws for it start, among the world's commercial streams.
+const CLERKS: u64 = 0xc1e2_0000;
 
 /// The share of a year's settlements a house keeps in tokens rather than redeeming.
 const FLOAT: f64 = 0.1;
@@ -535,6 +548,7 @@ fn keep(nations: &mut Nations, at: usize) {
     }
 
     issue_token(nations, at, reserve);
+    take_back_jailed(nations, at);
     leave_idle(nations, at);
     take_seats(nations, at);
 
@@ -543,6 +557,7 @@ fn keep(nations: &mut Nations, at: usize) {
     let mut fees = 0.0;
     nations.networks[at].blocks_this_year = 0;
     for month in 0..BLOCKS_A_YEAR {
+        mend(nations, at);
         let (value, paid) = settle_month(nations, at, &pairs, month, size, wage, reserve_level);
         carried += value;
         fees += paid;
@@ -553,16 +568,21 @@ fn keep(nations: &mut Nations, at: usize) {
             .values()
             .map(|k| (Address::of(&k.public()), k.clone()))
             .collect();
-        let network = &mut nations.networks[at];
-        let outcome = network.chain.step(
+        let outcome = nations.networks[at].chain.step(
             time,
             &keys,
             &|address, round| answering.get(&(*address, round)).copied().unwrap_or(false),
             MOST_ROUNDS,
         );
         match outcome {
-            Some(_) => network.blocks_this_year += 1,
+            Some(committed) => {
+                nations.networks[at].blocks_this_year += 1;
+                for (town, first, second) in signed_twice(nations, at, committed.height, month) {
+                    accuse(nations, at, town, first, second);
+                }
+            }
             None => {
+                let network = &mut nations.networks[at];
                 network.stalls += 1;
                 let height = network.chain.height();
                 nations.history.push(Event::Stalled {
@@ -849,25 +869,18 @@ fn fund_keeping(
 fn take_seats(nations: &mut Nations, at: usize) {
     let most = nations.networks[at].chain.params().max_validators;
     let standing = nations.networks[at].standing.clone();
-    let best = validator_techniques(nations, at)
-        .into_iter()
-        .fold(0.0f64, f64::max);
+    let best = best_technique(nations, at);
     let houses: Vec<usize> = nations.networks[at].houses().collect();
     for town in houses {
         let validators = nations.networks[at].validators();
         if validators.len() >= most {
             return;
         }
-        if validators.contains(&town) {
+        if validators.contains(&town) || jailed(&nations.networks[at], town) {
             continue;
         }
         let share = standing.get(&town).copied().unwrap_or(0.0);
-        if share < SEAT_AT {
-            continue;
-        }
-        // A seat is only worth taking by a house that checks as fast as the others: a slow one
-        // would make every payment on the chain dearer.
-        if nations.towns[town].technique[Sector::Reckoning as usize] < payments::CAPABLE * best {
+        if share < SEAT_AT || !fast_enough(nations, town, best) {
             continue;
         }
         let wanted = (GENESIS_COINS as f64 * share).max(20.0);
@@ -876,28 +889,329 @@ fn take_seats(nations: &mut Nations, at: usize) {
         if room < 20.0 {
             continue;
         }
-        let stake = wanted.min(room) as u128 * COIN;
-        fund(nations, at, town, stake + COIN);
-        let network = &mut nations.networks[at];
-        let min_fee = network.chain.params().min_fee;
         // A seat nobody would sell it the coin for is a seat it does not take this year.
+        if bond(nations, at, town, wanted.min(room) as u128 * COIN, false) {
+            nations.history.push(Event::Joined {
+                year: nations.year,
+                network: at,
+                town,
+            });
+        }
+    }
+}
+
+/// The fastest any of a chain's validators checks.
+fn best_technique(nations: &Nations, at: usize) -> f64 {
+    validator_techniques(nations, at).into_iter().fold(0.0f64, f64::max)
+}
+
+/// A seat is only worth taking by a house that checks as fast as the others: a slow one would
+/// make every payment on the chain dearer.
+fn fast_enough(nations: &Nations, town: usize, best: f64) -> bool {
+    nations.towns[town].technique[Sector::Reckoning as usize] >= payments::CAPABLE * best
+}
+
+/// Whether a house's account has been jailed, as things will stand once everything sent so far
+/// has gone through.
+fn jailed(network: &Network, town: usize) -> bool {
+    network
+        .address_of(town)
+        .and_then(|a| network.chain.pending_account(&a))
+        .is_some_and(|a| a.jailed)
+}
+
+/// A house buys stake from those who have it and bonds it; whether it bonded anything. With
+/// `partly`, it bonds as much as it could buy; without, all of `stake` or nothing.
+fn bond(nations: &mut Nations, at: usize, town: usize, stake: u128, partly: bool) -> bool {
+    fund(nations, at, town, stake + COIN);
+    let network = &mut nations.networks[at];
+    let min_fee = network.chain.params().min_fee;
+    let Some(address) = network.address_of(town) else {
+        return false;
+    };
+    let held = network.chain.pending_balance(&address, Asset::Coin);
+    let stake = if partly {
+        stake.min(held.saturating_sub(min_fee + COIN)) / COIN * COIN
+    } else if held >= stake + min_fee {
+        stake
+    } else {
+        0
+    };
+    if stake == 0 {
+        return false;
+    }
+    let tx = sign(network, town, min_fee, Action::Bond { amount: stake });
+    if submit(network, tx) {
+        true
+    } else {
+        network.refused += 1;
+        false
+    }
+}
+
+/// The validators whose houses signed a height twice: every vote in the block's commit has a
+/// `TWO_CLERKS` chance of a second from the same key, for no block. Each such house, with the
+/// vote the chain kept and the one it never used.
+fn signed_twice(nations: &Nations, at: usize, height: u64, month: u64) -> Vec<(usize, Vote, Vote)> {
+    let network = &nations.networks[at];
+    let Some(block) = network.chain.blocks.get(height as usize) else {
+        return Vec::new();
+    };
+    let mut rng = nations.seed.stream(
+        Domain::Commerce,
+        CLERKS + at as u64,
+        nations.year * BLOCKS_A_YEAR + month,
+    );
+    let mut caught = Vec::new();
+    for vote in &block.commit.votes {
+        if !rng.chance(TWO_CLERKS) {
+            continue;
+        }
+        let Some(town) = network.town_of(&Address::of(&vote.validator)) else {
+            continue;
+        };
+        let Some(key) = network.keys.get(&town) else {
+            continue;
+        };
+        let stray = Vote::signed(key, network.chain.id, vote.height, vote.round, Digest::default());
+        caught.push((town, vote.clone(), stray));
+    }
+    caught
+}
+
+/// Every validator hears every vote, so two from one key at one height are seen by all of them.
+/// The one that proposes next shows both to the chain — or, if that is the offender, the one
+/// with most stake after it — and the chain burns a twentieth of the offender's stake and jails
+/// it for good (`chain::state`). What it burns is read off the account as the evidence will find
+/// it, and written into the world's history.
+fn accuse(nations: &mut Nations, at: usize, town: usize, first: Vote, second: Vote) {
+    let network = &nations.networks[at];
+    let offender = Address::of(&first.validator);
+    let params = network.chain.params();
+    let (min_fee, permille) = (params.min_fee, params.slash_permille as u128);
+    let Some(account) = network.chain.pending_account(&offender) else {
+        return;
+    };
+    if account.jailed {
+        return;
+    }
+    let burned = account.bonded * permille / 1000
+        + account
+            .unbonding
+            .iter()
+            .map(|(_, amount)| amount * permille / 1000)
+            .sum::<u128>();
+    let (rotation, next) = network.chain.rotation.at_round(0);
+    let mut others: Vec<&chain::consensus::Validator> = rotation.members.iter().collect();
+    others.sort_by(|a, b| b.power.cmp(&a.power).then(a.address.cmp(&b.address)));
+    let Some(by) = std::iter::once(&rotation.members[next])
+        .chain(others)
+        .filter(|v| v.address != offender)
+        .filter(|v| network.chain.pending_balance(&v.address, Asset::Coin) >= min_fee)
+        .find_map(|v| network.town_of(&v.address))
+    else {
+        return;
+    };
+    let height = first.height;
+    let network = &mut nations.networks[at];
+    let evidence = Action::Evidence {
+        first: Box::new(first),
+        second: Box::new(second),
+    };
+    let tx = sign(network, by, min_fee, evidence);
+    if submit(network, tx) {
+        nations.history.push(Event::Slashed {
+            year: nations.year,
+            network: at,
+            town,
+            by,
+            height,
+            burned,
+        });
+    } else {
+        network.refused += 1;
+    }
+}
+
+/// Make a house sign the latest block it signed a second time, for no block, as `signed_twice`
+/// does by chance — for tests, which cannot wait on chance.
+#[cfg(test)]
+pub(crate) fn sign_twice(nations: &mut Nations, at: usize, town: usize) {
+    let network = &nations.networks[at];
+    let key = network.keys[&town].clone();
+    let vote = network
+        .chain
+        .blocks
+        .iter()
+        .rev()
+        .find_map(|b| b.commit.votes.iter().find(|v| v.validator == key.public()).cloned())
+        .expect("it has signed a block");
+    let stray = Vote::signed(&key, network.chain.id, vote.height, vote.round, Digest::default());
+    accuse(nations, at, town, vote, stray);
+}
+
+/// A house the chain has jailed will never validate again, so it takes back what is left of its
+/// stake, through the same twelve-block wait as any house leaving.
+fn take_back_jailed(nations: &mut Nations, at: usize) {
+    let network = &mut nations.networks[at];
+    let min_fee = network.chain.params().min_fee;
+    let houses: Vec<usize> = network.houses().collect();
+    for town in houses {
         let Some(address) = network.address_of(town) else {
             continue;
         };
-        if network.chain.pending_balance(&address, Asset::Coin) < stake + min_fee {
+        let Some(account) = network.chain.pending_account(&address) else {
+            continue;
+        };
+        if !account.jailed || account.bonded == 0 {
             continue;
         }
-        let tx = sign(network, town, min_fee, Action::Bond { amount: stake });
-        if submit(network, tx) {
+        let bonded = account.bonded;
+        if network.chain.pending_balance(&address, Asset::Coin) < min_fee {
+            continue;
+        }
+        let tx = sign(network, town, min_fee, Action::Unbond { amount: bonded });
+        if !submit(network, tx) {
+            network.refused += 1;
+        }
+    }
+}
+
+/// A chain that has lost a validator to jail may be left with one country's houses holding more
+/// than `ONE_COUNTRY_AT_MOST` of the stake, or with fewer than four validators. Then the houses
+/// best placed to mend it bond what it takes, whatever their standing, until neither is so:
+/// while a country is over its share, the best-placed house of another country — which may
+/// validate already — bonds what brings it back; while there are fewer than four, the
+/// best-placed house not validating whose country has room under its share takes a seat. What
+/// nobody can buy the coin for, the country over its share gives up: its largest validator
+/// unbonds the rest. With nothing to mend, as in almost every month, it does nothing.
+fn mend(nations: &mut Nations, at: usize) {
+    let most = nations.networks[at].chain.params().max_validators;
+    let min_bond = nations.networks[at].chain.params().min_bond.max(COIN) / COIN;
+    for _ in 0..most {
+        if let Some((country, ours, all)) = over_its_share(nations, at) {
+            // What the others must add for this country to hold its three fifths again.
+            let needed = (ours as f64 / ONE_COUNTRY_AT_MOST - all as f64).ceil() as u128 + 1;
+            let Some(town) = best_placed(nations, at, |t| nations.towns[t].country != country, true) else {
+                break;
+            };
+            let seated = pending_towns(&nations.networks[at]).contains(&town);
+            if !bond(nations, at, town, needed.max(min_bond) * COIN, true) {
+                break;
+            }
+            // Bonding what it could buy may still leave it short of a seat.
+            if !seated && pending_towns(&nations.networks[at]).contains(&town) {
+                nations.history.push(Event::Joined {
+                    year: nations.year,
+                    network: at,
+                    town,
+                });
+            }
+        } else if nations.networks[at].chain.pending_validators().len() < payments::FEWEST_FOUNDERS.min(most) {
+            let room = |t: usize| {
+                let (ours, all) = pending_country_power(nations, at, nations.towns[t].country);
+                (ONE_COUNTRY_AT_MOST * all as f64 - ours as f64) / (1.0 - ONE_COUNTRY_AT_MOST)
+            };
+            let Some(town) = best_placed(nations, at, |t| room(t) >= 20.0, false) else {
+                break;
+            };
+            let share = nations.networks[at].standing.get(&town).copied().unwrap_or(0.0);
+            let wanted = (GENESIS_COINS as f64 * share).max(20.0).min(room(town)) as u128;
+            if !bond(nations, at, town, wanted.max(min_bond) * COIN, false) {
+                break;
+            }
             nations.history.push(Event::Joined {
                 year: nations.year,
                 network: at,
                 town,
             });
         } else {
-            network.refused += 1;
+            return;
         }
     }
+    // With nobody else holding stake, giving some up would change nothing.
+    let Some((country, ours, all)) = over_its_share(nations, at).filter(|(_, ours, all)| ours < all) else {
+        return;
+    };
+    let excess = ((ours as f64 - ONE_COUNTRY_AT_MOST * all as f64) / (1.0 - ONE_COUNTRY_AT_MOST)).ceil() as u128;
+    let network = &nations.networks[at];
+    let largest = network
+        .chain
+        .pending_validators()
+        .into_iter()
+        .filter(|(address, _, _)| {
+            network
+                .town_of(address)
+                .is_some_and(|t| nations.towns[t].country == country)
+        })
+        .max_by(|a, b| a.2.cmp(&b.2).then(b.0.cmp(&a.0)));
+    let Some((address, _, power)) = largest else {
+        return;
+    };
+    let Some(town) = network.town_of(&address) else {
+        return;
+    };
+    let amount = excess.min((power as u128).saturating_sub(min_bond as u128)) * COIN;
+    let network = &mut nations.networks[at];
+    let min_fee = network.chain.params().min_fee;
+    if amount == 0 || network.chain.pending_balance(&address, Asset::Coin) < min_fee {
+        return;
+    }
+    let tx = sign(network, town, min_fee, Action::Unbond { amount });
+    if !submit(network, tx) {
+        network.refused += 1;
+    }
+}
+
+/// The towns whose houses will validate once everything sent so far has gone through.
+fn pending_towns(network: &Network) -> Vec<usize> {
+    network
+        .chain
+        .pending_validators()
+        .iter()
+        .filter_map(|(address, _, _)| network.town_of(address))
+        .collect()
+}
+
+/// The country whose houses hold more than `ONE_COUNTRY_AT_MOST` of the stake, once everything
+/// sent so far has gone through, with its power and everybody's. Power is whole coins, so a
+/// founding that gave a country exactly its three fifths can leave it a thousandth over, and that
+/// is not what this is for.
+fn over_its_share(nations: &Nations, at: usize) -> Option<(usize, u64, u64)> {
+    (0..nations.countries.len()).find_map(|c| {
+        let (ours, all) = pending_country_power(nations, at, c);
+        (ours as f64 > (ONE_COUNTRY_AT_MOST + 1e-3) * all as f64).then_some((c, ours, all))
+    })
+}
+
+/// The house with the best standing that is not jailed and is `wanted` — one that will validate
+/// already only if `validating` allows it — preferring one that checks fast enough. Mending a
+/// chain is not taking a seat by choice: when the only houses that can keep a country from
+/// holding a chain alone check slower than the rest, a slower chain is the price of one nobody
+/// keeps, as it was at the founding, which waited for the slowest country.
+fn best_placed(
+    nations: &Nations,
+    at: usize,
+    wanted: impl Fn(usize) -> bool,
+    validating: bool,
+) -> Option<usize> {
+    let network = &nations.networks[at];
+    let seated = pending_towns(network);
+    let best = best_technique(nations, at);
+    network
+        .houses()
+        .filter(|t| validating || !seated.contains(t))
+        .filter(|t| !jailed(network, *t) && wanted(*t))
+        .max_by(|a, b| {
+            let key = |t: &usize| {
+                (
+                    fast_enough(nations, *t, best),
+                    network.standing.get(t).copied().unwrap_or(0.0),
+                )
+            };
+            let (ka, kb) = (key(a), key(b));
+            ka.0.cmp(&kb.0).then(ka.1.total_cmp(&kb.1)).then(b.cmp(a))
+        })
 }
 
 /// A validator whose standing has fallen below `LEAVE_BELOW` takes its stake back — unless the

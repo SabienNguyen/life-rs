@@ -14,7 +14,7 @@ use crate::block::{Block, Header};
 use crate::codec::Writer;
 use crate::consensus::{Commit, NoQuorum, ValidatorSet, Vote};
 use crate::light::LightBlock;
-use crate::state::{Ledger, Params, Refusal, Token};
+use crate::state::{Account, Ledger, Params, Refusal, Token};
 use crate::tx::{Address, Asset, Transaction};
 use crate::{Digest, PublicKey, SigningKey};
 
@@ -173,6 +173,11 @@ impl Chain {
     /// What an address will hold once everything waiting has gone through.
     pub fn pending_balance(&self, address: &Address, asset: Asset) -> u128 {
         self.pending.balance(address, asset)
+    }
+
+    /// An account as it will be once everything waiting has gone through.
+    pub fn pending_account(&self, address: &Address) -> Option<&Account> {
+        self.pending.account(address)
     }
 
     pub fn waiting(&self) -> usize {

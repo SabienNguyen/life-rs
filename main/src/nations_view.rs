@@ -194,6 +194,21 @@ pub fn describe(world: &Nations, event: &Event, first_money: bool) -> Option<Str
             town_name(world, *town),
             world.networks[*network].name
         ),
+        Event::Slashed {
+            network,
+            town,
+            by,
+            height,
+            burned,
+            ..
+        } => format!(
+            "{}'s house signs block {} of the {} twice — its second clerk, not having seen the block, signs for none — and {} shows the chain both: {} coin of its stake is burned and it never validates again",
+            town_name(world, *town),
+            height,
+            world.networks[*network].name,
+            town_name(world, *by),
+            coin(*burned)
+        ),
         Event::Stalled { network, height, .. } => format!(
             "the {} stalls at height {}: more than a third of its stake is absent",
             world.networks[*network].name, height
@@ -616,7 +631,11 @@ fn transaction(world: &Nations, network: &Network, tx: &chain::Transaction) -> S
         Action::Issue { symbol, peg, .. } => format!("{from} registers {symbol}, standing for {peg}"),
         Action::Bond { amount } => format!("{from} stakes {} coin", coin(*amount)),
         Action::Unbond { amount } => format!("{from} unstakes {} coin", coin(*amount)),
-        Action::Evidence { .. } => format!("{from} shows two votes signed by one validator at one height"),
+        Action::Evidence { first, .. } => format!(
+            "{from} shows that {} signed block {} twice, once for no block",
+            holder(world, network, &Address::of(&first.validator)),
+            first.height
+        ),
         Action::Swap(swap) => {
             let other = holder(world, network, &Address::of(&swap.counterparty));
             let side = |(asset, amount): (Asset, u128)| match asset {
@@ -822,8 +841,17 @@ fn network_json(world: &Nations, at: usize, network: &Network, checked: Option<&
             .unwrap_or_else(|| "null".to_string())
     };
     let summary = list(chain.blocks.iter().map(|b| {
+        // The validator a block's evidence convicts, if it carries any.
+        let convicted = b
+            .txs
+            .iter()
+            .find_map(|tx| match &tx.action {
+                Action::Evidence { first, .. } => Some(address_town(&Address::of(&first.validator))),
+                _ => None,
+            })
+            .unwrap_or_else(|| "null".to_string());
         format!(
-            "[{},{},{},{},{},{}]",
+            "[{},{},{},{},{},{},{convicted}]",
             b.header.height,
             b.header.time / 2_629_800,
             b.header.round,
@@ -891,9 +919,11 @@ fn network_json(world: &Nations, at: usize, network: &Network, checked: Option<&
             .as_ref()
             .map(|k| chain.balance(&address, Asset::Token(k.id)))
             .unwrap_or(0);
-        let bonded = chain.ledger.account(&address).map(|a| a.bonded).unwrap_or(0);
+        let account = chain.ledger.account(&address);
+        let bonded = account.map(|a| a.bonded).unwrap_or(0);
+        let jailed = account.is_some_and(|a| a.jailed);
         Some(format!(
-            "{{\"town\":{t},\"address\":{},\"coin\":{},\"staked\":{},\"tokens\":{}}}",
+            "{{\"town\":{t},\"address\":{},\"coin\":{},\"staked\":{},\"tokens\":{},\"jailed\":{jailed}}}",
             quoted(&address.to_string()),
             quoted(&coin(held)),
             quoted(&coin(bonded)),
