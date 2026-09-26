@@ -456,7 +456,7 @@ Nothing below is scheduled:
   coin trades against it in swaps both sides sign; and no country holds the two thirds of the
   stake that would let it finalise a block alone. Paying abroad falls from nine per cent of a
   payment to under two, trade across borders rises by a fifth to a quarter, and — counting what
-  buying from more than one country is worth — a head lives on one or two per cent more, and in
+  buying from more than one country is worth — a head lives on up to two per cent more, and in
   the smallest country three to nine.
 
 ```

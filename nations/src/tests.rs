@@ -248,6 +248,27 @@ fn no_country_can_finalise_a_block_on_its_own() {
         100.0 * share
     );
     assert!(share < 2.0 / 3.0);
+    // Nor at any height before: every set that ever signed a block kept to it.
+    let (most, at) = most_one_country_ever_held(world);
+    assert!(most <= network::ONE_COUNTRY_AT_MOST + 1e-3, "{most:.3} at height {at}");
+}
+
+/// The largest share of a signing set any one country's houses held, at any height of a world's
+/// first chain, and the height — countries as the world reads them now.
+fn most_one_country_ever_held(world: &Nations) -> (f64, u64) {
+    let network = &world.networks[0];
+    (0..=network.chain.height())
+        .map(|height| {
+            let set = network.chain.light_block(height).expect("a block").validators;
+            let total: u64 = set.members.iter().map(|v| v.power).sum();
+            let mut held = vec![0u64; world.countries.len()];
+            for v in &set.members {
+                let town = network.town_of(&v.address).expect("every validator is a house");
+                held[world.towns[town].country] += v.power;
+            }
+            (held.iter().copied().max().unwrap_or(0) as f64 / total.max(1) as f64, height)
+        })
+        .fold((0.0, 0), |best, now| if now.0 > best.0 { now } else { best })
 }
 
 /// The cap moves stake from the country over it to the others in proportion to what they hold,
@@ -483,7 +504,7 @@ fn a_house_that_signs_twice_is_caught_and_the_chain_mended() {
 /// and in year 565 that house is caught signing twice. Before a caught house could come back
 /// under a key it keeps for staking, nobody in that country could ever bond again, and the other
 /// held the whole of the stake from then on; now Lingquay is back the same year, and no country
-/// holds more than its three fifths.
+/// holds more than its three fifths — at the end, or at any height on the way.
 #[test]
 fn a_country_whose_only_house_is_caught_keeps_its_share() {
     let mut world = Nations::found(WorldSeed::from_u128(0x5f));
@@ -509,6 +530,9 @@ fn a_country_whose_only_house_is_caught_keeps_its_share() {
         world.countries[largest].name,
         100.0 * share
     );
+    // Not even for the block after it was caught: the evidence and the mending go into one.
+    let (most, at) = most_one_country_ever_held(&world);
+    assert!(most <= network::ONE_COUNTRY_AT_MOST + 1e-3, "{most:.3} at height {at}");
     assert_eq!(network.refused, 0, "{:?}", network.refusals);
 }
 

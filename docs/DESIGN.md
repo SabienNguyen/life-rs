@@ -5968,7 +5968,10 @@ to year 800 — thirty-eight validators were caught, none in ten of the worlds a
 any; forty-nine more chains, among sixty-four further seeds run to year 700, caught forty-two. In
 all seventy-nine nothing any world sent its chain was refused, nothing stalled, no chain ended
 with fewer than five validators or with a country holding more than its three fifths, and every
-chain replays from its genesis. A test jails the worst case by hand — the smaller country's
+chain replays from its genesis. Nor does a country pass its share for a moment on the way: read
+block by block, at no height of seven of those chains — 0x11, 0x21, 0x221, 0x27, 0x2c, 0x4e and
+0x5f — does one country hold more than three fifths of the stake that signs, because the
+evidence and the bonding that mends what it does go into the same block. A test jails the worst case by hand — the smaller country's
 largest validator on 0x11, which left the larger holding the whole of the stake — and holds the
 chain, two years on, to a twentieth burned, the old key's stake taken back, the house seated
 again under a new one, at least four validators, three fifths, nothing refused or stalled, and a
