@@ -5863,18 +5863,19 @@ stand-in for payments not all being alike, and it is a rule, not a mechanism.
 
 Two switches beside `trade_is_possible` ask it directly: `chains_are_possible` forbids a ledger,
 and `borders_are_free` makes paying abroad cost nothing from the founding. The share of what a
-world makes that crosses a border, by year 700, its income, and what a head consumes counted at
-one price for a ware everywhere:
+world makes that crosses a border, by year 700, its income, what a head consumes counted at one
+price for a ware everywhere, the same counting what its wares are worth for coming from more than
+one country, and what the chain is worth, counted that way, to a head of the smallest country:
 
-| seed | traded abroad, no chain | with the chain | borders free | of the way | income: no chain / chain / free | consumed at one price |
-|---|---|---|---|---|---|---|
-| 0x11 | 3.00% | 3.84% | 4.19% | 70% | 181.6 / 180.4 / 180.2 | 564.8 / 565.5 / 564.8 |
-| 0x21 | 7.74% | 9.34% | 9.87% | 75% | 59.5 / 59.5 / 59.2 | 130.2 / 130.2 / 129.5 |
-| 0x221 | 5.79% | 7.07% | 7.65% | 69% | 76.6 / 76.4 / 75.7 | 181.1 / 181.3 / 180.2 |
-| 0xbeef | 9.00% | 10.76% | 11.27% | 78% | 45.1 / 45.1 / 44.9 | 86.0 / 86.1 / 85.8 |
-| 0x5eed | 2.91% | 3.50% | 3.84% | 63% | 58.9 / 58.5 / 57.0 | 127.5 / 127.5 / 126.1 |
-| 0x7 | 8.26% | 9.72% | 10.39% | 69% | 96.4 / 95.6 / 95.9 | 254.8 / 254.5 / 254.5 |
-| 0x1234 | 7.87% | 9.39% | 9.93% | 74% | 49.0 / 48.8 / 49.8 | 97.5 / 97.5 / 98.1 |
+| seed | traded abroad, no chain | with the chain | borders free | of the way | income: no chain / chain / free | consumed at one price | counting variety | smallest country, for the chain |
+|---|---|---|---|---|---|---|---|---|
+| 0x11 | 3.00% | 3.84% | 4.19% | 70% | 181.6 / 180.4 / 180.2 | 564.8 / 565.5 / 564.8 | 577.1 / 583.0 / 584.7 | Stanwick +5.9% |
+| 0x21 | 7.74% | 9.34% | 9.87% | 75% | 59.5 / 59.5 / 59.2 | 130.2 / 130.2 / 129.5 | 137.5 / 139.8 / 139.9 | Stanhaven +9.3% |
+| 0x221 | 5.79% | 7.07% | 7.65% | 69% | 76.6 / 76.4 / 75.7 | 181.1 / 181.3 / 180.2 | 188.9 / 192.2 / 192.6 | Fennhythe +4.7% |
+| 0xbeef | 9.00% | 10.76% | 11.27% | 78% | 45.1 / 45.1 / 44.9 | 86.0 / 86.1 / 85.8 | 91.7 / 93.5 / 93.8 | Tilquay +3.3% |
+| 0x5eed | 2.91% | 3.50% | 3.84% | 63% | 58.9 / 58.5 / 57.0 | 127.5 / 127.5 / 126.1 | 129.8 / 130.6 / 129.7 | Grimquay +3.6% |
+| 0x7 | 8.26% | 9.72% | 10.39% | 69% | 96.4 / 95.6 / 95.9 | 254.8 / 254.5 / 254.5 | 271.7 / 276.4 / 278.9 | Whitmouth +9.0% |
+| 0x1234 | 7.87% | 9.39% | 9.93% | 74% | 49.0 / 48.8 / 49.8 | 97.5 / 97.5 / 98.1 | 102.9 / 104.6 / 106.0 | Halport +7.1% |
 
 The chain raises trade across borders by eighteen to twenty-eight per cent, and gets between
 three fifths and four fifths of the way to borders that cost nothing — less early, while
@@ -5882,12 +5883,29 @@ checking is still dear, and more as it gets cheap: thirty years after 0x11's fou
 gone a fifth of the way, and a century on 64 per cent, which a test holds it to. Income moves by
 under four per cent either way, and not in one direction. That is partly how income is counted —
 a town's wares at its own price, so a town that imports them cheaply reads poorer even as it
-consumes more — so the last column counts what a head consumes with a ware worth a year's food
-everywhere. That moves by under half a per cent. In this model, trade across a border is wares
-for food and varieties nobody values for being varied, and widening it by a fifth makes nobody
-better off. A model in which the chain raised living standards would need people who value
-variety — love of variety in what they want — and that is not built. Famines do not move at all:
-they come in the centuries before there is anything to found.
+consumes more — so the next column counts what a head consumes with a ware worth a year's food
+everywhere. That moves by under half a per cent.
+
+It is the wrong count as well, because it takes a ware from abroad for the same ware as one from
+home, and the model's own buyers do not. They buy each country's wares by an Armington elasticity
+of five — some of each, whatever the prices — which is how people buy who value wares for coming
+from more than one place, and how much they value it needs nothing but the share of their
+spending that stays at home, λ: the same spending is worth λ^(−1/(σ−1)) times what it would buy
+at home alone. That is Arkolakis, Costinot and Rodríguez-Clare's sufficient statistic for what
+trade gains a people (2012), which holds whatever the costs of crossing that produced λ.
+`Country::variety` is that multiple, counting the wares a country takes in on the net as well as
+the varieties it buys both ways, and `Reading::with_variety` counts a head's wares at it. It is a
+reading, not a behaviour: nobody has more children, saves more or moves for it (§49.8).
+
+Counted that way the chain makes a head better off by 0.6 to 2.0 per cent across the world, and
+by 3.3 to 9.3 per cent in the smallest country, which buys most of its wares abroad. That the
+small gain most from trade is one of the oldest results there is, and nothing here put it in. A
+test holds 0x11 to both: a century after its founding, the world at least three tenths of a per
+cent better off for the chain, and the smallest country's wares worth at least five per cent
+more. 0x5eed with free borders ends below 0x5eed with a chain because by year 700 it is a
+different world — it consumes less even at one price — not because a chain beats a border that
+costs nothing. Famines do not move at all: they come in the centuries before there is anything
+to found.
 
 ### 49.7 What went wrong on the way
 
@@ -5991,10 +6009,11 @@ the mechanism was the wrong one.
 - **One chain per world.** Nothing competes with the first, and there are no bridges.
 - **Trade balances.** Bilateral trade is balanced by construction — no capital flows, no
   current-account deficits — and the lumpy months only move payments within a year.
-- **Nobody values variety.** Countries' wares are Armington varieties for what gets traded and
-  paid, but what people want is still one good called wares, so cheaper, wider trade across
-  borders does not show in what they consume (§49.6.1). The chain's whole effect on living
-  standards waits on that.
+- **Variety is counted, not wanted.** What the chain is worth to a head is read off the
+  Armington demand the model already has (§49.6.1), and nothing acts on it: nobody has more
+  children, saves more or moves for being better off that way, and what a town makes is still
+  one good called wares. A model where that gain fed back — into growth by variety, or into who
+  moves where — is not built.
 - **Houses are towns.** No firms, no accounts of persons, no exchanges and no order book: coin
   changes hands at the price the model sets for it, between the houses with most to spare and the
   ones that need it. The swap is real; the market that would find its price is not.

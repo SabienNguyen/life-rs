@@ -169,6 +169,8 @@ pub struct Town {
     service_price: f64,
     /// Wares bought last year, to use and to invest, in food.
     wares_bought: f64,
+    /// Wares a head used up last year, beside what went into capital.
+    pub wares_had: f64,
     /// What it put by last year, in food, and the share of that its houses could not lend.
     pub saved: f64,
     pub unlent: f64,
@@ -212,6 +214,9 @@ pub struct Country {
     pub exports: f64,
     /// What paying abroad cost it last year, as a share of a payment.
     pub pay_cost: f64,
+    /// What its wares are worth to its people for coming from more than one country, as a
+    /// multiple of the same spending on its own country's alone (`Nations::pay_abroad`).
+    pub variety: f64,
 }
 
 /// Something that happened to the world, worth a line in its history.
@@ -233,7 +238,8 @@ pub enum Event {
     Issued { year: u64, network: usize, symbol: String },
     /// A house started validating.
     Joined { year: u64, network: usize, town: usize },
-    /// A house stopped: it had done no business on the chain for years, and unbonded its stake.
+    /// A house stopped: its own payments on the chain had dwindled for years, and it unbonded its
+    /// stake.
     Left { year: u64, network: usize, town: usize },
     /// A block could not be finalised: more than a third of the stake was absent.
     Stalled { year: u64, network: usize, height: u64 },
@@ -265,6 +271,9 @@ pub struct Reading {
     pub income: f64,
     /// What a head consumed, at one price for a ware everywhere (`Town::consumed`).
     pub consumed: f64,
+    /// The same, with a head's wares counted at what their coming from more than one country is
+    /// worth to it (`Country::variety`).
+    pub with_variety: f64,
     pub hunger: f64,
     /// Share of the world's product sold across a border.
     pub traded: f64,
@@ -408,6 +417,7 @@ impl Nations {
                 exchange_value: 0.0,
                 service_price: 1.0,
                 wares_bought: 0.0,
+                wares_had: 0.0,
                 saved: 0.0,
                 unlent: money::UNBANKED,
             });
@@ -549,6 +559,7 @@ impl Nations {
                 product: 0.0,
                 exports: carried.get(&key).map(|(_, sold)| *sold).unwrap_or(0.0),
                 pay_cost: carried.get(&key).map(|(cost, _)| *cost).unwrap_or(usual),
+                variety: 1.0,
             });
         }
         // Largest first, then by key, so the order is stable.
@@ -840,6 +851,7 @@ impl Nations {
             town.exchange_value = exchanged_value;
             town.service_price = service_price;
             town.wares_bought = q * (spent.wares + spent.invested);
+            town.wares_had = spent.wares / people;
             town.saved = saved;
             town.unlent = unlent;
         }
@@ -1048,6 +1060,7 @@ impl Nations {
         for c in 0..self.countries.len() {
             self.countries[c].exports = sold[c] + bought[c];
         }
+        let taken_in = bought;
 
         // And the trade the two-good market cannot see: countries' wares are not the same wares,
         // so people buy some of each other's whatever the net position — two-way trade in
@@ -1108,6 +1121,21 @@ impl Nations {
         }
         for (country, sold) in self.countries.iter_mut().zip(&varieties) {
             country.exports += sold;
+        }
+        // What buying from more than one country is worth. People who buy by an Armington
+        // elasticity want each country's wares for being that country's — it is why they buy some
+        // of each whatever the net position — so the same spending is worth more when part of it
+        // goes abroad: the share kept at home, to the power −1/(σ − 1). That is Arkolakis,
+        // Costinot and Rodríguez-Clare's sufficient statistic for what trade gains a people, and
+        // it needs nothing but the share. Abroad is the wares taken in on the net as well as the
+        // varieties bought both ways.
+        for (c, country) in self.countries.iter_mut().enumerate() {
+            let home = if spend[c] > 0.0 {
+                (1.0 - (taken_in[c] + varieties[c]) / spend[c]).clamp(0.05, 1.0)
+            } else {
+                1.0
+            };
+            country.variety = home.powf(-1.0 / (VARIETY - 1.0));
         }
         // Familiarity grows with the share of each country's business done with the other.
         let keys: Vec<usize> = self.countries.iter().map(|c| c.key).collect();
@@ -1296,6 +1324,25 @@ impl Nations {
         self.cultures.step(&doing, &contact, &souls, self.year, &mut rng);
     }
 
+    /// What a head of a country lives on: what it consumed at one price for a ware, with its
+    /// wares counted at what their coming from more than one country is worth to it
+    /// (`Country::variety`). The world's is `Reading::with_variety`.
+    pub fn lives_on(&self, country: &Country) -> f64 {
+        let people: f64 = country.towns.iter().map(|t| self.towns[*t].people).sum();
+        if people <= 0.0 {
+            return 0.0;
+        }
+        country
+            .towns
+            .iter()
+            .map(|t| {
+                let town = &self.towns[*t];
+                town.people * (town.consumed + (country.variety - 1.0) * town.wares_had)
+            })
+            .sum::<f64>()
+            / people
+    }
+
     fn read(&mut self) {
         let people = self.people();
         let product: f64 = self.towns.iter().map(|t| t.product()).sum();
@@ -1346,6 +1393,10 @@ impl Nations {
             product,
             income,
             consumed: weigh(&|t| t.consumed),
+            with_variety: weigh(&|t| {
+                let variety = self.countries.get(t.country).map_or(1.0, |c| c.variety);
+                t.consumed + (variety - 1.0) * t.wares_had
+            }),
             hunger: weigh(&|t| t.hunger),
             traded: if product > 0.0 { abroad / product } else { 0.0 },
             shares,

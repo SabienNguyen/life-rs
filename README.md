@@ -434,7 +434,19 @@ Nothing below is scheduled:
   own trade on it; a stable token is minted only against a reserve somebody else vouches for;
   coin trades against it in swaps both sides sign; and no country holds the two thirds of the
   stake that would let it finalise a block alone. Paying abroad falls from nine per cent of a
-  payment to under two, and trade across borders rises by a fifth to a quarter.
+  payment to under two, trade across borders rises by a fifth to a quarter, and — counting what
+  buying from more than one country is worth — a head lives on one or two per cent more, and in
+  the smallest country three to nine.
+
+```
+── the Wickport Ledger ──
+  founded in year 418 by Wickport, Stanwick, Haltor, Marlscar, Twyfell, Wenmouth
+  height 2196 · 7 validators · 61 rounds lost · 0 stalls · 0 transactions refused
+  WENT: 660,063,130,121 in circulation, 660,063,130,121 held in reserve and attested by Stanwick — backed 1.0000
+  paying abroad costs 1.7% of the payment now, against 9.0% through houses alone
+  replayed from genesis: 2197 blocks, every signature and root checked, in 4.1s — it holds
+  followed as a light client, by headers, commits and validator sets alone: to height 2196 in 0.4s, never a transaction
+```
 
 It is a real chain: SHA-256, Ed25519 and Merkle trees written from their standards and checked
 against the RFC vectors and OpenSSL; Byzantine-fault-tolerant proof of stake, with a block final

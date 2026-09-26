@@ -265,6 +265,13 @@ function amount(v) {
   return v.toFixed(0);
 }
 function pct(v) { return (100 * v).toFixed(1) + "%"; }
+// Coin from base units, as the report writes it: whole coin where there is plenty, three
+// figures where there is less.
+function coinText(base) {
+  if (base >= BigInt(10000000000) || base === BigInt(0)) return (base / BigInt(100000000)).toLocaleString();
+  const v = Number(base) / 1e8;
+  return v.toFixed(Math.min(8, Math.max(0, 2 - Math.floor(Math.log10(v)))));
+}
 function townName(i) { return i === null || i === undefined ? "?" : WORLD.towns[i].name; }
 function countryOfTown(i) { return WORLD.countries[WORLD.towns[i].country]; }
 function monthLabel(m) { const k = Math.max(0, m - 1); return "year " + Math.floor(k / 12) + ", month " + (k % 12 + 1); }
@@ -522,9 +529,11 @@ function drawCountries() {
       '<td class="n">' + c.states.length + "</td>" +
       "<td>" + moneyText + "</td>" +
       '<td class="n">' + price + "</td>" +
-      '<td class="n">' + pct(c.payCost) + "</td></tr>";
+      '<td class="n">' + pct(c.payCost) + "</td>" +
+      '<td class="n">' + (WORLD.countries.length > 1 ? "+" + pct(c.variety - 1) : "—") + "</td></tr>";
   }).join("");
-  $("countries").innerHTML = "<tr><th>country</th><th class='n'>people</th><th class='n'>income</th><th class='n'>towns</th><th class='n'>states</th><th>money</th><th class='n'>a year's food</th><th class='n'>paying abroad</th></tr>" + rows;
+  $("countries").innerHTML = "<tr><th>country</th><th class='n'>people</th><th class='n'>income</th><th class='n'>towns</th><th class='n'>states</th><th>money</th><th class='n'>a year's food</th><th class='n'>paying abroad</th>" +
+    "<th class='n' title=\"What a head's wares are worth for coming from more than one country, beyond the same spent at home\">variety</th></tr>" + rows;
   Array.prototype.forEach.call(document.querySelectorAll("#countries tr.pick"), function (row) {
     row.addEventListener("click", function () { pickCountry(Number(row.getAttribute("data-c"))); });
   });
@@ -562,6 +571,14 @@ drawCountries();
     box.innerHTML = "<p class='muted'>" + esc(why[key] || (key === "TrustedKeeper" ? "One house is trusted by all the rest, so they keep their books with it." : "Nobody has asked yet.")) + "</p>";
     return;
   }
+  const lastReading = WORLD.readings[WORLD.readings.length - 1] || [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  // What a head would live on without the chain, against what it does with it.
+  function livesOn() {
+    const without = WORLD.withoutChain.withVariety, with_ = lastReading[9];
+    if (!(without > 0) || !(with_ > 0)) return "—";
+    const change = without / with_ - 1;
+    return pct(Math.abs(change)) + (change <= 0 ? " less" : " more");
+  }
   box.innerHTML = WORLD.chains.map(function (c, at) {
     const founders = c.founders.map(townName).join(", ");
     const v = c.verified;
@@ -595,7 +612,8 @@ drawCountries();
         (WORLD.throughHouses === null ? "" : ", " + pct(WORLD.throughHouses) + " through houses alone") + "</div>" +
       "<div>rounds lost · stalls · refused</div><div>" + c.roundsLost + " · " + c.stalls + " · " + c.refused + "</div>" +
       (WORLD.withoutChain && at === 0 ? "<div>without any chain</div><div>" + pct(WORLD.withoutChain.traded) + " of what the world makes would cross a border, against " +
-        pct((WORLD.readings[WORLD.readings.length - 1] || [0, 0, 0, 0, 0])[4]) + " with it <span class='muted'>— the same world, run again from its seed with no chain allowed</span></div>" : "") +
+        pct(lastReading[4]) + " with it, and a head would live on " + livesOn() +
+        " <span class='muted'>— the same world, run again from its seed with no chain allowed; living counts what wares are worth for coming from more than one country</span></div>" : "") +
       (c.largestCountry ? "<div>most stake in one country</div><div>" + esc(WORLD.countries[c.largestCountry.country].name) + ", " + pct(c.largestCountry.share) +
         " <span class='muted'>— a block needs two thirds, so it is always signed abroad too</span></div>" : "") + "</div>" +
       "<h2 style='margin-top:14px'>Validators</h2><div class='scroll'><table><tr><th>house</th><th>country</th><th class='n'>stake</th><th>address</th></tr>" + validators + "</table></div>" +
@@ -842,8 +860,8 @@ async function checkYourself(at, tamper) {
       const read = readAccount(leaf);
       const held = Object.keys(read.tokens).map(function (id) { return read.tokens[id]; }).reduce(function (n, v) { return n + v; }, BigInt(0));
       const holds = await merkleHolds(p.stateRoot, leaf, a.index, a.size, a.path);
-      say(holds, esc(townName(a.town)) + " holds " + (read.coin / BigInt(100000000)).toLocaleString() + " coin, " +
-        (read.bonded / BigInt(100000000)).toLocaleString() + " staked and " + (held / BigInt(1000000)).toLocaleString() + " " + esc(token) +
+      say(holds, esc(townName(a.town)) + " holds " + coinText(read.coin) + " coin, " +
+        coinText(read.bonded) + " staked and " + (held / BigInt(1000000)).toLocaleString() + " " + esc(token) +
         " — read from the " + leaf.length + " bytes the proof carries" + (tamper && i === 0 ? ", with one byte changed" : ""));
     }
   } catch (e) {

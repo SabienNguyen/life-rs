@@ -17,15 +17,16 @@ pub struct Checked {
 /// The same world run again from its seed with no chain allowed, as far as the world has gone:
 /// what it would have traded across its borders and earned without one. `None` for a world that
 /// has founded no chain, which has nothing to compare. Cheap — it is the chain that costs time.
-pub fn without_a_chain(world: &Nations) -> Option<nations::Reading> {
+pub fn without_a_chain(world: &Nations) -> Option<Nations> {
     if world.networks.is_empty() {
         return None;
     }
     let mut other = Nations::found(world.seed);
     other.chains_are_possible = false;
     other.run(world.year);
-    other.readings.last().cloned()
+    Some(other)
 }
+
 
 /// Replay every chain a world keeps from its genesis, with nothing taken on trust.
 pub fn check(world: &Nations) -> Vec<Checked> {
@@ -81,6 +82,17 @@ fn grouped(value: u128) -> String {
         out.push(c);
     }
     out
+}
+
+/// Coin, from base units: whole coin where there is plenty, three figures where there is less —
+/// in a rich world one coin is worth millions, and a swap buys a fraction of one.
+fn coin(amount: u128) -> String {
+    if amount >= 100 * COIN || amount == 0 {
+        return grouped(amount / COIN);
+    }
+    let value = amount as f64 / COIN as f64;
+    let decimals = (2 - value.log10().floor() as i64).clamp(0, 8) as usize;
+    format!("{value:.decimals$}")
 }
 
 fn percent(value: f64) -> String {
@@ -178,7 +190,7 @@ pub fn describe(world: &Nations, event: &Event, first_money: bool) -> Option<Str
             world.networks[*network].name
         ),
         Event::Left { network, town, .. } => format!(
-            "{} leaves the {}'s validators and takes its stake back, its business on the chain having dwindled",
+            "{} leaves the {}'s validators and takes its stake back, its own payments on the chain having dwindled",
             town_name(world, *town),
             world.networks[*network].name
         ),
@@ -276,8 +288,8 @@ pub fn report(world: &Nations, checked: &[Checked]) -> Vec<String> {
 
     out.push("── countries ──".to_string());
     out.push(format!(
-        "  {:<14} {:>8} {:>7} {:>6} {:>6}  {:<22} {:>14} {:>9} {:>9}",
-        "country", "people", "income", "towns", "states", "money", "a year's food", "inflation", "pay abroad"
+        "  {:<14} {:>8} {:>7} {:>6} {:>6}  {:<22} {:>14} {:>9} {:>10} {:>9}",
+        "country", "people", "income", "towns", "states", "money", "a year's food", "inflation", "pay abroad", "variety"
     ));
     for country in &world.countries {
         let (money, price, inflation) = match country.currency {
@@ -292,7 +304,7 @@ pub fn report(world: &Nations, checked: &[Checked]) -> Vec<String> {
             None => ("barter and metal".to_string(), "—".to_string(), "—".to_string()),
         };
         out.push(format!(
-            "  {:<14} {:>8} {:>7.1} {:>6} {:>6}  {:<22} {:>14} {:>9} {:>9}",
+            "  {:<14} {:>8} {:>7.1} {:>6} {:>6}  {:<22} {:>14} {:>9} {:>10} {:>9}",
             country.name,
             amount(country.people),
             country.product / country.people.max(1.0),
@@ -301,8 +313,15 @@ pub fn report(world: &Nations, checked: &[Checked]) -> Vec<String> {
             money,
             price,
             inflation,
-            percent(country.pay_cost)
+            percent(country.pay_cost),
+            format!("+{}", percent(country.variety - 1.0))
         ));
+    }
+    if world.countries.len() > 1 {
+        out.push(
+            "  variety: what a head's wares are worth for coming from more than one country, beyond the same spent at home"
+                .to_string(),
+        );
     }
     out.push(String::new());
 
@@ -417,13 +436,34 @@ fn ledger(world: &Nations, at: usize, network: &Network, checked: Option<&Checke
             percent(houses)
         ));
     }
-    if let (Some(without), Some(with)) = (without_a_chain(world), world.readings.last()) {
+    if let Some(unchained) = without_a_chain(world)
+        && let (Some(without), Some(with)) = (unchained.readings.last(), world.readings.last())
+    {
         out.push(format!(
             "  run again with no chain allowed, the same world trades {} of what it makes across its borders rather than {}, and a head makes {:.1} times subsistence rather than {:.1}",
             percent(without.traded),
             percent(with.traded),
             without.income,
             with.income
+        ));
+        // The smallest country, as the same country in both worlds: the one with the same key.
+        let smallest = world.countries.last().and_then(|c| {
+            let other = unchained.countries.iter().find(|o| o.key == c.key)?;
+            Some((c, world.lives_on(c) / unchained.lives_on(other).max(1e-9) - 1.0))
+        });
+        out.push(format!(
+            "  counting what wares are worth for coming from more than one country, a head lives on {} {} for the chain{}",
+            percent((with.with_variety / without.with_variety.max(1e-9) - 1.0).abs()),
+            if with.with_variety >= without.with_variety { "more" } else { "less" },
+            match smallest {
+                Some((c, gain)) => format!(
+                    " — in {}, the smallest country, {} {}",
+                    c.name,
+                    percent(gain.abs()),
+                    if gain >= 0.0 { "more" } else { "less" }
+                ),
+                None => String::new(),
+            }
         ));
     }
 
@@ -554,7 +594,7 @@ fn transaction(world: &Nations, network: &Network, tx: &chain::Transaction) -> S
             Asset::Coin => format!(
                 "{from} pays {} {} coin",
                 holder(world, network, to),
-                grouped(amount / COIN)
+                coin(*amount)
             ),
             Asset::Token(_) => format!(
                 "{from} pays {} {} {token}",
@@ -574,13 +614,13 @@ fn transaction(world: &Nations, network: &Network, tx: &chain::Transaction) -> S
             format!("{from} redeems {} {token}", grouped(amount / TOKEN_UNIT))
         }
         Action::Issue { symbol, peg, .. } => format!("{from} registers {symbol}, standing for {peg}"),
-        Action::Bond { amount } => format!("{from} stakes {} coin", grouped(amount / COIN)),
-        Action::Unbond { amount } => format!("{from} unstakes {} coin", grouped(amount / COIN)),
+        Action::Bond { amount } => format!("{from} stakes {} coin", coin(*amount)),
+        Action::Unbond { amount } => format!("{from} unstakes {} coin", coin(*amount)),
         Action::Evidence { .. } => format!("{from} shows two votes signed by one validator at one height"),
         Action::Swap(swap) => {
             let other = holder(world, network, &Address::of(&swap.counterparty));
             let side = |(asset, amount): (Asset, u128)| match asset {
-                Asset::Coin => format!("{} coin", grouped(amount / COIN)),
+                Asset::Coin => format!("{} coin", coin(amount)),
                 Asset::Token(_) => format!("{} {token}", grouped(amount / TOKEN_UNIT)),
             };
             format!("{from} sells {other} {} for {}, both legs at once", side(swap.give), side(swap.get))
@@ -684,13 +724,14 @@ pub fn snapshot(world: &Nations, checked: &[Checked]) -> String {
     fields.push(format!("\"states\":{states}"));
     let countries = list(world.countries.iter().map(|c| {
         format!(
-            "{{\"name\":{},\"capital\":{},\"people\":{},\"product\":{},\"currency\":{},\"payCost\":{},\"exports\":{},\"towns\":{},\"states\":{}}}",
+            "{{\"name\":{},\"capital\":{},\"people\":{},\"product\":{},\"currency\":{},\"payCost\":{},\"variety\":{},\"exports\":{},\"towns\":{},\"states\":{}}}",
             quoted(&c.name),
             c.capital,
             num(c.people),
             num(c.product),
             c.currency.map(|x| x.to_string()).unwrap_or_else(|| "null".to_string()),
             num(c.pay_cost),
+            num(c.variety),
             num(c.exports),
             list(c.towns.iter().map(|t| t.to_string())),
             list(c.states.iter().map(|s| s.to_string()))
@@ -714,7 +755,7 @@ pub fn snapshot(world: &Nations, checked: &[Checked]) -> String {
     fields.push(format!("\"currencies\":{currencies}"));
     let readings = list(world.readings.iter().map(|r| {
         format!(
-            "[{},{},{},{},{},{},{},{},{}]",
+            "[{},{},{},{},{},{},{},{},{},{}]",
             r.year,
             num(r.people),
             num(r.income),
@@ -723,7 +764,8 @@ pub fn snapshot(world: &Nations, checked: &[Checked]) -> String {
             num(r.shares[0]),
             num(r.monetised),
             num(r.on_chain),
-            r.blocks
+            r.blocks,
+            num(r.with_variety)
         )
     }));
     fields.push(format!("\"readings\":{readings}"));
@@ -748,7 +790,13 @@ pub fn snapshot(world: &Nations, checked: &[Checked]) -> String {
     fields.push(format!(
         "\"withoutChain\":{}",
         without_a_chain(world)
-            .map(|r| format!("{{\"traded\":{},\"income\":{}}}", num(r.traded), num(r.income)))
+            .and_then(|w| w.readings.last().cloned())
+            .map(|r| format!(
+                "{{\"traded\":{},\"income\":{},\"withVariety\":{}}}",
+                num(r.traded),
+                num(r.income),
+                num(r.with_variety)
+            ))
             .unwrap_or_else(|| "null".to_string())
     ));
     fields.push(format!(
@@ -837,7 +885,7 @@ fn network_json(world: &Nations, at: usize, network: &Network, checked: Option<&
     }));
     let accounts = list(network.houses().filter_map(|t| {
         let address = network.address_of(t)?;
-        let coin = chain.balance(&address, Asset::Coin);
+        let held = chain.balance(&address, Asset::Coin);
         let tokens = network
             .token
             .as_ref()
@@ -847,8 +895,8 @@ fn network_json(world: &Nations, at: usize, network: &Network, checked: Option<&
         Some(format!(
             "{{\"town\":{t},\"address\":{},\"coin\":{},\"staked\":{},\"tokens\":{}}}",
             quoted(&address.to_string()),
-            quoted(&grouped(coin / COIN)),
-            quoted(&grouped(bonded / COIN)),
+            quoted(&coin(held)),
+            quoted(&coin(bonded)),
             quoted(&grouped(tokens / TOKEN_UNIT))
         ))
     }));
@@ -1033,6 +1081,11 @@ mod tests {
         assert_eq!(amount(9_876_543_210.0), "9.88B");
         assert_eq!(grouped(1_234_567), "1,234,567");
         assert_eq!(grouped(12), "12");
+        // A swap in a rich world buys part of a coin, and says which part.
+        assert_eq!(coin(39_500_000), "0.395");
+        assert_eq!(coin(550_000_000), "5.50");
+        assert_eq!(coin(4_000 * COIN), "4,000");
+        assert_eq!(coin(0), "0");
         assert_eq!(when(2_629_800), (0, 1));
         assert_eq!(when(2_629_800 * 13), (1, 1));
     }

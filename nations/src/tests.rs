@@ -385,21 +385,33 @@ fn a_chain_makes_paying_abroad_cheaper() {
 ///
 /// Written after finding that it had changed nothing: redrawing the countries every year reset
 /// what paying abroad cost before the market read it, so the chain lowered a number nobody used.
+///
+/// And it has to make somebody better off. Counted at one price for a ware it hardly does, but
+/// people who buy each country's wares for being that country's are better off for buying more
+/// of them, and a small country, which buys most of its wares abroad, most of all.
 #[test]
 fn a_chain_widens_the_markets_it_touches() {
     let world = chained();
-    let traded = |w: &Nations| w.readings.last().expect("a year has passed").traded;
     let otherwise = |free: bool, chains: bool| {
         let mut other = Nations::found(WorldSeed::from_u128(0x11));
         other.borders_are_free = free;
         other.chains_are_possible = chains;
         other.run(world.year);
-        traded(&other)
+        other
     };
-    let (without, with, free) = (otherwise(false, false), traded(world), otherwise(true, true));
+    let (unchained, freed) = (otherwise(false, false), otherwise(true, true));
+    let last = |w: &Nations| w.readings.last().expect("a year has passed").clone();
+    let (without, with, free) = (last(&unchained), last(world), last(&freed));
+    let (without, with, free) = (without.traded, with.traded, free.traded);
     assert!(with > 1.1 * without, "{with:.4} traded abroad with the chain, {without:.4} without");
     assert!(with <= 1.01 * free, "{with:.4} with the chain, {free:.4} with free borders");
     assert!(with - without > 0.5 * (free - without), "most of the way: {without:.4} → {with:.4} of {free:.4}");
+
+    let (without, with) = (last(&unchained).with_variety, last(world).with_variety);
+    assert!(with > 1.003 * without, "a head lives on {with:.2} with the chain, {without:.2} without");
+    let smallest = |w: &Nations| w.countries.last().expect("more than one country").variety;
+    let (without, with) = (smallest(&unchained), smallest(world));
+    assert!(with > 1.05 * without, "the smallest country's wares are worth {with:.3} with the chain, {without:.3} without");
 }
 
 /// A world that is one country has a house everybody in it can pay through, and never builds a
