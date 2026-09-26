@@ -563,9 +563,13 @@ function pickCountry(i) {
       const town = WORLD.towns[t];
       return esc(town.name) + " <span class='muted'>" + amount(town.people) + "</span>";
     }).join(", ");
-    return "<tr><td>" + esc(WORLD.towns[state.hub].name) + "</td><td>" + towns + "</td></tr>";
+    // Income a head, weighed by who lives where — as the countries above are counted.
+    let people = 0, earned = 0;
+    state.towns.forEach(function (t) { people += WORLD.towns[t].people; earned += WORLD.towns[t].people * WORLD.towns[t].income; });
+    return "<tr><td>" + esc(WORLD.towns[state.hub].name) + "</td><td class='n'>" + amount(people) + "</td><td class='n'>" +
+      (earned / Math.max(1, people)).toFixed(1) + "</td><td>" + towns + "</td></tr>";
   }).join("");
-  box.innerHTML = "<h2>The states of " + esc(c.name) + "</h2><div class='scroll'><table><tr><th>hub</th><th>towns drawn to it</th></tr>" + states + "</table></div>";
+  box.innerHTML = "<h2>The states of " + esc(c.name) + "</h2><div class='scroll'><table><tr><th>hub</th><th class='n'>people</th><th class='n'>income</th><th>towns drawn to it</th></tr>" + states + "</table></div>";
 }
 drawCountries();
 

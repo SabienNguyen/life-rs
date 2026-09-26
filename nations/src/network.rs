@@ -1284,7 +1284,7 @@ fn mend(nations: &mut Nations, at: usize) {
     let Some(key) = network.keys_of(town).find(|k| Address::of(&k.public()) == address).cloned() else {
         return;
     };
-    let amount = excess.min((power as u128).saturating_sub(min_bond as u128)) * COIN;
+    let amount = excess.min((power as u128).saturating_sub(min_bond)) * COIN;
     let network = &mut nations.networks[at];
     let min_fee = network.chain.params().min_fee;
     if amount == 0 || network.chain.pending_balance(&address, Asset::Coin) < min_fee {
