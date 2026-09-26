@@ -5595,9 +5595,9 @@ simulated statistically. This is that tier, for the first time, in three crates:
 
 `--nations <years>` tells a run; `--html` turns it into a page — the world's history charted,
 the towns on the planet's land with the latest block's payments drawn between their houses,
-and every chain's accounts, validators and recent blocks down to their hashes; `--json` is the
-data; and `nations/examples/who_builds_a_ledger.rs` is the instrument every number below came
-from.
+every chain's accounts, validators and recent blocks down to their hashes, and a button that
+checks the latest block in the browser itself (§49.5); `--json` is the data; and
+`nations/examples/who_builds_a_ledger.rs` is the instrument every number below came from.
 
 ### 49.1 Four levels, none of them drawn
 
@@ -5765,6 +5765,12 @@ The standard is design principle five's: the mechanism is real and the resolutio
 - Anybody holding only the genesis can replay every block, recheck every signature and recompute
   every root, and arrive at the same ledger to the byte. `--nations` does this before it says
   anything about a chain.
+- Anybody holding only a block's header can check that block: the header hashes to the block's
+  name; its transactions hash up to the root it commits to and each is signed by the key it
+  names; the validators and stake it commits to are the ones whose signatures make up more than
+  two thirds; and any account's balance is proved into its state root by a path of hashes. The
+  page does all of this in the browser, with the browser's own SHA-256 and Ed25519, and has a
+  button that changes one byte of one account to show the proof failing.
 
 **Stake, not work**, and the reason is a simulation's. Proof of work's security is the real cost
 of the hashing, so a simulated world whose miners grow a thousandfold must either hash a thousand
