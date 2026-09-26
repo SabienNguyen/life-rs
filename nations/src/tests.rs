@@ -414,6 +414,60 @@ fn whoever_forks_the_worlds_chain_is_named_and_burned() {
     assert_eq!(left.ledger.broken_law(), None);
 }
 
+/// The cap keeps any one country from finalising a block alone; it does not keep one from
+/// stopping the chain. A third of the stake away leaves a height short of the two thirds, so
+/// every country — and every house — holding that much could stop the chain by staying away, and
+/// nobody holding less could. It would wait, not split: once they are back it goes on, with the
+/// block the others had already signed.
+#[test]
+fn a_third_of_the_stake_staying_away_stops_the_chain_and_less_does_not() {
+    use chain::Address;
+    use std::collections::BTreeMap;
+
+    let world = chained();
+    let network = &world.networks[0];
+    let signers = network::signers(world, 0);
+    let total: u64 = signers.iter().map(|(_, _, power)| power).sum();
+    let keys: BTreeMap<Address, chain::SigningKey> = signers
+        .iter()
+        .map(|(_, key, _)| (Address::of(&key.public()), key.clone()))
+        .collect();
+    let time = network.chain.tip().header.time + 30 * 86_400;
+    let country_of = |address: &Address| network.town_of(address).map(|t| world.towns[t].country);
+    let mut stoppers = 0;
+    for country in 0..world.countries.len() {
+        let theirs: u64 = signers
+            .iter()
+            .filter(|(town, _, _)| world.towns[*town].country == country)
+            .map(|(_, _, power)| power)
+            .sum();
+        let mut chain = network.chain.clone();
+        let away = |address: &Address, _| country_of(address) != Some(country);
+        let outcome = chain.step(time, &keys, &away, 64);
+        assert_eq!(
+            outcome.is_none(),
+            3 * theirs >= total,
+            "{} holds {theirs} of {total}",
+            world.countries[country].name
+        );
+        if outcome.is_none() {
+            stoppers += 1;
+            let before = chain.tip().header.height;
+            chain.step(time + 1, &keys, &|_, _| true, 64).expect("back, and it goes on");
+            assert_eq!(chain.height(), before + 1);
+            assert_eq!(chain.tip().header.time, time, "with the block the others had signed");
+        }
+    }
+    let (_, largest) = network::largest_country_share(world, 0).expect("validators");
+    assert!(largest > 1.0 / 3.0 && stoppers >= 1, "the largest country can stop it");
+    for (town, key, power) in &signers {
+        let mut chain = network.chain.clone();
+        let gone = Address::of(&key.public());
+        let outcome = chain.step(time, &keys, &|address, _| *address != gone, 64);
+        assert_eq!(outcome.is_none(), 3 * power >= total, "{}'s house", world.towns[*town].name);
+    }
+}
+
 /// The cap moves stake from the country over it to the others in proportion to what they hold,
 /// and leaves a world where nobody is over it alone.
 #[test]

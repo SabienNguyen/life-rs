@@ -824,6 +824,38 @@ fn a_balance_can_be_shown_with_nothing_but_a_header() {
     assert!(!inflated.holds_under(&root), "a balance claimed larger does not prove");
 }
 
+/// And a payment can be shown the same way, to somebody who has followed the headers and holds
+/// nothing else: the transaction and a handful of hashes up to the root its block's header
+/// commits to. The same payment for one coin more, the right one at another place in the block,
+/// or against another block's header, proves nothing.
+#[test]
+fn a_payment_can_be_shown_with_nothing_but_a_header() {
+    let mut world = found_with(&[25, 25, 25, 25]);
+    for amount in 1..=5 {
+        world.pay(0, world.address(1), Asset::Coin, amount * COIN).unwrap();
+    }
+    world.everybody();
+    world.everybody();
+    let headers = world.chain.light_blocks();
+    assert_eq!(follow(&world.chain.genesis, &headers), Ok(2));
+    let paid = world.chain.blocks[1].txs[2].clone();
+    let receipt = world.chain.receipt(&paid.id()).expect("the chain carried it");
+    assert_eq!((receipt.height, receipt.index, receipt.size), (1, 2, 5));
+    assert!(receipt.path.len() >= 2, "a handful of hashes, not the block");
+    assert!(receipt.holds_under(&headers[1].header));
+
+    let mut more = receipt.clone();
+    if let Action::Pay { amount, .. } = &mut more.tx.action {
+        *amount += COIN;
+    }
+    assert!(!more.holds_under(&headers[1].header), "a payment claimed larger does not prove");
+    let mut moved = receipt.clone();
+    moved.index = 3;
+    assert!(!moved.holds_under(&headers[1].header));
+    assert!(!receipt.holds_under(&headers[2].header), "nor under another block's header");
+    assert_eq!(world.chain.receipt(&Digest::of(b"never sent")), None);
+}
+
 #[test]
 fn unbonded_stake_waits_before_it_can_be_spent() {
     let mut world = found_with(&[25, 25, 25, 25]);

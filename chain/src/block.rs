@@ -135,4 +135,50 @@ impl Block {
         let leaves: Vec<Digest> = txs.iter().map(|t| crate::merkle::leaf(&t.id().0)).collect();
         crate::merkle::root(&leaves)
     }
+
+    /// A receipt for the transaction at `index`: it, and the path from it to the root the
+    /// header commits to.
+    pub fn receipt(&self, index: usize) -> Option<Receipt> {
+        let tx = self.txs.get(index)?.clone();
+        let leaves: Vec<Digest> = self.txs.iter().map(|t| crate::merkle::leaf(&t.id().0)).collect();
+        Some(Receipt {
+            tx,
+            height: self.header.height,
+            index,
+            size: self.txs.len(),
+            path: crate::merkle::proof(&leaves, index),
+        })
+    }
+}
+
+/// That a transaction was carried: the transaction, where it sits in its block, and the path from
+/// it to the root the block's header commits to. Checked against the header alone — which is what
+/// a light client holds, having checked that more than two thirds of the stake made it final — it
+/// proves a payment to somebody who keeps no copy of the chain. A block carries nothing that does
+/// not apply, so carried is done.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Receipt {
+    pub tx: Transaction,
+    pub height: u64,
+    pub index: usize,
+    pub size: usize,
+    pub path: Vec<Digest>,
+}
+
+impl Receipt {
+    /// Whether this is a receipt for a transaction in the block this header heads: signed by the
+    /// key it names, at its place among as many transactions as the header says the block holds.
+    pub fn holds_under(&self, header: &Header) -> bool {
+        header.height == self.height
+            && header.tx_count as usize == self.size
+            && self.tx.chain == header.chain
+            && self.tx.signature_holds()
+            && crate::merkle::verify(
+                &header.txs,
+                &crate::merkle::leaf(&self.tx.id().0),
+                self.index,
+                self.size,
+                &self.path,
+            )
+    }
 }

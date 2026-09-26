@@ -10,7 +10,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::block::{Block, Header};
+use crate::block::{Block, Header, Receipt};
 use crate::codec::{Malformed, Reader, Writer};
 use crate::consensus::{Commit, NoQuorum, ValidatorSet, Vote};
 use crate::light::LightBlock;
@@ -520,6 +520,12 @@ impl Chain {
             .iter()
             .find(|b| b.txs.iter().any(|t| t.id() == *id))
             .map(|b| b.header.height)
+    }
+
+    /// A receipt for a transaction the chain has carried (`block::Receipt`).
+    pub fn receipt(&self, id: &Digest) -> Option<Receipt> {
+        let block = &self.blocks[self.find(id)? as usize];
+        block.receipt(block.txs.iter().position(|t| t.id() == *id)?)
     }
 }
 

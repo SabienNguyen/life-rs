@@ -543,11 +543,36 @@ fn ledger(world: &Nations, at: usize, network: &Network, checked: Option<&Checke
         network.refused
     ));
     if let Some((country, share)) = nations::network::largest_country_share(world, at) {
+        // What the cap does not stop: a third of the stake away leaves a height short of the
+        // two thirds, so whoever holds that much can stop the chain, if not finalise anything.
+        let members = &chain.rotation.members;
+        let total: u128 = members.iter().map(|v| v.power as u128).sum();
+        let of = |country: usize| -> u128 {
+            members
+                .iter()
+                .filter(|v| network.town_of(&v.address).is_some_and(|t| world.towns[t].country == country))
+                .map(|v| v.power as u128)
+                .sum()
+        };
+        let stops = if 3 * of(country) >= total {
+            ", but a third is enough to stop one: were its houses all to stay away, the chain would wait for them"
+        } else {
+            ", and short of the third it would take to stop one"
+        };
         out.push(format!(
-            "  the most stake any one country's houses hold is {}'s, {} — short of the two thirds a block needs, so every block is signed abroad too",
+            "  the most stake any one country's houses hold is {}'s, {} — short of the two thirds a block needs, so every block is signed abroad too{stops}",
             world.countries[country].name,
             percent(share)
         ));
+        if let Some(biggest) = members.iter().max_by_key(|v| (v.power, std::cmp::Reverse(v.address)))
+            && 3 * biggest.power as u128 >= total
+        {
+            out.push(format!(
+                "  one house, {}'s, holds {} of the stake by itself — enough to stop the chain alone by staying away",
+                holder(world, network, &biggest.address),
+                percent(biggest.power as f64 / total.max(1) as f64)
+            ));
+        }
     }
     let reserve = network.token.as_ref().map(|t| world.currencies[t.currency].symbol.clone());
     out.push(format!(

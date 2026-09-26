@@ -68,7 +68,7 @@ pub mod state;
 pub mod sync;
 pub mod tx;
 
-pub use block::{Block, Header};
+pub use block::{Block, Header, Receipt};
 pub use consensus::{Commit, ValidatorSet, Vote};
 pub use ed25519::{PublicKey, Signature, SigningKey};
 pub use light::{Fork, LightBlock, follow, follow_from, fork};

@@ -5825,7 +5825,10 @@ The standard is design principle five's: the mechanism is real and the resolutio
 - Anybody holding only a block's header can check that block: the header hashes to the block's
   name; its transactions hash up to the root it commits to and each is signed by the key it
   names; the validators and stake it commits to are the ones whose signatures make up more than
-  two thirds; and any account's balance is proved into its state root by a path of hashes. The
+  two thirds; any account's balance is proved into its state root by a path of hashes; and any
+  payment into its transaction root the same way — a receipt, the transaction and a handful of
+  hashes, which proves it was carried to somebody who has followed the headers and keeps nothing
+  else, since a block carries nothing that does not apply (`Chain::receipt`). The
   page does all of this in the browser, with the browser's own SHA-256 and Ed25519, and has a
   button that changes one byte of one account to show the proof failing — and then hashes the
   whole of the books, every account, token and the totals, up to that same root, which is what
@@ -5848,15 +5851,15 @@ every node lives in one process and hears every message at once, so a validator 
 answering this round or it is not. That is where a partition would go.
 
 The primitives are checked against FIPS 180-4's and RFC 8032's vectors and against eight more
-signatures produced by OpenSSL, and the chain's forty-nine tests are claims: nothing is spent
+signatures produced by OpenSSL, and the chain's fifty tests are claims: nothing is spent
 twice; a swap moves both legs or neither; a changed amount fails the transaction root, patched
 to match fails the signature, and patched again fails the commit; the chain keeps going with a
 quarter of the stake absent and stops with half; a block holding a bad transaction is never
 signed; a block somebody signed is the block its height commits; a fork made across two rounds
 names the half of the stake that made it, and either side's chain burns them for it; a node that
 joins late from the headers and somebody's books arrives at the chain's ledger to the byte, and
-books a coin out or a block early are refused; a balance can be proved to somebody holding only
-a header; and whatever anybody sends,
+books a coin out or a block early are refused; a balance, and a payment, can be proved to
+somebody holding only a header; and whatever anybody sends,
 in whatever order — sixty blocks of transactions drawn at random, half of them sensible and half
 not — the conservation laws hold after every block and the chain replays to what it holds.
 
@@ -6174,6 +6177,20 @@ the mechanism was the wrong one.
   chain — not the fees a seat earns, nor wanting a chain that survives more faults than it does —
   so over the centuries the sets thin, to six or eight of the fourteen to twenty-one a chain may
   once have had (§49.6.2).
+- **Whoever holds a third can stop it.** The cap keeps any one country from finalising a block
+  alone, not from stopping the chain: with a third of the stake away every height falls short of
+  two thirds, and the chain waits — it never splits — until enough are back. A test stops 0x11's
+  chain by each country and each house in turn, and it stops exactly when what is away is a
+  third or more, and goes on with the block the others had signed once they are back. In all 23
+  worlds of the sweep at year 800 the largest country holds more than a third — 40 to 60 per
+  cent, as in a world of two countries one must — and in 21 two countries each do, so in every
+  one a single country's houses staying away would stop its chain. In five a single house could:
+  0x27's holds 60 per cent, all of its country's, and 0xb's 54. None has: a validator is away
+  only when its town starves, or for a round by chance, and the report and the page say who
+  could. A cap on one house's share, as
+  there is on one country's, would be the next rule, at what that one costs — stake moved to
+  houses that check more slowly — and where the two could not both hold, the country's would
+  have to win.
 - **One chain per world.** Nothing competes with the first, and there are no bridges.
 - **Trade balances.** Bilateral trade is balanced by construction — no capital flows, no
   current-account deficits — and the lumpy months only move payments within a year.

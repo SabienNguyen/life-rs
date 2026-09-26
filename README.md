@@ -216,7 +216,7 @@ tokens against attested reserves
 </td></tr>
 </table>
 
-**845 tests.** Most of them are about a claim rather than a function.
+**847 tests.** Most of them are about a claim rather than a function.
 
 ---
 
@@ -480,15 +480,17 @@ against the RFC vectors and OpenSSL; Byzantine-fault-tolerant proof of stake, wi
 final once two thirds of the stake has signed it; and a whole history that replays from
 genesis, every signature and root rechecked, before the report says a word about it — and that
 can be followed by its headers alone, as a light client follows a real chain, or joined late
-from anybody's copy of its books, believed only as far as they hash to a header's state root. A validator
-caught signing two blocks at one height, in one round or two, loses a twentieth of its stake and
-that key's seat for good, comes back if at all under a key it keeps for staking, and the others
-bond what keeps every country within its three fifths of the stake. Two final blocks at one
-height would take more than a third of the stake signing both, and a light client shown both
-names every one of them. With `--html` the page shows all of it, checks the latest
-block in your own browser with the browser's own SHA-256 and Ed25519, and follows the last
-forty-eight by their headers alone, as a light client would. A world of one country never
-builds one — it has a house everybody can pay through.
+from anybody's copy of its books, believed only as far as they hash to a header's state root. A
+balance or a payment can be proved to somebody holding nothing but a header. A validator caught
+signing two blocks at one height, in one round or two, loses a twentieth of its stake and that
+key's seat for good, comes back if at all under a key it keeps for staking, and the others bond
+what keeps every country within its three fifths of the stake: short of the two thirds that
+would finalise a block, though not of the third that could stop one, and the report says who
+could. Two final blocks at one height would take more than a third of the stake signing both,
+and a light client shown both names every one of them. With `--html` the page shows all of it,
+checks the latest block and the whole of its books in your own browser with the browser's own
+SHA-256 and Ed25519, and follows the last forty-eight by their headers alone, as a light client
+would. A world of one country never builds one — it has a house everybody can pay through.
 
 A chain is also a file. `--export-chain wickport.chain` writes a world's chain down — its
 genesis and every block, 22 MB for 0x11's six centuries — and `--verify-chain wickport.chain`

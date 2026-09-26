@@ -597,6 +597,15 @@ drawCountries();
     const change = without / with_ - 1;
     return pct(Math.abs(change)) + (change <= 0 ? " less" : " more");
   }
+  // A house with a third of the stake can stop the chain by itself, by staying away.
+  function alone(c) {
+    const total = c.validators.reduce(function (n, v) { return n + v.power; }, 0);
+    const biggest = c.validators.reduce(function (a, v) { return !a || v.power > a.power ? v : a; }, null);
+    if (!biggest || 3 * biggest.power < total) return "";
+    const who = biggest.town === null ? "One house" : esc(townName(biggest.town)) + "'s house";
+    return "<p class='muted'>" + who + " holds " + pct(biggest.power / total) +
+      " of the stake by itself — enough to stop the chain alone by staying away, though not to finalise a block.</p>";
+  }
   box.innerHTML = WORLD.chains.map(function (c, at) {
     const founders = c.founders.map(townName).join(", ");
     const v = c.verified;
@@ -637,8 +646,11 @@ drawCountries();
         pct(lastReading[4]) + " with it, and a head would live on " + livesOn() +
         " <span class='muted'>— the same world, run again from its seed with no chain allowed; living counts what wares are worth for coming from more than one country</span></div>" : "") +
       (c.largestCountry ? "<div>most stake in one country</div><div>" + esc(WORLD.countries[c.largestCountry.country].name) + ", " + pct(c.largestCountry.share) +
-        " <span class='muted'>— a block needs two thirds, so it is always signed abroad too</span></div>" : "") + "</div>" +
+        " <span class='muted'>— a block needs two thirds, so it is always signed abroad too" +
+        (3 * c.largestCountry.share >= 1 - 1e-9 ? "; but a third is enough to stop one, so were its houses all to stay away the chain would wait for them" : "") +
+        "</span></div>" : "") + "</div>" +
       "<h2 style='margin-top:14px'>Validators</h2><div class='scroll'><table><tr><th>house</th><th>country</th><th class='n'>stake</th><th>address</th></tr>" + validators + "</table></div>" +
+      alone(c) +
       "</div><div>" + token +
       "<h2 style='margin-top:14px'>Accounts</h2><div class='scroll'><table><tr><th>house</th><th class='n'>coin</th><th class='n'>staked</th><th class='n'>tokens</th></tr>" + accounts + "</table></div>" +
       "</div></div>" +
