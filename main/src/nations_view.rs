@@ -261,10 +261,16 @@ pub fn describe(world: &Nations, event: &Event, first_money: bool) -> Option<Str
                 None => format!("{symbol} is issued on the {}", n.name),
             }
         }
-        Event::Joined { network, town, .. } => format!(
-            "{} takes a seat among the {}'s validators",
+        Event::Joined {
+            network,
+            town,
+            new_key,
+            ..
+        } => format!(
+            "{} takes a seat among the {}'s validators{}",
             town_name(world, *town),
-            world.networks[*network].name
+            world.networks[*network].name,
+            if *new_key { " again, under a key it keeps for staking" } else { "" }
         ),
         Event::Left { network, town, .. } => format!(
             "{} leaves the {}'s validators and takes its stake back, its own payments on the chain having dwindled",
@@ -279,7 +285,7 @@ pub fn describe(world: &Nations, event: &Event, first_money: bool) -> Option<Str
             burned,
             ..
         } => format!(
-            "{}'s house signs block {} of the {} twice — its second clerk, not having seen the block, signs for none — and {} shows the chain both: {} coin of its stake is burned and it never validates again",
+            "{}'s house signs block {} of the {} twice — its second clerk, not having seen the block, signs for none — and {} shows the chain both: {} coin of its stake is burned and that key never validates again",
             town_name(world, *town),
             height,
             world.networks[*network].name,
@@ -565,7 +571,7 @@ fn ledger(world: &Nations, at: usize, network: &Network, checked: Option<&Checke
         .validators()
         .into_iter()
         .filter_map(|t| {
-            let key = network.address_of(t)?;
+            let key = network.staking_address(t)?;
             let power = chain
                 .rotation
                 .members
@@ -1002,8 +1008,19 @@ fn network_json(world: &Nations, at: usize, network: &Network, checked: Option<&
             quoted(&v.address.to_string())
         )
     }));
-    let accounts = list(network.houses().filter_map(|t| {
-        let address = network.address_of(t)?;
+    // Every house's own account, and after it any key it has staked with since its own was
+    // jailed.
+    let held_by: Vec<(usize, Address, bool)> = network
+        .houses()
+        .flat_map(|t| {
+            network
+                .addresses_of(t)
+                .into_iter()
+                .enumerate()
+                .map(move |(i, a)| (t, a, i > 0))
+        })
+        .collect();
+    let accounts = list(held_by.into_iter().map(|(t, address, staking)| {
         let held = chain.balance(&address, Asset::Coin);
         let tokens = network
             .token
@@ -1013,13 +1030,13 @@ fn network_json(world: &Nations, at: usize, network: &Network, checked: Option<&
         let account = chain.ledger.account(&address);
         let bonded = account.map(|a| a.bonded).unwrap_or(0);
         let jailed = account.is_some_and(|a| a.jailed);
-        Some(format!(
-            "{{\"town\":{t},\"address\":{},\"coin\":{},\"staked\":{},\"tokens\":{},\"jailed\":{jailed}}}",
+        format!(
+            "{{\"town\":{t},\"address\":{},\"coin\":{},\"staked\":{},\"tokens\":{},\"jailed\":{jailed},\"staking\":{staking}}}",
             quoted(&address.to_string()),
             quoted(&coin(held)),
             quoted(&coin(bonded)),
             quoted(&grouped(tokens / TOKEN_UNIT))
-        ))
+        )
     }));
     let token = match network.token.as_ref() {
         Some(t) => match chain.token(t.id) {

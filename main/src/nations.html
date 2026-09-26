@@ -603,7 +603,8 @@ drawCountries();
     }).join("");
     const accounts = c.accounts.map(function (a) {
       const staked = a.jailed ? "<span class='bad' title='caught signing a block twice; it never validates again'>jailed</span>" + (a.staked === "0" ? "" : " · " + a.staked) : a.staked;
-      return "<tr><td>" + esc(townName(a.town)) + "</td><td class='n'>" + a.coin + "</td><td class='n'>" + staked + "</td><td class='n'>" + a.tokens + "</td></tr>";
+      const who = esc(townName(a.town)) + (a.staking ? " <span class='muted' title='the key it validates with since its own was jailed'>staking key</span>" : "");
+      return "<tr><td>" + who + "</td><td class='n'>" + a.coin + "</td><td class='n'>" + staked + "</td><td class='n'>" + a.tokens + "</td></tr>";
     }).join("");
     return "<div style='margin-bottom:20px'>" +
       "<h3>The " + esc(c.name) + " <span class='pill'>height " + c.height + "</span></h3>" +

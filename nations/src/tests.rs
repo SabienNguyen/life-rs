@@ -417,8 +417,9 @@ fn a_chain_widens_the_markets_it_touches() {
 /// Two clerks at one key, once, in the worst place: the largest validator of the smaller
 /// country, whose jailing leaves the larger one holding more than two thirds of the stake. The
 /// house that proposes next shows both signatures; the chain burns a twentieth of the stake and
-/// jails the house for good; the house takes back the rest; and the others bond what brings the
-/// larger country back to its three fifths, with nothing refused and nothing stalled.
+/// jails the key for good; the house takes back the rest; and its country bonds what brings the
+/// larger one back to its three fifths — the house itself, under a key it keeps for staking —
+/// with nothing refused and nothing stalled.
 #[test]
 fn a_house_that_signs_twice_is_caught_and_the_chain_mended() {
     let mut world = Nations::found(WorldSeed::from_u128(0x11));
@@ -458,7 +459,11 @@ fn a_house_that_signs_twice_is_caught_and_the_chain_mended() {
     let account = network.chain.ledger.account(&address).expect("an account");
     assert!(account.jailed);
     assert_eq!(account.bonded, 0, "it took back what was left");
-    assert!(!network.validators().contains(&offender));
+    assert!(!network.chain.rotation.members.iter().any(|v| v.address == address));
+    // Its country's best-placed house to mend the stake was itself, under a key kept for staking.
+    assert!(network.validators().contains(&offender));
+    assert_ne!(network.staking_address(offender), Some(address));
+    assert_eq!(network.address_of(offender), Some(address), "and its own account is its own");
     assert!(network.validators().len() >= payments::FEWEST_FOUNDERS);
     let (country, share) = network::largest_country_share(&world, 0).expect("validators");
     assert!(

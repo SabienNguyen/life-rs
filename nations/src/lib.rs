@@ -237,7 +237,13 @@ pub enum Event {
     /// A stable token was registered on one.
     Issued { year: u64, network: usize, symbol: String },
     /// A house started validating.
-    Joined { year: u64, network: usize, town: usize },
+    Joined {
+        year: u64,
+        network: usize,
+        town: usize,
+        /// Under a key kept for staking, its own having been jailed.
+        new_key: bool,
+    },
     /// A house stopped: its own payments on the chain had dwindled for years, and it unbonded its
     /// stake.
     Left { year: u64, network: usize, town: usize },

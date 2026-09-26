@@ -138,6 +138,11 @@ pub struct Network {
     pub chain: Chain,
     /// Every house with an account, by town, with the key it signs with.
     keys: BTreeMap<usize, SigningKey>,
+    /// The keys a house stakes and validates with once the chain has jailed its own, newest
+    /// last: a house caught signing twice keeps its account — its coin, its tokens, whatever it
+    /// issues or vouches for — and if it validates again, does so with a key kept for nothing
+    /// else, as an operator on a real chain comes back under a new consensus key.
+    stakers: BTreeMap<usize, Vec<SigningKey>>,
     pub founders: Vec<usize>,
     pub token: Option<Token>,
     /// Share of each pair of countries' payments settled here, by country keys.
@@ -176,30 +181,65 @@ impl Network {
         self.keys.keys().copied()
     }
 
+    /// Every key a house has signed with: its own, then any it has staked with.
+    fn keys_of(&self, town: usize) -> impl Iterator<Item = &SigningKey> + '_ {
+        self.keys
+            .get(&town)
+            .into_iter()
+            .chain(self.stakers.get(&town).into_iter().flatten())
+    }
+
+    /// The key a house stakes and validates with: its own, until the chain jails it, and after
+    /// that the newest it keeps for staking.
+    fn staking_key(&self, town: usize) -> Option<&SigningKey> {
+        self.stakers
+            .get(&town)
+            .and_then(|keys| keys.last())
+            .or_else(|| self.keys.get(&town))
+    }
+
+    /// Every address a house holds: its own first, then any it has staked with, oldest first.
+    pub fn addresses_of(&self, town: usize) -> Vec<Address> {
+        self.keys_of(town).map(|k| Address::of(&k.public())).collect()
+    }
+
+    /// The address a house's stake is bonded from.
+    pub fn staking_address(&self, town: usize) -> Option<Address> {
+        self.staking_key(town).map(|k| Address::of(&k.public()))
+    }
+
     /// The towns whose houses validate now.
     pub fn validators(&self) -> Vec<usize> {
         self.keys
-            .iter()
-            .filter(|(_, k)| self.chain.rotation.find(&k.public()).is_some())
-            .map(|(t, _)| *t)
+            .keys()
+            .copied()
+            .filter(|t| self.keys_of(*t).any(|k| self.chain.rotation.find(&k.public()).is_some()))
             .collect()
     }
 
-    /// The town whose house holds an address, if any does.
+    /// The town whose house holds an address, if any does — by its own key or one it stakes with.
     pub fn town_of(&self, address: &Address) -> Option<usize> {
         self.keys
-            .iter()
-            .find(|(_, k)| Address::of(&k.public()) == *address)
-            .map(|(t, _)| *t)
+            .keys()
+            .copied()
+            .find(|t| self.keys_of(*t).any(|k| Address::of(&k.public()) == *address))
     }
 }
 
 /// The key a town's house signs with on a chain: derived from the world's seed, so a world
 /// founded twice signs the same history twice.
 fn key_for(nations: &Nations, network: usize, town: usize) -> SigningKey {
-    let mut rng = nations
-        .seed
-        .stream(Domain::Commerce, 0x04e1_0000 + network as u64, town as u64);
+    key_of_generation(nations, network, town, 0)
+}
+
+/// The same for the keys a house stakes with after its own is jailed, the first of them
+/// generation one.
+fn key_of_generation(nations: &Nations, network: usize, town: usize, generation: u64) -> SigningKey {
+    let mut rng = nations.seed.stream(
+        Domain::Commerce,
+        0x04e1_0000 + network as u64,
+        town as u64 | generation << 32,
+    );
     let mut seed = [0u8; 32];
     for chunk in seed.chunks_exact_mut(8) {
         chunk.copy_from_slice(&rng.next_u64().to_le_bytes());
@@ -444,6 +484,7 @@ fn consider_founding(nations: &mut Nations) {
         founded: nations.year,
         chain,
         keys: founders.iter().copied().zip(keys).collect(),
+        stakers: BTreeMap::new(),
         founders,
         token: None,
         shares: BTreeMap::new(),
@@ -548,7 +589,7 @@ fn keep(nations: &mut Nations, at: usize) {
     }
 
     issue_token(nations, at, reserve);
-    take_back_jailed(nations, at);
+    tend_stakes(nations, at);
     leave_idle(nations, at);
     take_seats(nations, at);
 
@@ -563,9 +604,11 @@ fn keep(nations: &mut Nations, at: usize) {
         fees += paid;
         let time = (nations.year * BLOCKS_A_YEAR + month + 1) * MONTH;
         let answering = who_answers(nations, at, month);
-        let keys: BTreeMap<Address, SigningKey> = nations.networks[at]
+        let network = &nations.networks[at];
+        let keys: BTreeMap<Address, SigningKey> = network
             .keys
             .values()
+            .chain(network.stakers.values().flatten())
             .map(|k| (Address::of(&k.public()), k.clone()))
             .collect();
         let outcome = nations.networks[at].chain.step(
@@ -628,7 +671,13 @@ fn who_answers(nations: &Nations, at: usize, month: u64) -> BTreeMap<(Address, u
         nations.year * BLOCKS_A_YEAR + month,
     );
     let mut answers = BTreeMap::new();
-    for (town, key) in &network.keys {
+    // Houses' own keys first and staking keys after, so a world with none of the second draws
+    // exactly what it drew before there were any.
+    let staking = network
+        .stakers
+        .iter()
+        .filter_map(|(town, keys)| Some((town, keys.last()?)));
+    for (town, key) in network.keys.iter().chain(staking) {
         let address = Address::of(&key.public());
         let fed = nations.towns[*town].hunger < TOO_HUNGRY;
         for round in 0..MOST_ROUNDS {
@@ -640,7 +689,11 @@ fn who_answers(nations: &Nations, at: usize, month: u64) -> BTreeMap<(Address, u
 
 /// A house that signs a transaction: its key, and the nonce it is up to.
 fn sign(network: &Network, town: usize, fee: u128, action: Action) -> Option<Transaction> {
-    let key = network.keys.get(&town)?;
+    sign_with(network, network.keys.get(&town)?, fee, action)
+}
+
+/// The same with a particular key, such as the one a house stakes with.
+fn sign_with(network: &Network, key: &SigningKey, fee: u128, action: Action) -> Option<Transaction> {
     let nonce = network.chain.next_nonce(&Address::of(&key.public()));
     Some(Transaction::signed(key, network.chain.id, nonce, fee, action))
 }
@@ -876,7 +929,7 @@ fn take_seats(nations: &mut Nations, at: usize) {
         if validators.len() >= most {
             return;
         }
-        if validators.contains(&town) || jailed(&nations.networks[at], town) {
+        if validators.contains(&town) {
             continue;
         }
         let share = standing.get(&town).copied().unwrap_or(0.0);
@@ -891,13 +944,21 @@ fn take_seats(nations: &mut Nations, at: usize) {
         }
         // A seat nobody would sell it the coin for is a seat it does not take this year.
         if bond(nations, at, town, wanted.min(room) as u128 * COIN, false) {
-            nations.history.push(Event::Joined {
-                year: nations.year,
-                network: at,
-                town,
-            });
+            record_seat(nations, at, town);
         }
     }
+}
+
+/// Write down that a house took a seat — under a key kept for staking, if its own was jailed.
+fn record_seat(nations: &mut Nations, at: usize, town: usize) {
+    let network = &nations.networks[at];
+    let new_key = network.staking_address(town) != network.address_of(town);
+    nations.history.push(Event::Joined {
+        year: nations.year,
+        network: at,
+        town,
+        new_key,
+    });
 }
 
 /// The fastest any of a chain's validators checks.
@@ -911,28 +972,37 @@ fn fast_enough(nations: &Nations, town: usize, best: f64) -> bool {
     nations.towns[town].technique[Sector::Reckoning as usize] >= payments::CAPABLE * best
 }
 
-/// Whether a house's account has been jailed, as things will stand once everything sent so far
-/// has gone through.
+/// Whether the key a house stakes with has been jailed, as things will stand once everything
+/// sent so far has gone through.
 fn jailed(network: &Network, town: usize) -> bool {
     network
-        .address_of(town)
+        .staking_address(town)
         .and_then(|a| network.chain.pending_account(&a))
         .is_some_and(|a| a.jailed)
 }
 
 /// A house buys stake from those who have it and bonds it; whether it bonded anything. With
-/// `partly`, it bonds as much as it could buy; without, all of `stake` or nothing.
+/// `partly`, it bonds as much as it could buy; without, all of `stake` or nothing. A house whose
+/// staking key the chain has jailed takes a new one first, and hands it the coin to bond.
 fn bond(nations: &mut Nations, at: usize, town: usize, stake: u128, partly: bool) -> bool {
+    if jailed(&nations.networks[at], town) {
+        let generation = nations.networks[at].stakers.get(&town).map_or(0, Vec::len) as u64 + 1;
+        let key = key_of_generation(nations, at, town, generation);
+        nations.networks[at].stakers.entry(town).or_default().push(key);
+    }
     fund(nations, at, town, stake + COIN);
     let network = &mut nations.networks[at];
     let min_fee = network.chain.params().min_fee;
-    let Some(address) = network.address_of(town) else {
+    let (Some(own), Some(key)) = (network.address_of(town), network.staking_key(town).cloned()) else {
         return false;
     };
-    let held = network.chain.pending_balance(&address, Asset::Coin);
+    let staking = Address::of(&key.public());
+    // Handing the stake to a staking key is one more transaction, and one more fee.
+    let fees = if staking == own { min_fee } else { 2 * min_fee };
+    let held = network.chain.pending_balance(&own, Asset::Coin);
     let stake = if partly {
-        stake.min(held.saturating_sub(min_fee + COIN)) / COIN * COIN
-    } else if held >= stake + min_fee {
+        stake.min(held.saturating_sub(fees + COIN)) / COIN * COIN
+    } else if held >= stake + fees {
         stake
     } else {
         0
@@ -940,7 +1010,19 @@ fn bond(nations: &mut Nations, at: usize, town: usize, stake: u128, partly: bool
     if stake == 0 {
         return false;
     }
-    let tx = sign(network, town, min_fee, Action::Bond { amount: stake });
+    if staking != own {
+        let handed = Action::Pay {
+            to: staking,
+            asset: Asset::Coin,
+            amount: stake + min_fee,
+        };
+        let tx = sign(network, town, min_fee, handed);
+        if !submit(network, tx) {
+            network.refused += 1;
+            return false;
+        }
+    }
+    let tx = sign_with(network, &key, min_fee, Action::Bond { amount: stake });
     if submit(network, tx) {
         true
     } else {
@@ -970,7 +1052,7 @@ fn signed_twice(nations: &Nations, at: usize, height: u64, month: u64) -> Vec<(u
         let Some(town) = network.town_of(&Address::of(&vote.validator)) else {
             continue;
         };
-        let Some(key) = network.keys.get(&town) else {
+        let Some(key) = network.keys_of(town).find(|k| k.public() == vote.validator) else {
             continue;
         };
         let stray = Vote::signed(key, network.chain.id, vote.height, vote.round, Digest::default());
@@ -1038,7 +1120,7 @@ fn accuse(nations: &mut Nations, at: usize, town: usize, first: Vote, second: Vo
 #[cfg(test)]
 pub(crate) fn sign_twice(nations: &mut Nations, at: usize, town: usize) {
     let network = &nations.networks[at];
-    let key = network.keys[&town].clone();
+    let key = network.staking_key(town).expect("a house has a key").clone();
     let vote = network
         .chain
         .blocks
@@ -1050,29 +1132,57 @@ pub(crate) fn sign_twice(nations: &mut Nations, at: usize, town: usize) {
     accuse(nations, at, town, vote, stray);
 }
 
-/// A house the chain has jailed will never validate again, so it takes back what is left of its
-/// stake, through the same twelve-block wait as any house leaving.
-fn take_back_jailed(nations: &mut Nations, at: usize) {
+/// A key a house can no longer validate with gives up what it holds. A jailed key takes back
+/// what is left of its stake, through the same twelve-block wait as any house leaving; and a key
+/// kept for staking hands its house whatever coin it has beyond the fees it may still need —
+/// its rewards, and its stake as that is released.
+fn tend_stakes(nations: &mut Nations, at: usize) {
     let network = &mut nations.networks[at];
     let min_fee = network.chain.params().min_fee;
-    let houses: Vec<usize> = network.houses().collect();
-    for town in houses {
-        let Some(address) = network.address_of(town) else {
+    let towns: Vec<usize> = network.houses().collect();
+    for town in towns {
+        let Some(own) = network.address_of(town) else {
             continue;
         };
-        let Some(account) = network.chain.pending_account(&address) else {
-            continue;
-        };
-        if !account.jailed || account.bonded == 0 {
-            continue;
-        }
-        let bonded = account.bonded;
-        if network.chain.pending_balance(&address, Asset::Coin) < min_fee {
-            continue;
-        }
-        let tx = sign(network, town, min_fee, Action::Unbond { amount: bonded });
-        if !submit(network, tx) {
-            network.refused += 1;
+        let current = network.staking_address(town);
+        let keys: Vec<SigningKey> = network.keys_of(town).cloned().collect();
+        for key in keys {
+            let address = Address::of(&key.public());
+            let Some(account) = network.chain.pending_account(&address).cloned() else {
+                continue;
+            };
+            if account.jailed && account.bonded > 0 && account.coin >= min_fee {
+                let unbond = Action::Unbond {
+                    amount: account.bonded,
+                };
+                let tx = sign_with(network, &key, min_fee, unbond);
+                if !submit(network, tx) {
+                    network.refused += 1;
+                }
+            }
+            if address == own {
+                continue;
+            }
+            let keep = if Some(address) == current && !account.jailed {
+                COIN + min_fee
+            } else {
+                min_fee
+            };
+            let spare = network
+                .chain
+                .pending_balance(&address, Asset::Coin)
+                .saturating_sub(keep + min_fee);
+            if spare > 0 {
+                let home = Action::Pay {
+                    to: own,
+                    asset: Asset::Coin,
+                    amount: spare,
+                };
+                let tx = sign_with(network, &key, min_fee, home);
+                if !submit(network, tx) {
+                    network.refused += 1;
+                }
+            }
         }
     }
 }
@@ -1101,11 +1211,7 @@ fn mend(nations: &mut Nations, at: usize) {
             }
             // Bonding what it could buy may still leave it short of a seat.
             if !seated && pending_towns(&nations.networks[at]).contains(&town) {
-                nations.history.push(Event::Joined {
-                    year: nations.year,
-                    network: at,
-                    town,
-                });
+                record_seat(nations, at, town);
             }
         } else if nations.networks[at].chain.pending_validators().len() < payments::FEWEST_FOUNDERS.min(most) {
             let room = |t: usize| {
@@ -1120,11 +1226,7 @@ fn mend(nations: &mut Nations, at: usize) {
             if !bond(nations, at, town, wanted.max(min_bond) * COIN, false) {
                 break;
             }
-            nations.history.push(Event::Joined {
-                year: nations.year,
-                network: at,
-                town,
-            });
+            record_seat(nations, at, town);
         } else {
             return;
         }
@@ -1184,8 +1286,9 @@ fn over_its_share(nations: &Nations, at: usize) -> Option<(usize, u64, u64)> {
     })
 }
 
-/// The house with the best standing that is not jailed and is `wanted` — one that will validate
-/// already only if `validating` allows it — preferring one that checks fast enough. Mending a
+/// The house with the best standing that is `wanted` — one that will validate already only if
+/// `validating` allows it — preferring one that checks fast enough. A house whose key was jailed
+/// counts like any other: it would bond with a new one (`bond`). Mending a
 /// chain is not taking a seat by choice: when the only houses that can keep a country from
 /// holding a chain alone check slower than the rest, a slower chain is the price of one nobody
 /// keeps, as it was at the founding, which waited for the slowest country.
@@ -1201,7 +1304,7 @@ fn best_placed(
     network
         .houses()
         .filter(|t| validating || !seated.contains(t))
-        .filter(|t| !jailed(network, *t) && wanted(*t))
+        .filter(|t| wanted(*t))
         .max_by(|a, b| {
             let key = |t: &usize| {
                 (
@@ -1226,7 +1329,7 @@ fn leave_idle(nations: &mut Nations, at: usize) {
         .collect();
     for town in idle {
         let network = &nations.networks[at];
-        let Some(address) = network.address_of(town) else {
+        let Some(address) = network.staking_address(town) else {
             continue;
         };
         let pending = network.chain.pending_validators();
@@ -1251,7 +1354,8 @@ fn leave_idle(nations: &mut Nations, at: usize) {
         if bonded == 0 || network.chain.pending_balance(&address, Asset::Coin) < min_fee {
             continue;
         }
-        let tx = sign(network, town, min_fee, Action::Unbond { amount: bonded });
+        let key = network.staking_key(town).cloned();
+        let tx = key.and_then(|k| sign_with(network, &k, min_fee, Action::Unbond { amount: bonded }));
         if submit(network, tx) {
             nations.history.push(Event::Left {
                 year: nations.year,
