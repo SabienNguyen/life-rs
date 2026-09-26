@@ -27,9 +27,9 @@ fn main() {
         .unwrap_or(700);
 
     println!(
-        "{:>9} {:>5} {:>4} {:>6} {:>5} {:>7} {:>13} {:>5} {:>6} {:>7} {:>7} {:>6} {:>7} {:>6}  replayed",
+        "{:>9} {:>5} {:>4} {:>6} {:>5} {:>7} {:>13} {:>5} {:>6} {:>6} {:>7} {:>7} {:>6} {:>7} {:>6}  replayed",
         "seed", "towns", "ctry", "money", "trap", "founded", "founders", "vals", "height",
-        "houses", "now", "chain", "refused", "stalls"
+        "stake", "houses", "now", "chain", "refused", "stalls"
     );
     for seed in seeds {
         let started = Instant::now();
@@ -62,13 +62,17 @@ fn main() {
             Some(network) => {
                 let countries: BTreeSet<usize> =
                     network.founders.iter().map(|t| world.towns[*t].country).collect();
+                // The most of the stake any one country's validators hold.
+                let stake = nations::network::largest_country_share(&world, 0)
+                    .map(|(_, share)| format!("{:.0}%", 100.0 * share))
+                    .unwrap_or_default();
                 let checking = Instant::now();
                 let verdict = match network.chain.verify() {
                     Ok(()) => format!("ok in {:.1}s", checking.elapsed().as_secs_f64()),
                     Err((height, why)) => format!("FAILED at {height}: {why:?}"),
                 };
                 println!(
-                    "{:>9} {:>5} {:>4} {:>6} {:>5} {:>7} {:>13} {:>5} {:>6} {:>7} {:>7} {:>5.0}% {:>7} {:>6}  {verdict} ({ran:.1}s to run)",
+                    "{:>9} {:>5} {:>4} {:>6} {:>5} {:>7} {:>13} {:>5} {:>6} {:>6} {:>7} {:>7} {:>5.0}% {:>7} {:>6}  {verdict} ({ran:.1}s to run)",
                     format!("{seed:#x}"),
                     world.towns.len(),
                     world.countries.len(),
@@ -78,6 +82,7 @@ fn main() {
                     format!("{} in {}", network.founders.len(), countries.len()),
                     network.validators().len(),
                     network.chain.height(),
+                    stake,
                     houses,
                     now,
                     100.0 * share,
@@ -86,12 +91,13 @@ fn main() {
                 );
             }
             None => println!(
-                "{:>9} {:>5} {:>4} {:>6} {:>5} {:>7} {:>13} {:>5} {:>6} {:>7} {:>7} {:>6} {:>7} {:>6}  no chain: {:?} ({ran:.1}s to run)",
+                "{:>9} {:>5} {:>4} {:>6} {:>5} {:>7} {:>13} {:>5} {:>6} {:>6} {:>7} {:>7} {:>6} {:>7} {:>6}  no chain: {:?} ({ran:.1}s to run)",
                 format!("{seed:#x}"),
                 world.towns.len(),
                 world.countries.len(),
                 money,
                 trap,
+                "—",
                 "—",
                 "—",
                 "—",

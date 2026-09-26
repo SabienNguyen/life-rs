@@ -5,14 +5,16 @@
 //! `commerce::payments` states — is there a keeper they all trust, are there enough of them,
 //! and would checking it cost less than their distrust does — and the first year the answers
 //! are no, yes and yes, the largest of them found a chain together: a genesis they all sign,
-//! with stake in proportion to their business abroad.
+//! with stake in proportion to their business abroad — except that no country's houses hold the
+//! two thirds that would let them finalise a block alone.
 //!
 //! After that, nothing about it is decided here that the chain does not also check. Once the
 //! world has a currency everybody invoices in, the house that issues it registers a stable
 //! token on the chain, with a house in another country vouching for its reserve. Twelve times a
 //! year a block is cut: the attestor states the reserve, the issuer mints what houses have paid
-//! it for, houses pay each other what their merchants owe abroad, and whatever a house holds
-//! beyond what it needs on hand it redeems. Every one of those is a signed transaction the chain
+//! it for, houses — every sizeable state's market house, for its own state's trade — pay each
+//! other what their merchants owe abroad, and whatever a house holds beyond what it needs on
+//! hand it redeems. Every one of those is a signed transaction the chain
 //! refuses if it does not add up, in a block the validators commit only if they can re-derive
 //! it. A validator whose town is starving is not at its post; one that simply has a bad day
 //! misses a round; and a chain that loses a third of its stake stops until they come back.
@@ -23,7 +25,7 @@
 
 use std::collections::BTreeMap;
 
-use chain::{Action, Address, Asset, COIN, Chain, Genesis, SigningKey, TOKEN_UNIT, Transaction};
+use chain::{Action, Address, Asset, COIN, Chain, Genesis, SigningKey, Swap, TOKEN_UNIT, Transaction};
 use commerce::payments::{self, Candidate};
 use commerce::production::Sector;
 use sim_core::Domain;
@@ -63,6 +65,12 @@ const FLOAT: f64 = 0.1;
 /// A country whose share of what a chain carries reaches this takes a seat among its
 /// validators, rather than leave its payments to be checked by others.
 const SEAT_AT: f64 = 0.05;
+
+/// The most of a chain's stake the houses of one country may hold: short of the two thirds that
+/// would let them finalise a block with nobody else signing. Nobody abroad joins a ledger one
+/// country could keep on its own, so the founders settle it between them — the largest country
+/// takes less stake than its business would give it, and every block needs somebody abroad.
+pub const ONE_COUNTRY_AT_MOST: f64 = 0.6;
 
 /// A state that makes this share of its country's product has its own market house on a chain,
 /// paying and being paid for its own trade abroad. A smaller one's trade goes through the
@@ -227,6 +235,66 @@ fn house_trust(nations: &Nations, trust: &[Vec<f64>], a: usize, b: usize) -> f64
     payments::trust(payments::trust_ceiling(true, nations.distance_km(a, b)), 1.0)
 }
 
+/// Founders' stakes, in coin, with no country's houses holding more than `ONE_COUNTRY_AT_MOST`
+/// of the whole: a country over it has its houses' stakes scaled down to it, and what it gives
+/// up goes to the others in proportion to what they hold, until none is over. `founders` is
+/// each founder's country and the stake its business would have given it.
+pub(crate) fn no_country_keeps_it(founders: &[(usize, f64)]) -> Vec<f64> {
+    let mut stakes: Vec<f64> = founders.iter().map(|(_, s)| s.max(0.0)).collect();
+    let total: f64 = stakes.iter().sum();
+    let countries: std::collections::BTreeSet<usize> = founders.iter().map(|(c, _)| *c).collect();
+    if total <= 0.0 || countries.len() < 2 {
+        return stakes;
+    }
+    let most = ONE_COUNTRY_AT_MOST * total;
+    let mut capped = std::collections::BTreeSet::new();
+    // Each pass caps at least one more country or finds none over, so it ends.
+    for _ in 0..countries.len() {
+        let held = |c: usize, stakes: &[f64]| -> f64 {
+            founders
+                .iter()
+                .zip(stakes)
+                .filter(|((k, _), _)| *k == c)
+                .map(|(_, s)| s)
+                .sum()
+        };
+        let over: Vec<usize> = countries
+            .iter()
+            .copied()
+            .filter(|c| held(*c, &stakes) > most * (1.0 + 1e-12))
+            .collect();
+        if over.is_empty() {
+            break;
+        }
+        let mut freed = 0.0;
+        for c in &over {
+            let scale = most / held(*c, &stakes);
+            for ((k, _), stake) in founders.iter().zip(stakes.iter_mut()) {
+                if k == c {
+                    freed += *stake * (1.0 - scale);
+                    *stake *= scale;
+                }
+            }
+            capped.insert(*c);
+        }
+        let others: f64 = founders
+            .iter()
+            .zip(&stakes)
+            .filter(|((k, _), _)| !capped.contains(k))
+            .map(|(_, s)| s)
+            .sum();
+        if others <= 0.0 {
+            break;
+        }
+        for ((k, _), stake) in founders.iter().zip(stakes.iter_mut()) {
+            if !capped.contains(k) {
+                *stake += freed * *stake / others;
+            }
+        }
+    }
+    stakes
+}
+
 fn consider_founding(nations: &mut Nations) {
     // A world of one country has no border to pay across, and a house everybody can pay through.
     if nations.countries.len() < 2 {
@@ -287,19 +355,30 @@ fn consider_founding(nations: &mut Nations) {
     let keys: Vec<SigningKey> = founders.iter().map(|t| key_for(nations, network, *t)).collect();
     let founding_volume: f64 = founding.founders.iter().map(|i| candidates[*i].volume).sum();
     let spare = GENESIS_COINS - FOUNDING_STAKE * founders.len() as u128;
+    let stakes = no_country_keeps_it(
+        &founding
+            .founders
+            .iter()
+            .map(|i| {
+                let share = candidates[*i].volume / founding_volume.max(1e-9);
+                (
+                    candidates[*i].country,
+                    FOUNDING_STAKE as f64 + spare as f64 * share,
+                )
+            })
+            .collect::<Vec<_>>(),
+    );
     // Beside its stake, each founder holds coin to pay fees with: as much as fee-paying makes
     // up of what the coin is worth. At a founding, when checking is still dear, that is about
     // as much again as the stake — a tenth, which is what founders once kept, ran out in the
     // first month and left houses refused for want of a fee for two years.
     let for_fees = payments::held_for_fees(chain_cost).min(0.9);
     let liquid = for_fees / (1.0 - for_fees);
-    let allocations: Vec<(chain::PublicKey, u128, u128)> = founding
-        .founders
+    let allocations: Vec<(chain::PublicKey, u128, u128)> = stakes
         .iter()
         .zip(&keys)
-        .map(|(i, key)| {
-            let share = candidates[*i].volume / founding_volume.max(1e-9);
-            let stake = FOUNDING_STAKE * COIN + (spare as f64 * share * COIN as f64) as u128;
+        .map(|(coins, key)| {
+            let stake = (coins * COIN as f64) as u128;
             (key.public(), (stake as f64 * liquid) as u128, stake)
         })
         .collect();
@@ -584,11 +663,49 @@ fn issue_token(nations: &mut Nations, at: usize, reserve: usize) {
     });
 }
 
+/// What coin costs on a chain, in its stable token: which token, and how many of its base units
+/// one base unit of coin fetches.
+#[derive(Clone, Copy)]
+struct Price {
+    token: u32,
+    per_unit: f64,
+}
+
+impl Price {
+    fn now(network: &Network) -> Option<Price> {
+        let token = network.token.as_ref()?;
+        Some(Price {
+            token: token.id,
+            per_unit: network.coin_price * TOKEN_UNIT as f64 / COIN as f64,
+        })
+    }
+
+    /// Tokens for so much coin, rounded down, so a seller is never paid more than the price.
+    fn of(&self, coin: u128) -> u128 {
+        (coin as f64 * self.per_unit).max(0.0) as u128
+    }
+
+    /// Coin so many tokens buy, rounded down.
+    fn buys(&self, tokens: u128) -> u128 {
+        if self.per_unit <= 0.0 {
+            return 0;
+        }
+        (tokens as f64 / self.per_unit).max(0.0) as u128
+    }
+}
+
 /// A house short of coin buys it from the houses that have most to spare, largest first, until
 /// it has enough or nobody has any left to sell. Nobody sells what they need themselves: what
 /// every house needs this month is `keeping`.
-fn fund(nations: &mut Nations, at: usize, town: usize, wanted: u128) {
-    fund_keeping(nations, at, town, wanted, &BTreeMap::new());
+///
+/// Where there is a stable token and the buyer holds it, the buyer pays in it, in a swap both
+/// of them sign — the seller's coin and the buyer's tokens change hands at once or not at all.
+/// What tokens do not cover is paid for over the counter, off the chain, which is how a house
+/// with nothing on the chain yet gets its first coin. Returns what each seller was paid in
+/// tokens.
+fn fund(nations: &mut Nations, at: usize, town: usize, wanted: u128) -> Vec<(usize, u128)> {
+    let price = Price::now(&nations.networks[at]);
+    fund_keeping(nations, at, town, wanted, &BTreeMap::new(), price)
 }
 
 fn fund_keeping(
@@ -597,10 +714,12 @@ fn fund_keeping(
     town: usize,
     wanted: u128,
     keeping: &BTreeMap<usize, u128>,
-) {
+    price: Option<Price>,
+) -> Vec<(usize, u128)> {
+    let mut paid = Vec::new();
     let network = &mut nations.networks[at];
     let Some(address) = network.address_of(town) else {
-        return;
+        return paid;
     };
     let min_fee = network.chain.params().min_fee;
     let mut sellers: Vec<(usize, u128)> = network
@@ -617,7 +736,7 @@ fn fund_keeping(
     for (seller, balance) in sellers {
         let have = network.chain.pending_balance(&address, Asset::Coin);
         if have >= wanted {
-            return;
+            break;
         }
         // A seller keeps a coin and a fee for itself, and whatever it needs this month.
         let own = keeping.get(&seller).copied().unwrap_or(0);
@@ -626,20 +745,50 @@ fn fund_keeping(
         if amount == 0 {
             continue;
         }
-        let tx = sign(
-            network,
-            seller,
-            min_fee,
-            Action::Pay {
-                to: address,
-                asset: Asset::Coin,
-                amount,
-            },
-        );
-        if !submit(network, tx) {
-            network.refused += 1;
+        // As much as the buyer's tokens pay for, in a swap; the rest over the counter.
+        let mut swapped = 0;
+        if let Some(price) = price
+            && let Some(seller_address) = network.address_of(seller)
+            && let Some(buyer_key) = network.keys.get(&town)
+        {
+            let tokens = network.chain.pending_balance(&address, Asset::Token(price.token));
+            let coin = amount.min(price.buys(tokens));
+            let cost = price.of(coin);
+            if coin > 0 && cost > 0 {
+                let agreed = Swap::agreed(
+                    buyer_key,
+                    network.chain.id,
+                    seller_address,
+                    network.chain.next_nonce(&address),
+                    (Asset::Coin, coin),
+                    (Asset::Token(price.token), cost),
+                );
+                let tx = sign(network, seller, min_fee, Action::Swap(Box::new(agreed)));
+                if submit(network, tx) {
+                    swapped = coin;
+                    paid.push((seller, cost));
+                } else {
+                    network.refused += 1;
+                }
+            }
+        }
+        if amount > swapped {
+            let tx = sign(
+                network,
+                seller,
+                min_fee,
+                Action::Pay {
+                    to: address,
+                    asset: Asset::Coin,
+                    amount: amount - swapped,
+                },
+            );
+            if !submit(network, tx) {
+                network.refused += 1;
+            }
         }
     }
+    paid
 }
 
 /// A country whose business on a chain has grown large enough takes a seat among its
@@ -677,7 +826,14 @@ fn take_seats(nations: &mut Nations, at: usize) {
         if mine / total < SEAT_AT {
             continue;
         }
-        let stake = (GENESIS_COINS as f64 * mine / total).max(20.0) as u128 * COIN;
+        let wanted = (GENESIS_COINS as f64 * mine / total).max(20.0);
+        // No more than keeps its country's houses short of `ONE_COUNTRY_AT_MOST` of the stake.
+        let (ours, all) = country_power(nations, at, c);
+        let room = (ONE_COUNTRY_AT_MOST * all as f64 - ours as f64) / (1.0 - ONE_COUNTRY_AT_MOST);
+        if room < 20.0 {
+            continue;
+        }
+        let stake = wanted.min(room) as u128 * COIN;
         fund(nations, at, capital, stake + COIN);
         let network = &mut nations.networks[at];
         let min_fee = network.chain.params().min_fee;
@@ -756,6 +912,32 @@ fn lumps(nations: &Nations, at: usize, from: usize, to: usize) -> [f64; BLOCKS_A
         *factor /= mean;
     }
     factors
+}
+
+/// The voting power of one country's validators on a chain, and of all of them.
+fn country_power(nations: &Nations, at: usize, country: usize) -> (u64, u64) {
+    let network = &nations.networks[at];
+    let members = &network.chain.rotation.members;
+    let ours = members
+        .iter()
+        .filter(|v| {
+            network
+                .town_of(&v.address)
+                .is_some_and(|t| nations.towns[t].country == country)
+        })
+        .map(|v| v.power)
+        .sum();
+    (ours, members.iter().map(|v| v.power).sum())
+}
+
+/// The largest share of a chain's voting power the validators of any one country hold.
+pub fn largest_country_share(nations: &Nations, at: usize) -> Option<(usize, f64)> {
+    (0..nations.countries.len())
+        .map(|c| {
+            let (ours, all) = country_power(nations, at, c);
+            (c, ours as f64 / all.max(1) as f64)
+        })
+        .max_by(|a, b| a.1.total_cmp(&b.1).then(b.0.cmp(&a.0)))
 }
 
 /// One month of settlement: the attestor states the reserve, the issuer mints what houses have
@@ -847,16 +1029,35 @@ fn settle_month(
         .iter()
         .map(|(t, need)| (*t, need + COIN / 100))
         .collect();
-    for (town, need) in &keeping {
-        fund_keeping(nations, at, *town, *need, &keeping);
+    let price = Price::now(&nations.networks[at]);
+    // The two houses that must sign before anybody can be paid this month make sure of their
+    // own fees first.
+    let mut incoming: BTreeMap<usize, u128> = BTreeMap::new();
+    for town in [token.attestor, token.issuer] {
+        let need = keeping.get(&town).copied().unwrap_or(0);
+        for (seller, tokens) in fund_keeping(nations, at, town, need, &keeping, price) {
+            *incoming.entry(seller).or_insert(0) += tokens;
+        }
     }
 
-    // Tokens: what each house must hold to pay what it owes before it is paid.
+    // Tokens: what each house must hold to pay what it owes before it is paid, and to buy the
+    // coin its fees will take.
     let mut outgoing: BTreeMap<usize, u128> = BTreeMap::new();
-    let mut incoming: BTreeMap<usize, u128> = BTreeMap::new();
     for (from, to, units, _) in &owed {
         *outgoing.entry(*from).or_insert(0) += units;
         *incoming.entry(*to).or_insert(0) += units;
+    }
+    if let Some(price) = price {
+        let network = &nations.networks[at];
+        for (town, need) in &keeping {
+            let Some(address) = network.address_of(*town) else {
+                continue;
+            };
+            let short = need.saturating_sub(network.chain.pending_balance(&address, Asset::Coin));
+            if short > 0 && *town != token.attestor && *town != token.issuer {
+                *outgoing.entry(*town).or_insert(0) += price.of(short) + TOKEN_UNIT;
+            }
+        }
     }
     let network = &mut nations.networks[at];
     let mut mints: Vec<(usize, u128)> = Vec::new();
@@ -905,6 +1106,16 @@ fn settle_month(
             network.refused += 1;
         }
     }
+    // Houses buy the coin their fees will take from the houses with most to spare.
+    for (town, need) in &keeping {
+        if *town == token.attestor || *town == token.issuer {
+            continue;
+        }
+        for (seller, tokens) in fund_keeping(nations, at, *town, *need, &keeping, price) {
+            *incoming.entry(seller).or_insert(0) += tokens;
+        }
+    }
+    let network = &mut nations.networks[at];
     let mut settled = 0.0;
     let mut fees = 0.0;
     for (from, to, units, food) in &owed {
@@ -929,14 +1140,26 @@ fn settle_month(
             network.refused += 1;
         }
     }
-    // Whatever a house holds beyond a float of its business, it hands back for currency.
+    // Whatever a house holds beyond a float of its business — the larger of what it paid and
+    // what it was paid this month — it hands back for currency.
     let mut redeemed = false;
-    for (town, came_in) in &incoming {
+    let houses: Vec<usize> = network.houses().collect();
+    for town in &houses {
         let Some(address) = network.address_of(*town) else {
             continue;
         };
         let held = network.chain.pending_balance(&address, Asset::Token(token.id));
-        let keep = (FLOAT * *came_in as f64 * BLOCKS_A_YEAR as f64) as u128;
+        // Nobody sends what it cannot pay the fee for; a house with no coin to hand redeems
+        // another month.
+        if held == 0 || network.chain.pending_balance(&address, Asset::Coin) < min_fee {
+            continue;
+        }
+        let business = incoming
+            .get(town)
+            .copied()
+            .unwrap_or(0)
+            .max(outgoing.get(town).copied().unwrap_or(0));
+        let keep = (FLOAT * business as f64 * BLOCKS_A_YEAR as f64) as u128;
         if held > keep {
             let tx = sign(
                 network,

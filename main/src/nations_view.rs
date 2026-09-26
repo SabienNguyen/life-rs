@@ -320,12 +320,12 @@ pub fn report(world: &Nations, checked: &[Checked]) -> Vec<String> {
         ));
     }
     for (at, network) in world.networks.iter().enumerate() {
-        out.extend(ledger(world, network, checked.get(at)));
+        out.extend(ledger(world, at, network, checked.get(at)));
     }
     out
 }
 
-fn ledger(world: &Nations, network: &Network, checked: Option<&Checked>) -> Vec<String> {
+fn ledger(world: &Nations, at: usize, network: &Network, checked: Option<&Checked>) -> Vec<String> {
     let mut out = Vec::new();
     let chain = &network.chain;
     let ledger = &chain.ledger;
@@ -340,6 +340,13 @@ fn ledger(world: &Nations, network: &Network, checked: Option<&Checked>) -> Vec<
         network.stalls,
         network.refused
     ));
+    if let Some((country, share)) = nations::network::largest_country_share(world, at) {
+        out.push(format!(
+            "  the most stake any one country's houses hold is {}'s, {} — short of the two thirds a block needs, so every block is signed abroad too",
+            world.countries[country].name,
+            percent(share)
+        ));
+    }
     let reserve = network.token.as_ref().map(|t| world.currencies[t.currency].symbol.clone());
     out.push(format!(
         "  coin: {} in existence ({} at genesis, {} issued since, {} burned), one worth {} {}",
@@ -488,6 +495,14 @@ fn transaction(world: &Nations, network: &Network, tx: &chain::Transaction) -> S
         Action::Bond { amount } => format!("{from} stakes {} coin", grouped(amount / COIN)),
         Action::Unbond { amount } => format!("{from} unstakes {} coin", grouped(amount / COIN)),
         Action::Evidence { .. } => format!("{from} shows two votes signed by one validator at one height"),
+        Action::Swap(swap) => {
+            let other = holder(world, network, &Address::of(&swap.counterparty));
+            let side = |(asset, amount): (Asset, u128)| match asset {
+                Asset::Coin => format!("{} coin", grouped(amount / COIN)),
+                Asset::Token(_) => format!("{} {token}", grouped(amount / TOKEN_UNIT)),
+            };
+            format!("{from} sells {other} {} for {}, both legs at once", side(swap.give), side(swap.get))
+        }
     }
 }
 
@@ -645,7 +660,7 @@ pub fn snapshot(world: &Nations, checked: &[Checked]) -> String {
             .networks
             .iter()
             .enumerate()
-            .map(|(at, n)| network_json(world, n, checked.get(at))),
+            .map(|(at, n)| network_json(world, at, n, checked.get(at))),
     );
     fields.push(format!("\"chains\":{chains}"));
     fields.push(format!(
@@ -662,7 +677,7 @@ pub fn snapshot(world: &Nations, checked: &[Checked]) -> String {
     format!("{{{}}}", fields.join(",\n"))
 }
 
-fn network_json(world: &Nations, network: &Network, checked: Option<&Checked>) -> String {
+fn network_json(world: &Nations, at: usize, network: &Network, checked: Option<&Checked>) -> String {
     let chain = &network.chain;
     let address_town = |a: &Address| {
         network
@@ -769,8 +784,12 @@ fn network_json(world: &Nations, network: &Network, checked: Option<&Checked>) -
         ),
         None => "null".to_string(),
     };
+    let largest = match nations::network::largest_country_share(world, at) {
+        Some((country, share)) => format!("{{\"country\":{country},\"share\":{}}}", num(share)),
+        None => "null".to_string(),
+    };
     format!(
-        "{{\"name\":{},\"id\":{},\"founded\":{},\"founders\":{},\"height\":{},\"stalls\":{},\"refused\":{},\"roundsLost\":{},\"coin\":{{\"supply\":{},\"genesis\":{},\"issued\":{},\"burned\":{},\"price\":{}}},\"carried\":{},\"fees\":{},\"cost\":{},\"token\":{token},\"validators\":{validators},\"accounts\":{accounts},\"blocks\":{summary},\"recent\":{full},\"verified\":{verified}}}",
+        "{{\"name\":{},\"id\":{},\"founded\":{},\"founders\":{},\"largestCountry\":{largest},\"height\":{},\"stalls\":{},\"refused\":{},\"roundsLost\":{},\"coin\":{{\"supply\":{},\"genesis\":{},\"issued\":{},\"burned\":{},\"price\":{}}},\"carried\":{},\"fees\":{},\"cost\":{},\"token\":{token},\"validators\":{validators},\"accounts\":{accounts},\"blocks\":{summary},\"recent\":{full},\"verified\":{verified}}}",
         quoted(&network.name),
         quoted(&chain.id.to_string()),
         network.founded,

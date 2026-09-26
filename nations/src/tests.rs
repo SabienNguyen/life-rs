@@ -204,6 +204,37 @@ fn a_chain_is_founded_by_parties_who_distrust_each_other() {
     );
 }
 
+/// Nobody keeps it — in the strict sense: no country's houses hold the two thirds of the stake
+/// that would let them finalise a block with nobody abroad signing, although one country does
+/// most of the business. They were held to three fifths at the founding, and a capital that
+/// buys a seat later is held to it too.
+#[test]
+fn no_country_can_finalise_a_block_on_its_own() {
+    let world = chained();
+    let (country, share) = network::largest_country_share(world, 0).expect("a chain has validators");
+    assert!(
+        share <= network::ONE_COUNTRY_AT_MOST + 1e-3,
+        "{} holds {:.1}% of the stake",
+        world.countries[country].name,
+        100.0 * share
+    );
+    assert!(share < 2.0 / 3.0);
+}
+
+/// The cap moves stake from the country over it to the others in proportion to what they hold,
+/// and leaves a world where nobody is over it alone.
+#[test]
+fn stake_over_the_cap_goes_to_the_others() {
+    let stakes = network::no_country_keeps_it(&[(0, 70.0), (0, 20.0), (1, 6.0), (2, 4.0)]);
+    let total: f64 = stakes.iter().sum();
+    assert!((total - 100.0).abs() < 1e-9, "no stake is lost: {total}");
+    assert!((stakes[0] + stakes[1] - 60.0).abs() < 1e-9);
+    assert!((stakes[0] / stakes[1] - 3.5).abs() < 1e-9, "a country's own houses keep their order");
+    assert!((stakes[2] / stakes[3] - 1.5).abs() < 1e-9, "the others gain in proportion");
+    let fair = [(0, 50.0), (1, 50.0)];
+    assert_eq!(network::no_country_keeps_it(&fair), vec![50.0, 50.0]);
+}
+
 /// Everything the world has done on its chain can be checked by somebody holding nothing but
 /// the genesis: every block, signature and root, from the first.
 #[test]
@@ -265,6 +296,32 @@ fn the_houses_that_found_a_chain_are_the_ones_that_use_it() {
         .filter(|((height, a, b), paid)| flows.get(&(*height, *b, *a)) == Some(paid))
         .count();
     assert!(mirrored * 20 < flows.len(), "{mirrored} of {} monthly flows mirrored", flows.len());
+}
+
+/// Coin changes hands on the chain against the stable token, both legs at once: every house
+/// buys the coin its fees take in a swap it and the seller both sign. Only a house with no
+/// tokens yet — the issuer, before there are any — buys its first coin over the counter.
+#[test]
+fn coin_is_bought_with_tokens_on_the_chain() {
+    let network = &chained().networks[0];
+    let (mut swaps, mut over_the_counter) = (0, 0);
+    for block in &network.chain.blocks {
+        for tx in &block.txs {
+            match &tx.action {
+                chain::Action::Swap(swap) => {
+                    assert_eq!(swap.give.0, chain::Asset::Coin, "houses sell coin for tokens");
+                    swaps += 1;
+                }
+                chain::Action::Pay {
+                    asset: chain::Asset::Coin,
+                    ..
+                } => over_the_counter += 1,
+                _ => {}
+            }
+        }
+    }
+    assert!(swaps > 100, "{swaps} swaps");
+    assert!(over_the_counter * 50 < swaps, "{over_the_counter} over the counter against {swaps} swaps");
 }
 
 /// A house does not send what it cannot pay the fee for: the founders keep enough coin liquid to

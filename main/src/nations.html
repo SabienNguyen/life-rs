@@ -472,7 +472,9 @@ drawCountries();
       "<div>settled last year</div><div>" + amount(c.carried) + " years of food, for " + amount(c.fees) + " in fees</div>" +
       "<div>a payment costs</div><div>" + pct(c.cost) + " of it on the chain" +
         (WORLD.throughHouses === null ? "" : ", " + pct(WORLD.throughHouses) + " through houses alone") + "</div>" +
-      "<div>rounds lost · stalls · refused</div><div>" + c.roundsLost + " · " + c.stalls + " · " + c.refused + "</div></div>" +
+      "<div>rounds lost · stalls · refused</div><div>" + c.roundsLost + " · " + c.stalls + " · " + c.refused + "</div>" +
+      (c.largestCountry ? "<div>most stake in one country</div><div>" + esc(WORLD.countries[c.largestCountry.country].name) + ", " + pct(c.largestCountry.share) +
+        " <span class='muted'>— a block needs two thirds, so it is always signed abroad too</span></div>" : "") + "</div>" +
       "<h2 style='margin-top:14px'>Validators</h2><div class='scroll'><table><tr><th>house</th><th>country</th><th class='n'>stake</th><th>address</th></tr>" + validators + "</table></div>" +
       "</div><div>" + token +
       "<h2 style='margin-top:14px'>Accounts</h2><div class='scroll'><table><tr><th>house</th><th class='n'>coin</th><th class='n'>staked</th><th class='n'>tokens</th></tr>" + accounts + "</table></div>" +
