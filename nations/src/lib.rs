@@ -146,6 +146,11 @@ pub struct Town {
     pub output: Output,
     /// Income per head, in years of food.
     pub income: f64,
+    /// What a head consumed, with a ware counted as a year's food here as everywhere: income as
+    /// one price for all would count it. `income` values wares at this town's own price, so a
+    /// town importing them cheaply reads poorer even as it consumes more, which is right for
+    /// what the town can do with it and wrong for comparing two worlds.
+    pub consumed: f64,
     /// Share short of what its people needed to eat.
     pub hunger: f64,
     /// The price of a ware in food, here.
@@ -258,6 +263,8 @@ pub struct Reading {
     pub people: f64,
     pub product: f64,
     pub income: f64,
+    /// What a head consumed, at one price for a ware everywhere (`Town::consumed`).
+    pub consumed: f64,
     pub hunger: f64,
     /// Share of the world's product sold across a border.
     pub traded: f64,
@@ -389,6 +396,7 @@ impl Nations {
                 monetised: None,
                 output: Output::default(),
                 income: 1.0,
+                consumed: 1.0,
                 hunger: 0.0,
                 price: 1.0,
                 exchanged: 0.0,
@@ -822,6 +830,7 @@ impl Nations {
 
             town.output = output;
             town.income = income;
+            town.consumed = (spent.food + spent.wares + spent.invested + spent.services) / people;
             town.hunger = spent.hunger;
             town.price = q;
             town.exchanged = share_exchanged;
@@ -1336,6 +1345,7 @@ impl Nations {
             people,
             product,
             income,
+            consumed: weigh(&|t| t.consumed),
             hunger: weigh(&|t| t.hunger),
             traded: if product > 0.0 { abroad / product } else { 0.0 },
             shares,

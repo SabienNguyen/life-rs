@@ -5863,25 +5863,31 @@ stand-in for payments not all being alike, and it is a rule, not a mechanism.
 
 Two switches beside `trade_is_possible` ask it directly: `chains_are_possible` forbids a ledger,
 and `borders_are_free` makes paying abroad cost nothing from the founding. The share of what a
-world makes that crosses a border, by year 700, and its income:
+world makes that crosses a border, by year 700, its income, and what a head consumes counted at
+one price for a ware everywhere:
 
-| seed | traded abroad, no chain | with the chain | borders free | of the way | income: no chain / chain / free |
-|---|---|---|---|---|---|
-| 0x11 | 3.00% | 3.84% | 4.19% | 70% | 181.6 / 180.4 / 180.2 |
-| 0x21 | 7.74% | 9.34% | 9.87% | 75% | 59.5 / 59.5 / 59.2 |
-| 0x221 | 5.79% | 7.07% | 7.65% | 69% | 76.6 / 76.4 / 75.7 |
-| 0xbeef | 9.00% | 10.76% | 11.27% | 78% | 45.1 / 45.1 / 44.9 |
-| 0x5eed | 2.91% | 3.50% | 3.84% | 63% | 58.9 / 58.5 / 57.0 |
-| 0x7 | 8.26% | 9.72% | 10.39% | 69% | 96.4 / 95.6 / 95.9 |
-| 0x1234 | 7.87% | 9.39% | 9.93% | 74% | 49.0 / 48.8 / 49.8 |
+| seed | traded abroad, no chain | with the chain | borders free | of the way | income: no chain / chain / free | consumed at one price |
+|---|---|---|---|---|---|---|
+| 0x11 | 3.00% | 3.84% | 4.19% | 70% | 181.6 / 180.4 / 180.2 | 564.8 / 565.5 / 564.8 |
+| 0x21 | 7.74% | 9.34% | 9.87% | 75% | 59.5 / 59.5 / 59.2 | 130.2 / 130.2 / 129.5 |
+| 0x221 | 5.79% | 7.07% | 7.65% | 69% | 76.6 / 76.4 / 75.7 | 181.1 / 181.3 / 180.2 |
+| 0xbeef | 9.00% | 10.76% | 11.27% | 78% | 45.1 / 45.1 / 44.9 | 86.0 / 86.1 / 85.8 |
+| 0x5eed | 2.91% | 3.50% | 3.84% | 63% | 58.9 / 58.5 / 57.0 | 127.5 / 127.5 / 126.1 |
+| 0x7 | 8.26% | 9.72% | 10.39% | 69% | 96.4 / 95.6 / 95.9 | 254.8 / 254.5 / 254.5 |
+| 0x1234 | 7.87% | 9.39% | 9.93% | 74% | 49.0 / 48.8 / 49.8 | 97.5 / 97.5 / 98.1 |
 
 The chain raises trade across borders by eighteen to twenty-eight per cent, and gets between
 three fifths and four fifths of the way to borders that cost nothing — less early, while
 checking is still dear, and more as it gets cheap: thirty years after 0x11's founding it had
 gone a fifth of the way, and a century on 64 per cent, which a test holds it to. Income moves by
-under four per cent either way, and not in one direction. Trade abroad is two to ten per cent of
-what these worlds make, and widening it by a fifth does not show in what a head earns. Famines
-do not move at all: they come in the centuries before there is anything to found.
+under four per cent either way, and not in one direction. That is partly how income is counted —
+a town's wares at its own price, so a town that imports them cheaply reads poorer even as it
+consumes more — so the last column counts what a head consumes with a ware worth a year's food
+everywhere. That moves by under half a per cent. In this model, trade across a border is wares
+for food and varieties nobody values for being varied, and widening it by a fifth makes nobody
+better off. A model in which the chain raised living standards would need people who value
+variety — love of variety in what they want — and that is not built. Famines do not move at all:
+they come in the centuries before there is anything to found.
 
 ### 49.7 What went wrong on the way
 
@@ -5985,6 +5991,10 @@ the mechanism was the wrong one.
 - **One chain per world.** Nothing competes with the first, and there are no bridges.
 - **Trade balances.** Bilateral trade is balanced by construction — no capital flows, no
   current-account deficits — and the lumpy months only move payments within a year.
+- **Nobody values variety.** Countries' wares are Armington varieties for what gets traded and
+  paid, but what people want is still one good called wares, so cheaper, wider trade across
+  borders does not show in what they consume (§49.6.1). The chain's whole effect on living
+  standards waits on that.
 - **Houses are towns.** No firms, no accounts of persons, no exchanges and no order book: coin
   changes hands at the price the model sets for it, between the houses with most to spare and the
   ones that need it. The swap is real; the market that would find its price is not.

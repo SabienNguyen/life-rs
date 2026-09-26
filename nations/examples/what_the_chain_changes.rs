@@ -3,8 +3,8 @@
 //! `who_builds_a_ledger` measures the chains. This measures the worlds around them, and asks the
 //! question a chain has to answer: what would have been different without it? Each world is run
 //! three times from its seed — as it is, with `chains_are_possible` off, and with
-//! `borders_are_free` on — and the share of what it makes that crosses a border, and its income,
-//! are set side by side. Then the famine ablation §49.3 quotes: 0xbeef's first hundred and fifty
+//! `borders_are_free` on — and the share of what it makes that crosses a border, its income, and
+//! what a head consumes counted at one price for a ware everywhere are set side by side. Then the famine ablation §49.3 quotes: 0xbeef's first hundred and fifty
 //! years with and without `trade_is_possible`.
 //!
 //! Prints §49.3's and §49.6.1's tables as they stand in the design document. `SEEDS` is a
@@ -80,7 +80,7 @@ fn main() {
             };
             let of_the_way = (now.traded - without.traded) / (free.traded - without.traded);
             changes.push(format!(
-                "| {seed:#x} | {:.2}% | {:.2}% | {:.2}% | {:.0}% | {:.1} / {:.1} / {:.1} |",
+                "| {seed:#x} | {:.2}% | {:.2}% | {:.2}% | {:.0}% | {:.1} / {:.1} / {:.1} | {:.1} / {:.1} / {:.1} |",
                 100.0 * without.traded,
                 100.0 * now.traded,
                 100.0 * free.traded,
@@ -88,14 +88,17 @@ fn main() {
                 without.income,
                 now.income,
                 free.income,
+                without.consumed,
+                now.consumed,
+                free.consumed,
             ));
         }
     }
     println!();
     println!(
-        "| seed | traded abroad, no chain | with the chain | borders free | of the way | income: no chain / chain / free |"
+        "| seed | traded abroad, no chain | with the chain | borders free | of the way | income: no chain / chain / free | consumed at one price |"
     );
-    println!("|---|---|---|---|---|---|");
+    println!("|---|---|---|---|---|---|---|");
     for row in changes {
         println!("{row}");
     }
