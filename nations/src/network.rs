@@ -64,6 +64,25 @@ const FLOAT: f64 = 0.1;
 /// validators, rather than leave its payments to be checked by others.
 const SEAT_AT: f64 = 0.05;
 
+/// A state that makes this share of its country's product has its own market house on a chain,
+/// paying and being paid for its own trade abroad. A smaller one's trade goes through the
+/// capital's house.
+const OWN_HOUSE: f64 = 0.05;
+
+/// The least share of the trade between two countries that two houses settle with each other
+/// directly. Less than that, and the paying house sends it to the largest house on the other
+/// side, as a small bank pays through a large one abroad rather than keep an account with
+/// every small one.
+const DIRECT: f64 = 0.02;
+
+/// How unevenly a year's payments between two houses fall across its months: orders come in
+/// lumps, not a twelfth at a time. The spread of a month's payments about the year's mean, in
+/// logs.
+const LUMPY: f64 = 0.4;
+
+/// Where the draws for those lumps start, among the world's commercial streams.
+const LUMPS: u64 = 1 << 48;
+
 /// The stable token on a chain.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Token {
@@ -268,6 +287,12 @@ fn consider_founding(nations: &mut Nations) {
     let keys: Vec<SigningKey> = founders.iter().map(|t| key_for(nations, network, *t)).collect();
     let founding_volume: f64 = founding.founders.iter().map(|i| candidates[*i].volume).sum();
     let spare = GENESIS_COINS - FOUNDING_STAKE * founders.len() as u128;
+    // Beside its stake, each founder holds coin to pay fees with: as much as fee-paying makes
+    // up of what the coin is worth. At a founding, when checking is still dear, that is about
+    // as much again as the stake — a tenth, which is what founders once kept, ran out in the
+    // first month and left houses refused for want of a fee for two years.
+    let for_fees = payments::held_for_fees(chain_cost).min(0.9);
+    let liquid = for_fees / (1.0 - for_fees);
     let allocations: Vec<(chain::PublicKey, u128, u128)> = founding
         .founders
         .iter()
@@ -275,10 +300,10 @@ fn consider_founding(nations: &mut Nations) {
         .map(|(i, key)| {
             let share = candidates[*i].volume / founding_volume.max(1e-9);
             let stake = FOUNDING_STAKE * COIN + (spare as f64 * share * COIN as f64) as u128;
-            // A tenth again, liquid, to pay fees with until the chain pays them back.
-            (key.public(), stake / 10, stake)
+            (key.public(), (stake as f64 * liquid) as u128, stake)
         })
         .collect();
+    let genesis_coins: u128 = allocations.iter().map(|(_, coin, stake)| coin + stake).sum::<u128>() / COIN;
     // Named for the town whose house did the most business among its founders, as a country is
     // named for its largest place.
     let name = format!("{} Ledger", nations.towns[founders[0]].name);
@@ -294,7 +319,7 @@ fn consider_founding(nations: &mut Nations) {
     };
     let reserve_level = nations.currencies[reserve].level;
     let volume_in_currency = founding_volume * reserve_level;
-    let coin_price = payments::coin_value(volume_in_currency, 0.0, GENESIS_COINS as f64);
+    let coin_price = payments::coin_value(volume_in_currency, 0.0, genesis_coins as f64);
     nations.networks.push(Network {
         name,
         founded: nations.year,
@@ -327,12 +352,24 @@ fn keep(nations: &mut Nations, at: usize) {
     let size = payment_size(nations);
     let reserve_level = nations.currencies[reserve].level.max(1e-9);
 
-    // Every country that trades abroad keeps an account through its capital's house.
+    // Every country that trades abroad keeps an account through its capital's house, and so
+    // does every state of it large enough to have a market house of its own.
     for c in 0..nations.countries.len() {
-        let capital = nations.countries[c].capital;
-        if !nations.networks[at].keys.contains_key(&capital) && nations.countries[c].exports > 0.0 {
-            let key = key_for(nations, at, capital);
-            nations.networks[at].keys.insert(capital, key);
+        if nations.countries[c].exports <= 0.0 {
+            continue;
+        }
+        let mut houses = vec![nations.countries[c].capital];
+        houses.extend(
+            state_shares(nations, c)
+                .into_iter()
+                .filter(|(_, share)| *share >= OWN_HOUSE)
+                .map(|(hub, _)| hub),
+        );
+        for town in houses {
+            if !nations.networks[at].keys.contains_key(&town) {
+                let key = key_for(nations, at, town);
+                nations.networks[at].keys.insert(town, key);
+            }
         }
     }
 
@@ -391,7 +428,7 @@ fn keep(nations: &mut Nations, at: usize) {
     let mut fees = 0.0;
     nations.networks[at].blocks_this_year = 0;
     for month in 0..BLOCKS_A_YEAR {
-        let (value, paid) = settle_month(nations, at, &pairs, size, wage, reserve_level);
+        let (value, paid) = settle_month(nations, at, &pairs, month, size, wage, reserve_level);
         carried += value;
         fees += paid;
         let time = (nations.year * BLOCKS_A_YEAR + month + 1) * MONTH;
@@ -664,6 +701,63 @@ fn take_seats(nations: &mut Nations, at: usize) {
     }
 }
 
+/// What each state of a country makes, as a share of what the country makes, by the state's
+/// hub.
+fn state_shares(nations: &Nations, country: usize) -> Vec<(usize, f64)> {
+    let made: Vec<(usize, f64)> = nations.countries[country]
+        .states
+        .iter()
+        .map(|s| {
+            let state = &nations.states[*s];
+            let product: f64 = state.towns.iter().map(|t| nations.towns[*t].product()).sum();
+            (state.hub, product)
+        })
+        .collect();
+    let total: f64 = made.iter().map(|(_, p)| p).sum();
+    if total <= 0.0 {
+        return Vec::new();
+    }
+    made.into_iter().map(|(hub, p)| (hub, p / total)).collect()
+}
+
+/// The houses that carry a country's payments abroad on a chain, with the share each carries:
+/// every state's trade through its own market house if that house keeps an account here, and
+/// through the capital's if not.
+fn carriers(nations: &Nations, at: usize, country: usize) -> Vec<(usize, f64)> {
+    let capital = nations.countries[country].capital;
+    let network = &nations.networks[at];
+    let mut carried: BTreeMap<usize, f64> = BTreeMap::new();
+    for (hub, share) in state_shares(nations, country) {
+        let house = if share >= OWN_HOUSE && network.keys.contains_key(&hub) {
+            hub
+        } else {
+            capital
+        };
+        *carried.entry(house).or_insert(0.0) += share;
+    }
+    if carried.is_empty() {
+        carried.insert(capital, 1.0);
+    }
+    carried.into_iter().collect()
+}
+
+/// How one house's payments to another fall across this year's months: twelve factors that
+/// average one, drawn afresh each year for each pair of houses and each way round — so what a
+/// house pays another in a month is not what it is paid back, though over the year it is.
+fn lumps(nations: &Nations, at: usize, from: usize, to: usize) -> [f64; BLOCKS_A_YEAR as usize] {
+    let entity = LUMPS | (at as u64) << 40 | (from as u64) << 20 | to as u64;
+    let mut rng = nations.seed.stream(Domain::Commerce, entity, nations.year);
+    let mut factors = [0.0; BLOCKS_A_YEAR as usize];
+    for factor in factors.iter_mut() {
+        *factor = (LUMPY * rng.normal()).exp();
+    }
+    let mean = factors.iter().sum::<f64>() / factors.len() as f64;
+    for factor in factors.iter_mut() {
+        *factor /= mean;
+    }
+    factors
+}
+
 /// One month of settlement: the attestor states the reserve, the issuer mints what houses have
 /// paid it for, houses pay each other, and anything held beyond need is redeemed. Returns what
 /// was settled, in years of food, and the fees paid, in years of food.
@@ -671,6 +765,7 @@ fn settle_month(
     nations: &mut Nations,
     at: usize,
     pairs: &[((usize, usize), f64)],
+    month: u64,
     size: f64,
     wage: f64,
     reserve_level: f64,
@@ -678,13 +773,7 @@ fn settle_month(
     let Some(token) = nations.networks[at].token.clone() else {
         return (0.0, 0.0);
     };
-    let capital_of = |key: usize| {
-        nations
-            .countries
-            .iter()
-            .find(|c| c.key == key)
-            .map(|c| c.capital)
-    };
+    let country_of = |key: usize| nations.countries.iter().position(|c| c.key == key);
     // What each house pays each other house this month, in base units of the token.
     let to_units = |food: f64| (food * reserve_level * TOKEN_UNIT as f64).max(0.0) as u128;
     let mut owed: Vec<(usize, usize, u128, f64)> = Vec::new();
@@ -693,17 +782,36 @@ fn settle_month(
         if share <= 0.0 {
             continue;
         }
-        let (Some(a), Some(b)) = (capital_of(pair.0), capital_of(pair.1)) else {
+        let (Some(a), Some(b)) = (country_of(pair.0), country_of(pair.1)) else {
             continue;
         };
-        // Half each way: what one pays for the other's wares, the other pays for its food.
-        let each_way = share * volume / BLOCKS_A_YEAR as f64 / 2.0;
-        let units = to_units(each_way);
-        if units == 0 {
-            continue;
+        // Half each way over the year: what one pays for the other's wares, the other pays for
+        // its food. Split between the houses on each side by the trade each carries.
+        let each_way = share * volume / 2.0;
+        for (payer, payee) in [(a, b), (b, a)] {
+            let paying = carriers(nations, at, payer);
+            let paid = carriers(nations, at, payee);
+            let largest = paid
+                .iter()
+                .max_by(|x, y| x.1.total_cmp(&y.1).then(y.0.cmp(&x.0)))
+                .map(|(t, _)| *t)
+                .expect("a country always has a house to be paid through");
+            let mut between: BTreeMap<(usize, usize), f64> = BTreeMap::new();
+            for (from, mine) in &paying {
+                for (to, theirs) in &paid {
+                    let to = if mine * theirs >= DIRECT { *to } else { largest };
+                    *between.entry((*from, to)).or_insert(0.0) += mine * theirs;
+                }
+            }
+            for ((from, to), part) in between {
+                let lump = lumps(nations, at, from, to)[month as usize];
+                let food = each_way * part * lump / BLOCKS_A_YEAR as f64;
+                let units = to_units(food);
+                if units > 0 {
+                    owed.push((from, to, units, food));
+                }
+            }
         }
-        owed.push((a, b, units, each_way));
-        owed.push((b, a, units, each_way));
     }
     if owed.is_empty() {
         return (0.0, 0.0);
@@ -731,6 +839,10 @@ fn settle_month(
         *coin_needed.entry(*from).or_insert(0) += fee_for(*food) + 4 * min_fee;
         *coin_needed.entry(*to).or_insert(0) += 2 * min_fee;
     }
+    // And the issuer a fee for every house it might mint for, and the attestor one for its word.
+    let payers = owed.iter().map(|(from, ..)| *from).collect::<std::collections::BTreeSet<_>>();
+    *coin_needed.entry(token.issuer).or_insert(0) += (payers.len() as u128 + 2) * min_fee;
+    *coin_needed.entry(token.attestor).or_insert(0) += 2 * min_fee;
     let keeping: BTreeMap<usize, u128> = coin_needed
         .iter()
         .map(|(t, need)| (*t, need + COIN / 100))
@@ -818,6 +930,7 @@ fn settle_month(
         }
     }
     // Whatever a house holds beyond a float of its business, it hands back for currency.
+    let mut redeemed = false;
     for (town, came_in) in &incoming {
         let Some(address) = network.address_of(*town) else {
             continue;
@@ -834,17 +947,35 @@ fn settle_month(
                     amount: held - keep,
                 },
             );
-            if !submit(network, tx) {
+            if submit(network, tx) {
+                redeemed = true;
+            } else {
                 network.refused += 1;
             }
         }
     }
-    // The issuer pays out what was redeemed, so what it holds is what is still outstanding.
+    // The issuer pays out what was redeemed, so what it holds is what is still outstanding —
+    // and when anything was, the attestor says so again, so that the reserve the chain shows at
+    // the end of a month is the one there is rather than the one there was at its start.
     let outstanding = network
         .chain
         .pending_token(token.id)
         .map(|t| t.supply)
         .unwrap_or(0);
+    if redeemed {
+        let tx = sign(
+            network,
+            token.attestor,
+            min_fee,
+            Action::Attest {
+                token: token.id,
+                reserves: outstanding,
+            },
+        );
+        if !submit(network, tx) {
+            network.refused += 1;
+        }
+    }
     if let Some(t) = network.token.as_mut() {
         t.reserves = outstanding as f64 / TOKEN_UNIT as f64;
     }

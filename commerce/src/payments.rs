@@ -305,6 +305,14 @@ pub fn coin_value(carried_a_year: f64, fees_a_year: f64, coins: f64) -> f64 {
     (SECURITY * carried_a_year + FEE_FLOAT * fees_a_year) / coins
 }
 
+/// The share of a chain's coin held to pay fees with rather than staked, when checking costs
+/// `cost` of every payment: the part of `coin_value` that fee-paying makes up. Dear checking
+/// means much of it; a chain whose payments cost almost nothing to check is almost all stake.
+pub fn held_for_fees(cost: f64) -> f64 {
+    let fees = FEE_FLOAT * cost.max(0.0);
+    fees / (SECURITY + fees)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -460,5 +468,18 @@ mod tests {
         let diluted = coin_value(1e6, 1e4, 2e4);
         assert!(large > small * 50.0);
         assert!((diluted - small / 2.0).abs() < 1e-9);
+    }
+
+    /// Dear checking makes a coin mostly something to pay fees with; cheap checking makes it
+    /// mostly stake. And the share held for fees is that share of the coin's value.
+    #[test]
+    fn what_is_held_for_fees_is_what_fees_make_the_coin_worth() {
+        assert!(held_for_fees(0.08) > 0.45);
+        assert!(held_for_fees(0.002) < 0.05);
+        assert_eq!(held_for_fees(0.0), 0.0);
+        let (carried, cost) = (1e6, 0.03);
+        let whole = coin_value(carried, cost * carried, 1.0);
+        let fees = coin_value(0.0, cost * carried, 1.0);
+        assert!((held_for_fees(cost) - fees / whole).abs() < 1e-12);
     }
 }

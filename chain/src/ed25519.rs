@@ -28,7 +28,8 @@
 //! that holds a real key.
 
 use crate::sha2::Sha512;
-use std::sync::OnceLock;
+use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex, OnceLock};
 
 const MASK51: u64 = (1 << 51) - 1;
 
@@ -449,41 +450,177 @@ impl Point {
         acc
     }
 
-    /// [scalar]·B, from a table of every multiple of every power of sixteen of the base point.
-    ///
-    /// Sixty-four additions and no doublings. The table is built once per process, the first
-    /// time anything signs or verifies, and costs about a millisecond.
+    /// [scalar]·B, from the base point's multiples, which are worked out once per process the
+    /// first time anything signs or verifies.
     fn mul_base(scalar: &[u8; 32]) -> Point {
-        let table = base_table();
-        let mut acc = IDENTITY;
-        for (i, byte) in scalar.iter().enumerate() {
-            let (low, high) = ((byte & 15) as usize, (byte >> 4) as usize);
-            if low != 0 {
-                acc = acc.add(&table[2 * i][low]);
-            }
-            if high != 0 {
-                acc = acc.add(&table[2 * i + 1][high]);
-            }
+        static BASE_MULTIPLES: OnceLock<Multiples> = OnceLock::new();
+        BASE_MULTIPLES.get_or_init(|| Multiples::of(&BASE)).times(scalar)
+    }
+
+    /// The point made ready to be added many times.
+    fn cached(&self) -> Cached {
+        Cached {
+            y_plus_x: self.y.add(self.x),
+            y_minus_x: self.y.sub(self.x),
+            z2: self.z.add(self.z),
+            t2d: self.t.mul(D2),
         }
-        acc
+    }
+
+    /// The same sum as `add`, with the other point's share of the work done beforehand — or its
+    /// negation's, which is the same numbers in other places.
+    fn add_cached(&self, q: &Cached, negated: bool) -> Point {
+        let (plus, minus) = if negated {
+            (q.y_minus_x, q.y_plus_x)
+        } else {
+            (q.y_plus_x, q.y_minus_x)
+        };
+        let a = self.y.sub(self.x).mul(minus);
+        let b = self.y.add(self.x).mul(plus);
+        let c = self.t.mul(q.t2d);
+        let d = self.z.mul(q.z2);
+        let e = b.sub(a);
+        // Negating a point negates its T, which swaps which of these gains c and which loses it.
+        let (f, g) = if negated { (d.add(c), d.sub(c)) } else { (d.sub(c), d.add(c)) };
+        let h = b.add(a);
+        Point {
+            x: e.mul(f),
+            y: g.mul(h),
+            t: e.mul(h),
+            z: f.mul(g),
+        }
     }
 }
 
-fn base_table() -> &'static [[Point; 16]] {
-    static TABLE: OnceLock<Vec<[Point; 16]>> = OnceLock::new();
-    TABLE.get_or_init(|| {
-        let mut table = Vec::with_capacity(64);
-        let mut power = BASE;
-        for _ in 0..64 {
-            let mut row = [IDENTITY; 16];
-            for j in 1..16 {
-                row[j] = row[j - 1].add(&power);
+/// A point ready to be added: (Y + X, Y − X, 2Z, 2d·T). Adding one costs eight multiplications
+/// rather than nine, and adding its negation costs the same, since that is only a swap.
+#[derive(Clone, Copy, Debug)]
+struct Cached {
+    y_plus_x: Fe,
+    y_minus_x: Fe,
+    z2: Fe,
+    t2d: Fe,
+}
+
+/// A scalar below 2²⁵⁵ as sixty-four digits from −8 to 8, least significant first. A window of
+/// ordinary digits needs fifteen multiples of each power; signed ones need eight, because a
+/// negative digit is a positive one subtracted.
+fn signed_digits(scalar: &[u8; 32]) -> [i8; 64] {
+    debug_assert!(scalar[31] < 128, "a scalar here is always below 2^255");
+    let mut digits = [0i8; 64];
+    for (i, byte) in scalar.iter().enumerate() {
+        digits[2 * i] = (byte & 15) as i8;
+        digits[2 * i + 1] = (byte >> 4) as i8;
+    }
+    // A digit of eight or more becomes that less sixteen, carrying one into the next.
+    let mut carry = 0i8;
+    for digit in digits.iter_mut().take(63) {
+        *digit += carry;
+        carry = (*digit + 8) >> 4;
+        *digit -= carry << 4;
+    }
+    digits[63] += carry;
+    digits
+}
+
+/// One to eight times every power of 256 of a point: thirty-two rows of eight, the layout of
+/// the reference implementation's table for the base point. With it, any multiple of the point
+/// costs sixty-four additions and four doublings, against two hundred and fifty-two doublings
+/// for a ladder that starts from the point alone.
+struct Multiples(Vec<[Cached; 8]>);
+
+impl Multiples {
+    /// Costs about as much as one verification the slow way.
+    fn of(point: &Point) -> Multiples {
+        let mut rows = Vec::with_capacity(32);
+        let mut power = *point;
+        for _ in 0..32 {
+            let mut row = [power.cached(); 8];
+            let mut sum = power;
+            for entry in row.iter_mut().skip(1) {
+                sum = sum.add(&power);
+                *entry = sum.cached();
             }
-            table.push(row);
-            power = power.double().double().double().double();
+            rows.push(row);
+            for _ in 0..8 {
+                power = power.double();
+            }
         }
-        table
-    })
+        Multiples(rows)
+    }
+
+    /// [scalar]·the point: the odd digits, which stand sixteen times higher, then sixteen times
+    /// what they came to, then the even ones.
+    fn times(&self, scalar: &[u8; 32]) -> Point {
+        let digits = signed_digits(scalar);
+        let mut acc = IDENTITY;
+        for (row, pair) in digits.chunks_exact(2).enumerate() {
+            acc = self.plus(acc, row, pair[1]);
+        }
+        acc = acc.double().double().double().double();
+        for (row, pair) in digits.chunks_exact(2).enumerate() {
+            acc = self.plus(acc, row, pair[0]);
+        }
+        acc
+    }
+
+    fn plus(&self, acc: Point, row: usize, digit: i8) -> Point {
+        match digit {
+            0 => acc,
+            d if d > 0 => acc.add_cached(&self.0[row][d as usize - 1], false),
+            d => acc.add_cached(&self.0[row][d.unsigned_abs() as usize - 1], true),
+        }
+    }
+}
+
+/// How many keys verification remembers the multiples of. Forty kilobytes each; a chain's
+/// validators and houses are a few dozen, so this is room for every key of several worlds at
+/// once, and when it fills it simply starts again.
+const KEYS_REMEMBERED: usize = 256;
+
+/// Every key verification has seen, by its bytes: `None` for one seen once, and the multiples
+/// of its negation for one seen again.
+type Known = Mutex<BTreeMap<[u8; 32], Option<Arc<Multiples>>>>;
+
+/// A key as verification uses it: the negation of the point it names, and — once the key has
+/// been seen before — that point's multiples.
+enum Negated {
+    Point(Point),
+    Multiples(Arc<Multiples>),
+}
+
+impl Negated {
+    /// A key that has signed once is likely to sign again — on a chain the same validators
+    /// sign every block — and its multiples cost about one verification to work out and save
+    /// most of every verification after. So the first time it is decoded and used as it is, and
+    /// the second its multiples are worked out and kept. What is kept changes how fast a
+    /// signature is checked and never whether it is accepted.
+    fn of(key: &[u8; 32]) -> Option<Negated> {
+        static KNOWN: OnceLock<Known> = OnceLock::new();
+        let known = KNOWN.get_or_init(|| Mutex::new(BTreeMap::new()));
+        let before = known.lock().expect("nothing panics holding it").get(key).cloned();
+        if let Some(Some(multiples)) = before {
+            return Some(Negated::Multiples(multiples));
+        }
+        let point = Point::decode(key)?.neg();
+        let multiples = before.map(|_| Arc::new(Multiples::of(&point)));
+        let mut known = known.lock().expect("nothing panics holding it");
+        if known.len() >= KEYS_REMEMBERED {
+            known.clear();
+        }
+        known.insert(*key, multiples.clone());
+        Some(match multiples {
+            Some(multiples) => Negated::Multiples(multiples),
+            None => Negated::Point(point),
+        })
+    }
+
+    fn times(&self, scalar: &[u8; 32]) -> Point {
+        match self {
+            Negated::Point(point) => point.mul(scalar),
+            Negated::Multiples(multiples) => multiples.times(scalar),
+        }
+    }
 }
 
 /// The order of the base point, as four little-endian 64-bit limbs.
@@ -689,7 +826,7 @@ impl PublicKey {
         if !is_canonical_scalar(&s) {
             return false;
         }
-        let Some(a) = Point::decode(&self.0) else {
+        let Some(minus_a) = Negated::of(&self.0) else {
             return false;
         };
         let mut challenge = Sha512::new();
@@ -697,7 +834,7 @@ impl PublicKey {
         challenge.update(&self.0);
         challenge.update(message);
         let k = scalar_from_hash(&challenge.finish());
-        let check = Point::mul_base(&s).add(&a.neg().mul(&k));
+        let check = Point::mul_base(&s).add(&minus_a.times(&k));
         check.encode() == big_r
     }
 
@@ -913,12 +1050,78 @@ mod tests {
     #[test]
     fn the_two_ways_of_multiplying_agree() {
         for seed in 0u8..6 {
-            let scalar = crate::sha2::sha256(&[seed; 5]);
+            let mut scalar = crate::sha2::sha256(&[seed; 5]);
+            // Every scalar either is used with lies below 2²⁵⁵: a clamped secret, or anything
+            // reduced modulo L.
+            scalar[31] &= 127;
             assert_eq!(
                 Point::mul_base(&scalar).encode(),
                 BASE.mul(&scalar).encode(),
                 "fixed-base and variable-base multiplication disagree"
             );
+        }
+    }
+
+    /// A point's table of multiples gives what the ladder gives, for any scalar — including
+    /// the ones whose digits all carry, and the largest there can be.
+    #[test]
+    fn a_table_of_multiples_is_the_ladder_done_early() {
+        let point = BASE.mul(&crate::sha2::sha256(b"some point")).double();
+        let multiples = Multiples::of(&point);
+        let mut scalars: Vec<[u8; 32]> = (0u8..8)
+            .map(|i| {
+                let mut s = crate::sha2::sha256(&[i; 3]);
+                s[31] &= 127;
+                s
+            })
+            .collect();
+        let mut all_eights = [0x88u8; 32];
+        all_eights[31] = 0x78;
+        let mut largest = [0xffu8; 32];
+        largest[31] = 0x7f;
+        let mut one = [0u8; 32];
+        one[0] = 1;
+        scalars.extend([[0u8; 32], one, all_eights, largest, scalar_bytes(L)]);
+        for scalar in &scalars {
+            assert_eq!(
+                multiples.times(scalar).encode(),
+                point.mul(scalar).encode(),
+                "{}",
+                crate::hex(scalar)
+            );
+        }
+        // And the digits add back up to the scalar they came from.
+        for scalar in &scalars {
+            let digits = signed_digits(scalar);
+            assert!(digits.iter().all(|d| (-8..=8).contains(d)));
+            let mut value = [0i64; 33];
+            for (i, d) in digits.iter().enumerate() {
+                value[i / 2] += (*d as i64) << (4 * (i % 2));
+            }
+            let mut bytes = [0u8; 32];
+            let mut carry = 0i64;
+            for i in 0..32 {
+                let v = value[i] + carry;
+                bytes[i] = v.rem_euclid(256) as u8;
+                carry = v.div_euclid(256);
+            }
+            assert_eq!(carry, 0);
+            assert_eq!(&bytes, scalar);
+        }
+    }
+
+    /// A key verified often has its multiples kept, and what is kept never changes a verdict:
+    /// the same good signature holds every time and the same bad one fails every time.
+    #[test]
+    fn remembering_a_key_changes_nothing_but_the_time() {
+        let key = SigningKey::from_seed([0x5a; 32]);
+        let good = key.sign(b"pay seven");
+        let mut bad = good;
+        bad.0[40] ^= 1;
+        for _ in 0..4 {
+            assert!(key.public().verify(b"pay seven", &good));
+            assert!(!key.public().verify(b"pay seven", &bad));
+            assert!(!key.public().verify(b"pay eight", &good));
         }
     }
 }
@@ -948,6 +1151,22 @@ mod measure {
             ok += key.public().verify(&message, &last) as u32;
         }
         let verifying = start.elapsed() / n;
+        // A key checked for the first time, which is done the long way.
+        let fresh: Vec<(SigningKey, Signature)> = (0..200u32)
+            .map(|i| {
+                let mut seed = [3u8; 32];
+                seed[..4].copy_from_slice(&i.to_le_bytes());
+                let key = SigningKey::from_seed(seed);
+                let signature = key.sign(&message);
+                (key, signature)
+            })
+            .collect();
+        let start = std::time::Instant::now();
+        for (key, signature) in &fresh {
+            ok += key.public().verify(&message, signature) as u32;
+        }
+        let first_time = start.elapsed() / fresh.len() as u32;
+        eprintln!("verify a key seen before {verifying:?}, a key never seen {first_time:?}");
         let start = std::time::Instant::now();
         for i in 0..n {
             let _ = crate::sha2::sha256(&[message.as_slice(), &i.to_le_bytes()].concat());

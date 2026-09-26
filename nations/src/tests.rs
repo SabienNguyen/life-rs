@@ -227,6 +227,56 @@ fn the_stable_token_is_backed_one_for_one() {
     assert!(on_chain.minted > on_chain.supply, "tokens are redeemed as well as minted");
 }
 
+/// A chain is used by the houses that founded it, not by capitals alone: every state big enough
+/// to have its own market house pays for its own trade abroad. And what two houses pay each
+/// other in a month is not the same both ways — orders come in lumps — though over a year what
+/// a country buys and sells balances.
+#[test]
+fn the_houses_that_found_a_chain_are_the_ones_that_use_it() {
+    let world = chained();
+    let network = &world.networks[0];
+    let token = network.token.as_ref().expect("a token was issued").id;
+    let mut payers = std::collections::BTreeSet::new();
+    let mut flows = std::collections::BTreeMap::new();
+    for block in &network.chain.blocks {
+        for tx in &block.txs {
+            if let chain::Action::Pay {
+                to,
+                asset: chain::Asset::Token(id),
+                amount,
+            } = &tx.action
+                && *id == token
+                && let (Some(from), Some(to)) = (network.town_of(&tx.sender()), network.town_of(to))
+            {
+                payers.insert(from);
+                *flows.entry((block.header.height, from, to)).or_insert(0u128) += amount;
+            }
+        }
+    }
+    let capitals: std::collections::BTreeSet<usize> = world.countries.iter().map(|c| c.capital).collect();
+    assert!(
+        payers.difference(&capitals).count() >= world.countries.len(),
+        "{} houses pay, of which {} are capitals",
+        payers.len(),
+        payers.intersection(&capitals).count()
+    );
+    let mirrored = flows
+        .iter()
+        .filter(|((height, a, b), paid)| flows.get(&(*height, *b, *a)) == Some(paid))
+        .count();
+    assert!(mirrored * 20 < flows.len(), "{mirrored} of {} monthly flows mirrored", flows.len());
+}
+
+/// A house does not send what it cannot pay the fee for: the founders keep enough coin liquid to
+/// pay a chain's fees while checking is dear, the houses that join buy theirs from those with
+/// coin to spare, and the issuer and attestor budget for their own. So the chain refuses nothing
+/// the world sends it.
+#[test]
+fn nothing_the_world_sends_its_chain_is_refused() {
+    let network = &chained().networks[0];
+    assert_eq!(network.refused, 0, "{:?}", network.refusals);
+}
+
 /// What a chain is for: paying abroad costs less once there is one.
 #[test]
 fn a_chain_makes_paying_abroad_cheaper() {
