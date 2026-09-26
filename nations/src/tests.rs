@@ -479,6 +479,39 @@ fn a_house_that_signs_twice_is_caught_and_the_chain_mended() {
     assert_eq!(light, Ok(network.chain.height()));
 }
 
+/// The world that found the gap. 0x5f's smaller country has one house on its chain, Lingquay,
+/// and in year 565 that house is caught signing twice. Before a caught house could come back
+/// under a key it keeps for staking, nobody in that country could ever bond again, and the other
+/// held the whole of the stake from then on; now Lingquay is back the same year, and no country
+/// holds more than its three fifths.
+#[test]
+fn a_country_whose_only_house_is_caught_keeps_its_share() {
+    let mut world = Nations::found(WorldSeed::from_u128(0x5f));
+    world.run(570);
+    let caught = world
+        .history
+        .iter()
+        .find_map(|e| match e {
+            Event::Slashed { town, .. } => Some(*town),
+            _ => None,
+        })
+        .expect("a house is caught");
+    let network = &world.networks[0];
+    let country = world.towns[caught].country;
+    let houses = network.houses().filter(|t| world.towns[*t].country == country).count();
+    assert_eq!(houses, 1, "the one house its country has on the chain");
+    assert!(network.validators().contains(&caught));
+    assert_ne!(network.staking_address(caught), network.address_of(caught));
+    let (largest, share) = network::largest_country_share(&world, 0).expect("validators");
+    assert!(
+        share <= network::ONE_COUNTRY_AT_MOST + 1e-3,
+        "{} holds {:.1}% of the stake",
+        world.countries[largest].name,
+        100.0 * share
+    );
+    assert_eq!(network.refused, 0, "{:?}", network.refusals);
+}
+
 /// A world that is one country has a house everybody in it can pay through, and never builds a
 /// ledger nobody keeps.
 #[test]

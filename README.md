@@ -216,7 +216,7 @@ tokens against attested reserves
 </td></tr>
 </table>
 
-**838 tests.** Most of them are about a claim rather than a function.
+**839 tests.** Most of them are about a claim rather than a function.
 
 ---
 
