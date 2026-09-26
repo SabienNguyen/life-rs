@@ -307,6 +307,12 @@ pub struct Nations {
     /// nobody runs. With it off every link in the market tree costs as much as a link can, and
     /// each town lives on what it grows.
     pub trade_is_possible: bool,
+    /// Whether being paid abroad costs anything — the ablation that asks what borders cost a
+    /// world. With it on, a payment across a border costs what one at home does: nothing more
+    /// than the carriage and handling every link pays.
+    pub borders_are_free: bool,
+    /// Whether houses may found a ledger nobody keeps — the ablation that asks what one is worth.
+    pub chains_are_possible: bool,
     tastes: Tastes,
     distances: Vec<Vec<f64>>,
     reach_km: f64,
@@ -432,6 +438,8 @@ impl Nations {
             readings: Vec::new(),
             world_price: 1.0,
             trade_is_possible: true,
+            borders_are_free: false,
+            chains_are_possible: true,
             tastes: Tastes::ORDINARY,
             distances,
             reach_km,
@@ -489,6 +497,18 @@ impl Nations {
             .map(|t| t.people.round().clamp(0.0, u32::MAX as f64) as u32)
             .collect();
         let found = self.cultures.countries(&souls, |a, b| self.within_reach(a, b));
+        // What paying abroad cost each country last year carries over to the country with the
+        // same key, since it is what this year's market is priced with: it is only worked out
+        // again once the year's trade is known. Redrawing the countries used to set it back to
+        // nothing, so for as long as the map was redrawn every year no border ever cost anything,
+        // and the chain lowered a number nothing read. A country new this year starts where the
+        // others stood on average.
+        let carried: BTreeMap<usize, f64> = self.countries.iter().map(|c| (c.key, c.pay_cost)).collect();
+        let usual = if carried.is_empty() {
+            0.0
+        } else {
+            carried.values().sum::<f64>() / carried.len() as f64
+        };
         let mut countries: Vec<Country> = Vec::new();
         for c in found {
             let mut towns = c.places.clone();
@@ -512,7 +532,7 @@ impl Nations {
                 people: 0.0,
                 product: 0.0,
                 exports: 0.0,
-                pay_cost: 0.0,
+                pay_cost: carried.get(&key).copied().unwrap_or(usual),
             });
         }
         // Largest first, then by key, so the order is stable.
@@ -1114,7 +1134,9 @@ impl Nations {
                 weighted += flow * cost;
                 volume += flow;
             }
-            self.countries[c].pay_cost = if volume > 0.0 {
+            self.countries[c].pay_cost = if self.borders_are_free {
+                0.0
+            } else if volume > 0.0 {
                 weighted / volume
             } else if self.countries.len() > 1 {
                 // Nothing paid abroad last year: what the first payment would cost.

@@ -427,14 +427,14 @@ Nothing below is scheduled:
   Then ideas outrun mouths, the demographic transition follows, and farmers fall from four in
   five to one in ten.
 - **Markets end famines.** The same world with nothing able to move between towns starves
-  three times as often.
+  more than twice as often.
 - **Then a chain.** When houses in different countries have no keeper they all trust, at least
   four of them can check a ledger fast enough, and checking costs a third of what their
   distrust does, they found one none of them keeps. Every state's market house pays for its
   own trade on it; a stable token is minted only against a reserve somebody else vouches for;
   coin trades against it in swaps both sides sign; and no country holds the two thirds of the
   stake that would let it finalise a block alone. Paying abroad falls from nine per cent of a
-  payment to under two.
+  payment to under two, and trade across borders rises by a fifth to a quarter.
 
 It is a real chain: SHA-256, Ed25519 and Merkle trees written from their standards and checked
 against the RFC vectors and OpenSSL; Byzantine-fault-tolerant proof of stake, with a block final

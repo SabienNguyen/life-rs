@@ -178,7 +178,7 @@ fn key_for(nations: &Nations, network: usize, town: usize) -> SigningKey {
 /// A year of every ledger: founding one if it has become worth founding, then twelve blocks of
 /// each.
 pub(crate) fn year(nations: &mut Nations) {
-    if nations.networks.is_empty() {
+    if nations.networks.is_empty() && nations.chains_are_possible {
         consider_founding(nations);
     }
     for at in 0..nations.networks.len() {
@@ -705,9 +705,11 @@ impl Price {
 /// tokens.
 fn fund(nations: &mut Nations, at: usize, town: usize, wanted: u128) -> Vec<(usize, u128)> {
     let price = Price::now(&nations.networks[at]);
-    fund_keeping(nations, at, town, wanted, &BTreeMap::new(), price)
+    fund_keeping(nations, at, town, wanted, &BTreeMap::new(), price, 0)
 }
 
+/// `owing` is what the buyer must still pay others in tokens this month, which it never spends
+/// on coin.
 fn fund_keeping(
     nations: &mut Nations,
     at: usize,
@@ -715,6 +717,7 @@ fn fund_keeping(
     wanted: u128,
     keeping: &BTreeMap<usize, u128>,
     price: Option<Price>,
+    owing: u128,
 ) -> Vec<(usize, u128)> {
     let mut paid = Vec::new();
     let network = &mut nations.networks[at];
@@ -751,7 +754,10 @@ fn fund_keeping(
             && let Some(seller_address) = network.address_of(seller)
             && let Some(buyer_key) = network.keys.get(&town)
         {
-            let tokens = network.chain.pending_balance(&address, Asset::Token(price.token));
+            let tokens = network
+                .chain
+                .pending_balance(&address, Asset::Token(price.token))
+                .saturating_sub(owing);
             let coin = amount.min(price.buys(tokens));
             let cost = price.of(coin);
             if coin > 0 && cost > 0 {
@@ -1030,13 +1036,26 @@ fn settle_month(
         .map(|(t, need)| (*t, need + COIN / 100))
         .collect();
     let price = Price::now(&nations.networks[at]);
-    // The two houses that must sign before anybody can be paid this month make sure of their
-    // own fees first.
-    let mut incoming: BTreeMap<usize, u128> = BTreeMap::new();
-    for town in [token.attestor, token.issuer] {
+    // The two houses that must sign before there are any new tokens this month — the attestor
+    // and the issuer — pay those fees with coin bought the month before, so they buy two months'
+    // worth when the others buy one. Only when that is short, as in a chain's first month, do they
+    // buy before the mints, with whatever tokens they hold and over the counter for the rest.
+    let first = [token.attestor, token.issuer];
+    let target = |town: usize| {
         let need = keeping.get(&town).copied().unwrap_or(0);
-        for (seller, tokens) in fund_keeping(nations, at, town, need, &keeping, price) {
-            *incoming.entry(seller).or_insert(0) += tokens;
+        if first.contains(&town) { 2 * need } else { need }
+    };
+    let mut incoming: BTreeMap<usize, u128> = BTreeMap::new();
+    for town in first {
+        let need = keeping.get(&town).copied().unwrap_or(0);
+        let have = nations.networks[at]
+            .address_of(town)
+            .map(|a| nations.networks[at].chain.pending_balance(&a, Asset::Coin))
+            .unwrap_or(0);
+        if have < need {
+            for (seller, tokens) in fund_keeping(nations, at, town, need, &keeping, price, 0) {
+                *incoming.entry(seller).or_insert(0) += tokens;
+            }
         }
     }
 
@@ -1047,14 +1066,19 @@ fn settle_month(
         *outgoing.entry(*from).or_insert(0) += units;
         *incoming.entry(*to).or_insert(0) += units;
     }
+    let owing = outgoing.clone();
     if let Some(price) = price {
         let network = &nations.networks[at];
-        for (town, need) in &keeping {
+        for town in keeping.keys() {
             let Some(address) = network.address_of(*town) else {
                 continue;
             };
-            let short = need.saturating_sub(network.chain.pending_balance(&address, Asset::Coin));
-            if short > 0 && *town != token.attestor && *town != token.issuer {
+            // The attestor and issuer pay their own fees between now and buying, so their tokens
+            // are planned with a month's fees to spare.
+            let spare = if first.contains(town) { keeping[town] } else { 0 };
+            let short = (target(*town) + spare)
+                .saturating_sub(network.chain.pending_balance(&address, Asset::Coin));
+            if short > 0 {
                 *outgoing.entry(*town).or_insert(0) += price.of(short) + TOKEN_UNIT;
             }
         }
@@ -1107,11 +1131,9 @@ fn settle_month(
         }
     }
     // Houses buy the coin their fees will take from the houses with most to spare.
-    for (town, need) in &keeping {
-        if *town == token.attestor || *town == token.issuer {
-            continue;
-        }
-        for (seller, tokens) in fund_keeping(nations, at, *town, *need, &keeping, price) {
+    for town in keeping.keys() {
+        let owes = owing.get(town).copied().unwrap_or(0);
+        for (seller, tokens) in fund_keeping(nations, at, *town, target(*town), &keeping, price, owes) {
             *incoming.entry(seller).or_insert(0) += tokens;
         }
     }

@@ -7,10 +7,11 @@ use sim_core::WorldSeed;
 
 use crate::*;
 
-/// A world that founds a chain, run until it does and thirty years beyond.
+/// A world that founds a chain, run until it does and a century beyond — long enough for checking
+/// to have become cheap, which is when a chain does most of what it is for.
 ///
-/// Shared, because getting there is five centuries of history — cheap at this scale, a second or
-/// two, but not something every test should pay for again.
+/// Shared, because getting there is six centuries of history — cheap at this scale, a few
+/// seconds, but not something every test should pay for again.
 fn chained() -> &'static Nations {
     static WORLD: OnceLock<Nations> = OnceLock::new();
     WORLD.get_or_init(|| {
@@ -19,7 +20,7 @@ fn chained() -> &'static Nations {
             world.year();
         }
         assert!(!world.networks.is_empty(), "seed 0x11 founds a chain within eight centuries");
-        world.run(30);
+        world.run(100);
         world
     })
 }
@@ -240,7 +241,7 @@ fn stake_over_the_cap_goes_to_the_others() {
 #[test]
 fn the_chain_a_world_keeps_can_be_checked_from_its_genesis() {
     let network = &chained().networks[0];
-    assert!(network.chain.height() >= 12 * 30, "thirty years of monthly blocks");
+    assert!(network.chain.height() >= 12 * 100, "a century of monthly blocks");
     assert_eq!(network.chain.verify(), Ok(()));
     assert_eq!(network.chain.ledger.broken_law(), None);
 }
@@ -347,6 +348,30 @@ fn a_chain_makes_paying_abroad_cheaper() {
         now < 0.8 * bank,
         "{now:.3} with the chain against {bank:.3} through houses, founded {founded}"
     );
+}
+
+/// What a chain is for, as the world feels it: the same world with no chain trades less across
+/// its borders, and one where paying abroad costs nothing at all trades a little more. The chain
+/// gets most of the way there. It does not have to move income much — trade abroad is a few per
+/// cent of what a world makes — but it has to move trade, or it has changed nothing.
+///
+/// Written after finding that it had changed nothing: redrawing the countries every year reset
+/// what paying abroad cost before the market read it, so the chain lowered a number nobody used.
+#[test]
+fn a_chain_widens_the_markets_it_touches() {
+    let world = chained();
+    let traded = |w: &Nations| w.readings.last().expect("a year has passed").traded;
+    let otherwise = |free: bool, chains: bool| {
+        let mut other = Nations::found(WorldSeed::from_u128(0x11));
+        other.borders_are_free = free;
+        other.chains_are_possible = chains;
+        other.run(world.year);
+        traded(&other)
+    };
+    let (without, with, free) = (otherwise(false, false), traded(world), otherwise(true, true));
+    assert!(with > 1.1 * without, "{with:.4} traded abroad with the chain, {without:.4} without");
+    assert!(with <= 1.01 * free, "{with:.4} with the chain, {free:.4} with free borders");
+    assert!(with - without > 0.5 * (free - without), "most of the way: {without:.4} → {with:.4} of {free:.4}");
 }
 
 /// A world that is one country has a house everybody in it can pay through, and never builds a
