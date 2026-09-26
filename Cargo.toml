@@ -2,6 +2,7 @@
 members = [
     "biome",
     "bonds",
+    "chain",
     "climate",
     "cosmos",
     "culture",

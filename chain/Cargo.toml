@@ -1,0 +1,11 @@
+[package]
+name = "chain"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# No dependencies, on purpose. A ledger whose rules rest on another crate's freedom to change
+# its internals is a ledger whose history can change under it — the same argument `sim-core`
+# makes for writing its own generator. Every primitive here is a fixed, published algorithm
+# checked against its published test vectors.
+[dependencies]
