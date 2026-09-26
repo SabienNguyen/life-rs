@@ -171,6 +171,18 @@ fn a_light_client_follows_the_chain_by_its_headers() {
         Err((3, Invalid::WrongValidators)),
         "their set is not the one the header before handed over to"
     );
+
+    // Most light clients start from a header they already trust rather than from the genesis:
+    // from height 2, the same chain follows to the tip, and the same doctoring is caught.
+    assert_eq!(light::follow_from(&blocks[2], &blocks[3..]), Ok(world.chain.height()));
+    assert_eq!(
+        light::follow_from(&blocks[2], &doctored[3..]),
+        Err((3, Invalid::Commit(consensus::NoQuorum::StrayVote)))
+    );
+    // And the checkpoint itself must be final: one whose commit was stripped is not.
+    let mut unsigned = blocks[2].clone();
+    unsigned.commit.votes.truncate(1);
+    assert!(matches!(light::follow_from(&unsigned, &blocks[3..]), Err((2, Invalid::Commit(_)))));
 }
 
 #[test]

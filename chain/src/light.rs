@@ -33,7 +33,6 @@ pub struct LightBlock {
 /// height of the last header it can trust, or the first height that fails and why.
 pub fn follow(genesis: &Genesis, blocks: &[LightBlock]) -> Result<u64, (u64, Invalid)> {
     genesis.check().map_err(|why| (0, Invalid::BadGenesis(why)))?;
-    let id = genesis.id();
     let Some(first) = blocks.first() else {
         return Err((0, Invalid::NotGenesis));
     };
@@ -41,12 +40,23 @@ pub fn follow(genesis: &Genesis, blocks: &[LightBlock]) -> Result<u64, (u64, Inv
     if first.header != genesis_header_of(genesis) {
         return Err((0, Invalid::NotGenesis));
     }
-    is_final(first, id).map_err(|why| (0, why))?;
-    for pair in blocks.windows(2) {
-        let (before, next) = (&pair[0], &pair[1]);
+    follow_from(first, &blocks[1..])
+}
+
+/// Follow a chain from a header already trusted — a checkpoint somebody was given, or one they
+/// followed to before — through light blocks for every height after it, as most light clients
+/// start. The trusted block's own commit is checked too; what cannot be checked from here is
+/// that the checkpoint is really the chain's, which is what trusting it means. Returns the height
+/// of the last header it can trust, or the first that fails and why.
+pub fn follow_from(trusted: &LightBlock, blocks: &[LightBlock]) -> Result<u64, (u64, Invalid)> {
+    let id = trusted.header.chain;
+    is_final(trusted, id).map_err(|why| (trusted.header.height, why))?;
+    let mut before = trusted;
+    for next in blocks {
         follows(before, next, id).map_err(|why| (next.header.height, why))?;
+        before = next;
     }
-    Ok(blocks.last().expect("not empty").header.height)
+    Ok(before.header.height)
 }
 
 /// Whether a light block's commit makes its header final by the set it carries, and that set is

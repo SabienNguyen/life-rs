@@ -5787,7 +5787,9 @@ The standard is design principle five's: the mechanism is real and the resolutio
   thirds of that set's stake checked to have signed it — never a transaction. On 0x11 at year
   600 that is 2,196 headers in under half a second, against four seconds for the full replay,
   and a forged header or a set of strangers signing one is caught at its height
-  (`chain::light`).
+  (`chain::light`). Most light clients start not from the genesis but from a header they
+  already trust, and `light::follow_from` does that too, checking the trusted header's own
+  commit before anything after it.
 - A chain is also a file, in the same canonical encoding: its genesis and every block, which is
   everything anybody needs to check it (`chain::file`). Reading is as strict as signing —
   whatever reads writes back to the same bytes — and `--verify-chain` checks a file with nothing
@@ -5802,7 +5804,13 @@ The standard is design principle five's: the mechanism is real and the resolutio
   names; the validators and stake it commits to are the ones whose signatures make up more than
   two thirds; and any account's balance is proved into its state root by a path of hashes. The
   page does all of this in the browser, with the browser's own SHA-256 and Ed25519, and has a
-  button that changes one byte of one account to show the proof failing.
+  button that changes one byte of one account to show the proof failing. It also follows the
+  last forty-eight headers as a light client would, from the first of them: each must name the
+  header before, the commit that made it final and the set it handed over to, and what every
+  validator signed the page works out from the header itself before the browser checks the
+  signature — on 0x11 at year 600, 332 signatures in under a fifth of a second. Change one bit
+  of one of them and the following stops, at that header or the next, whose link to the commit
+  before no longer holds.
 
 **Stake, not work**, and the reason is a simulation's. Proof of work's security is the real cost
 of the hashing, so a simulated world whose miners grow a thousandfold must either hash a thousand

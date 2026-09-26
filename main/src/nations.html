@@ -265,6 +265,16 @@ function amount(v) {
   return v.toFixed(0);
 }
 function pct(v) { return (100 * v).toFixed(1) + "%"; }
+// Where a header keeps each field, as the chain writes it: the tag, then the chain's id, the
+// height, the round, the time, the parent, the last commit, the transaction root and count, the
+// state root, this set and the next, and the proposer — little-endian throughout.
+const AT = { chain: 26, height: 58, round: 66, time: 70, parent: 78, lastCommit: 110, validators: 210, next: 242, end: 294 };
+function little(bytes, at, n) {
+  let v = BigInt(0);
+  for (let i = n - 1; i >= 0; i--) v = v * BigInt(256) + BigInt(bytes[at + i]);
+  return v;
+}
+function lightHeight(c, i) { return Number(little(unhex(c.light.blocks[i].header), AT.height, 8)); }
 // Coin from base units, as the report writes it: whole coin where there is plenty, three
 // figures where there is less.
 function coinText(base) {
@@ -638,7 +648,11 @@ drawCountries();
       "<p class='muted'>Your browser can check block #" + c.proof.height + " with its own SHA-256 and Ed25519, taking nothing on this page's word: that its header hashes to its name and holds its state root, that more than two thirds of the stake signed it, and that every house's balance is in the state it commits to.</p>" +
       "<div style='display:flex;gap:8px;flex-wrap:wrap'><button class='toggle' style='float:none' id='check" + at + "'>Check block #" + c.proof.height + "</button>" +
       "<button class='toggle' style='float:none' id='tamper" + at + "'>Check it with one byte changed</button></div>" +
-      "<div id='checked" + at + "' style='margin-top:10px'></div></div>";
+      "<div id='checked" + at + "' style='margin-top:10px'></div>" +
+      "<p class='muted' style='margin-top:14px'>Or follow the last " + c.light.blocks.length + " blocks by their headers alone, as a light client does — from block #" + lightHeight(c, 0) + ", taken as given as a light client takes the header it starts from, every header after it must name the one before, its commit, and the set of validators the one before handed over to, and carry more than two thirds of that set's stake in signatures your browser checks.</p>" +
+      "<div style='display:flex;gap:8px;flex-wrap:wrap'><button class='toggle' style='float:none' id='follow" + at + "'>Follow " + c.light.blocks.length + " headers</button>" +
+      "<button class='toggle' style='float:none' id='forge" + at + "'>Follow them with one signature changed</button></div>" +
+      "<div id='followed" + at + "' style='margin-top:10px'></div></div>";
   }).join("");
   WORLD.chains.forEach(function (c, at) {
     const strip = $("blocks" + at);
@@ -653,6 +667,8 @@ drawCountries();
     drawLife(at);
     $("check" + at).addEventListener("click", function () { checkYourself(at, false); });
     $("tamper" + at).addEventListener("click", function () { checkYourself(at, true); });
+    $("follow" + at).addEventListener("click", function () { followHeaders(at, false); });
+    $("forge" + at).addEventListener("click", function () { followHeaders(at, true); });
   });
   window.addEventListener("resize", function () {
     requestAnimationFrame(function () { WORLD.chains.forEach(function (c, at) { drawLife(at); }); });
@@ -781,6 +797,99 @@ async function ed25519Holds(keyHex, signatureHex, messageHex) {
   const key = await crypto.subtle.importKey("raw", unhex(keyHex), { name: "Ed25519" }, false, ["verify"]);
   return crypto.subtle.verify({ name: "Ed25519" }, key, unhex(signatureHex), unhex(messageHex));
 }
+// ---- following headers --------------------------------------------------------------
+// The encoding's own tag: its length, four bytes, then its text.
+function tagOf(text) {
+  const t = new TextEncoder().encode(text);
+  return joined([new Uint8Array([t.length, 0, 0, 0]), t]);
+}
+function le(value, n) {
+  const out = new Uint8Array(n);
+  let v = BigInt(value);
+  for (let i = 0; i < n; i++) { out[i] = Number(v % BigInt(256)); v = v / BigInt(256); }
+  return out;
+}
+async function followHeaders(at, forge) {
+  const c = WORLD.chains[at];
+  const out = $("followed" + at);
+  const lines = [];
+  const say = function (ok, text) {
+    lines.push("<li><span class='" + (ok ? "ok" : "bad") + "'>" + (ok ? "✓ holds" : "✗ fails") + "</span> " + text + "</li>");
+    out.innerHTML = "<ul class='events' style='max-height:none'>" + lines.join("") + "</ul>";
+  };
+  out.innerHTML = "<p class='muted'>Following…</p>";
+  try {
+    const blocks = c.light.blocks.map(function (b) { return { header: unhex(b.header), round: b.round, votes: b.votes.map(function (v) { return v.slice(); }) }; });
+    const middle = Math.floor(blocks.length / 2);
+    const forgedAt = little(blocks[middle].header, AT.height, 8);
+    if (forge && blocks[middle].votes.length) {
+      // One bit of one validator's signature on one header in the middle — the least a forger
+      // could change.
+      const sig = unhex(blocks[middle].votes[0][1]);
+      sig[0] ^= 1;
+      blocks[middle].votes[0][1] = hexOf(sig);
+    }
+    const setAt = function (height) {
+      let set = null;
+      c.light.sets.forEach(function (s) { if (s.from <= height) set = s; });
+      return set;
+    };
+    let before = null, verifiedSignatures = 0, failed = null;
+    for (let i = 0; i < blocks.length && failed === null; i++) {
+      const b = blocks[i], h = b.header;
+      const height = little(h, AT.height, 8);
+      const hash = await sha256(h);
+      const fail = function (why) { failed = "at #" + height + ": " + why; };
+      if (before !== null) {
+        const was = before.header;
+        if (height !== little(was, AT.height, 8) + BigInt(1)) { fail("its height does not follow"); break; }
+        if (hexOf(h.slice(AT.parent, AT.parent + 32)) !== hexOf(before.hash)) { fail("it does not name the header before as its parent"); break; }
+        if (little(h, AT.time, 8) <= little(was, AT.time, 8)) { fail("its time goes backwards"); break; }
+        if (hexOf(h.slice(AT.validators, AT.validators + 32)) !== hexOf(was.slice(AT.next, AT.next + 32))) { fail("its signers are not the set the header before handed over to"); break; }
+        // The commit before, hashed as the chain hashes one: the round, and the Merkle root of
+        // the votes as each is encoded — what was signed, the key, the signature.
+        const leaves = [];
+        for (const v of before.encoded) leaves.push(await sha256(joined([new Uint8Array([0]), v])));
+        const commit = await sha256(joined([tagOf("life-rs/chain/commit/1"), le(before.round, 4), await merkleRoot(leaves)]));
+        if (hexOf(h.slice(AT.lastCommit, AT.lastCommit + 32)) !== hexOf(commit)) { fail("it does not name the commit that made the header before final"); break; }
+      }
+      // The set that signed it, which must be the one the header names.
+      const set = setAt(Number(height));
+      const setLeaves = [];
+      for (const v of set.members) setLeaves.push(await validatorLeaf(v));
+      if (hexOf(await merkleRoot(setLeaves)) !== hexOf(h.slice(AT.validators, AT.validators + 32))) { fail("the set given is not the one it names"); break; }
+      // Every vote: what the validator signed is worked out here, from the header — the chain's
+      // id, the height, the round and the block's name — and the browser checks the signature.
+      const payload = joined([tagOf("life-rs/chain/precommit/1"), h.slice(AT.chain, AT.chain + 32), le(height, 8), le(b.round, 4), hash]);
+      const power = {};
+      let total = 0;
+      set.members.forEach(function (v) { power[v.key] = v.power; total += v.power; });
+      let signed = 0;
+      const seen = {};
+      const encoded = [];
+      for (const [key, signature] of b.votes) {
+        encoded.push(joined([payload, unhex(key), unhex(signature)]));
+        if (power[key] === undefined || seen[key]) continue;
+        if (await ed25519Holds(key, signature, hexOf(payload))) {
+          seen[key] = true;
+          signed += power[key];
+          verifiedSignatures += 1;
+        }
+      }
+      if (3 * signed <= 2 * total) { fail("its signatures carry " + pct(signed / Math.max(1, total)) + " of the stake, not more than two thirds"); break; }
+      before = { header: h, hash: hash, round: b.round, encoded: encoded };
+    }
+    if (failed === null) {
+      say(true, "followed " + blocks.length + " headers, #" + lightHeight(c, 0) + " to #" + lightHeight(c, blocks.length - 1) + ": each names the one before, its commit and the set it handed over to, and " + verifiedSignatures + " signatures, checked by your browser, carry more than two thirds of each set's stake — never a transaction");
+    } else {
+      say(false, "the headers stop being the chain's " + failed + (forge ? " — one bit of one signature on #" + forgedAt + " having been changed" : ""));
+    }
+  } catch (e) {
+    lines.push("<li class='bad'>The check could not run here: " + esc(String(e)) + "</li>");
+    out.innerHTML = "<ul class='events' style='max-height:none'>" + lines.join("") + "</ul>";
+  }
+}
+
 async function checkYourself(at, tamper) {
   const c = WORLD.chains[at];
   const p = c.proof;

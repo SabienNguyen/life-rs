@@ -70,7 +70,7 @@ pub mod tx;
 pub use block::{Block, Header};
 pub use consensus::{Commit, ValidatorSet, Vote};
 pub use ed25519::{PublicKey, Signature, SigningKey};
-pub use light::LightBlock;
+pub use light::{LightBlock, follow, follow_from};
 pub use node::{Chain, Committed, Genesis, Invalid};
 pub use state::{Ledger, MAX_SUPPLY, MAX_TOKENS, Params, Refusal, Token};
 pub use tx::{Action, Address, Asset, COIN, Swap, TOKEN_UNIT, Transaction};

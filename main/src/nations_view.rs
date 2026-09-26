@@ -1058,6 +1058,7 @@ fn network_json(world: &Nations, at: usize, network: &Network, checked: Option<&
     };
     let ledger = &chain.ledger;
     let proof = check_it_yourself(network);
+    let light = light_window(network);
     let history = list(
         tally(network)
             .into_iter()
@@ -1080,7 +1081,7 @@ fn network_json(world: &Nations, at: usize, network: &Network, checked: Option<&
         None => "null".to_string(),
     };
     format!(
-        "{{\"name\":{},\"id\":{},\"founded\":{},\"founders\":{},\"largestCountry\":{largest},\"height\":{},\"stalls\":{},\"refused\":{},\"roundsLost\":{},\"coin\":{{\"supply\":{},\"genesis\":{},\"issued\":{},\"burned\":{},\"price\":{}}},\"carried\":{},\"fees\":{},\"cost\":{},\"token\":{token},\"validators\":{validators},\"accounts\":{accounts},\"blocks\":{summary},\"recent\":{full},\"proof\":{proof},\"history\":{history},\"verified\":{verified}}}",
+        "{{\"name\":{},\"id\":{},\"founded\":{},\"founders\":{},\"largestCountry\":{largest},\"height\":{},\"stalls\":{},\"refused\":{},\"roundsLost\":{},\"coin\":{{\"supply\":{},\"genesis\":{},\"issued\":{},\"burned\":{},\"price\":{}}},\"carried\":{},\"fees\":{},\"cost\":{},\"token\":{token},\"validators\":{validators},\"accounts\":{accounts},\"blocks\":{summary},\"recent\":{full},\"proof\":{proof},\"light\":{light},\"history\":{history},\"verified\":{verified}}}",
         quoted(&network.name),
         quoted(&chain.id.to_string()),
         network.founded,
@@ -1169,6 +1170,53 @@ fn checkable(network: &Network) -> Checkable {
     }
 }
 
+/// How many of the latest blocks the page follows by their headers alone.
+const LIGHT_WINDOW: u64 = 48;
+
+/// The latest blocks as a light client is handed them (`chain::light`), for the page to follow
+/// from the first of them: each header's bytes, and the round and signatures of the commit that
+/// made it final — what each validator signed, the page works out for itself from the header —
+/// with the validator sets that signed them, each given once, from the height it began.
+fn light_blocks(network: &Network) -> Vec<chain::LightBlock> {
+    let tip = network.chain.height();
+    (tip.saturating_sub(LIGHT_WINDOW - 1)..=tip)
+        .filter_map(|h| network.chain.light_block(h))
+        .collect()
+}
+
+/// `light_blocks`, for the page.
+fn light_window(network: &Network) -> String {
+    let blocks = light_blocks(network);
+    let mut sets: Vec<(u64, &chain::ValidatorSet)> = Vec::new();
+    for b in &blocks {
+        if sets.last().is_none_or(|(_, set)| set.hash() != b.header.validators) {
+            sets.push((b.header.height, &b.validators));
+        }
+    }
+    let sets = list(sets.iter().map(|(from, set)| {
+        let members = list(set.members.iter().map(|v| {
+            format!(
+                "{{\"address\":{},\"key\":{},\"power\":{}}}",
+                quoted(&v.address.to_string()),
+                quoted(&chain::hex(&v.key.0)),
+                v.power
+            )
+        }));
+        format!("{{\"from\":{from},\"members\":{members}}}")
+    }));
+    let blocks = list(blocks.iter().map(|b| {
+        let votes = list(b.commit.votes.iter().map(|v| {
+            format!("[{},{}]", quoted(&chain::hex(&v.validator.0)), quoted(&chain::hex(&v.signature.0)))
+        }));
+        format!(
+            "{{\"header\":{},\"round\":{},\"votes\":{votes}}}",
+            quoted(&chain::hex(&b.header.encode())),
+            b.commit.round
+        )
+    }));
+    format!("{{\"sets\":{sets},\"blocks\":{blocks}}}")
+}
+
 /// `checkable`, for the page.
 fn check_it_yourself(network: &Network) -> String {
     let it = checkable(network);
@@ -1240,6 +1288,13 @@ mod tests {
         }
         world.run(2);
         let it = checkable(&world.networks[0]);
+        // The headers the page follows are ones a light client follows, from the first of them.
+        let window = light_blocks(&world.networks[0]);
+        assert_eq!(window.len() as u64, LIGHT_WINDOW.min(world.networks[0].chain.height() + 1));
+        assert_eq!(
+            chain::light::follow_from(&window[0], &window[1..]),
+            Ok(world.networks[0].chain.height())
+        );
         assert_eq!(chain::Digest::of(&it.header), it.hash);
         let holds_root = it.header.windows(32).any(|w| w == it.state_root.0);
         assert!(holds_root, "the header carries its state root");

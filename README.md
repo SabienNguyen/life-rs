@@ -481,9 +481,10 @@ genesis, every signature and root rechecked, before the report says a word about
 can be followed by its headers alone, as a light client follows a real chain. A validator
 caught signing a block twice loses a twentieth of its stake and that key's seat for good, comes
 back if at all under a key it keeps for staking, and the others bond what keeps every country
-within its three fifths of the stake. With `--html` the page shows all of it and checks the
-latest block in your own browser, with the browser's own SHA-256 and Ed25519. A world of one
-country never builds one — it has a house everybody can pay through.
+within its three fifths of the stake. With `--html` the page shows all of it, checks the latest
+block in your own browser with the browser's own SHA-256 and Ed25519, and follows the last
+forty-eight by their headers alone, as a light client would. A world of one country never
+builds one — it has a house everybody can pay through.
 
 A chain is also a file. `--export-chain wickport.chain` writes a world's chain down — its
 genesis and every block, 22 MB for 0x11's six centuries — and `--verify-chain wickport.chain`
