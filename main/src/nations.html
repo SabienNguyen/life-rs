@@ -622,9 +622,13 @@ drawCountries();
       "<div>in circulation</div><div>" + c.token.supply + "</div>" +
       "<div>reserve attested</div><div>" + c.token.reserves + " (backed " + Number(c.token.backing).toFixed(4) + ")</div>" +
       "<div>minted / redeemed</div><div>" + c.token.minted + " / " + c.token.redeemed + "</div></div>" : "<p class='muted'>No stable token yet.</p>";
+    // Each validator's share of the stake: a house is held to three tenths of it, a country to
+    // three fifths, short of the third that could stop the chain and the two thirds that finalise.
+    const staked = c.validators.reduce(function (n, v) { return n + v.power; }, 0) || 1;
     const validators = c.validators.slice().sort(function (a, b) { return b.power - a.power; }).map(function (val) {
       const town = val.town === null ? "?" : WORLD.towns[val.town];
-      return "<tr><td>" + esc(town.name || "?") + "</td><td>" + esc(val.town === null ? "" : countryOfTown(val.town).name) + "</td><td class='n'>" + val.power.toLocaleString() + "</td><td class='mono'>" + esc(val.address.slice(0, 16)) + "…</td></tr>";
+      return "<tr><td>" + esc(town.name || "?") + "</td><td>" + esc(val.town === null ? "" : countryOfTown(val.town).name) + "</td><td class='n'>" + val.power.toLocaleString() +
+        "</td><td class='n'>" + pct(val.power / staked) + "</td><td class='mono'>" + esc(val.address.slice(0, 16)) + "…</td></tr>";
     }).join("");
     const accounts = c.accounts.map(function (a) {
       const staked = a.jailed ? "<span class='bad' title='caught signing a block twice; it never validates again'>jailed</span>" + (a.staked === "0" ? "" : " · " + a.staked) : a.staked;
@@ -649,7 +653,7 @@ drawCountries();
         " <span class='muted'>— a block needs two thirds, so it is always signed abroad too" +
         (3 * c.largestCountry.share >= 1 - 1e-9 ? "; but a third is enough to stop one, so were its houses all to stay away the chain would wait for them" : "") +
         "</span></div>" : "") + "</div>" +
-      "<h2 style='margin-top:14px'>Validators</h2><div class='scroll'><table><tr><th>house</th><th>country</th><th class='n'>stake</th><th>address</th></tr>" + validators + "</table></div>" +
+      "<h2 style='margin-top:14px'>Validators</h2><div class='scroll'><table><tr><th>house</th><th>country</th><th class='n'>stake</th><th class='n'>share</th><th>address</th></tr>" + validators + "</table></div>" +
       alone(c) +
       "</div><div>" + token +
       "<h2 style='margin-top:14px'>Accounts</h2><div class='scroll'><table><tr><th>house</th><th class='n'>coin</th><th class='n'>staked</th><th class='n'>tokens</th></tr>" + accounts + "</table></div>" +
