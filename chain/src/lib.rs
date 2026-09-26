@@ -14,7 +14,7 @@
 //! validators holding more than two thirds of the stake have signed it. Change one byte
 //! anywhere in the history and the change is visible from every later block. Nothing is
 //! simulated *about* the chain — what is coarse is how often a block is cut, which is once a
-//! week of the world's time rather than once every few seconds.
+//! month of the world's time rather than once every few seconds.
 //!
 //! ## Why stake and not work
 //!
@@ -38,7 +38,8 @@
 //! - `merkle` — RFC 6962 trees, with inclusion proofs.
 //! - `codec` — one canonical encoding, with a domain tag on everything signed or hashed.
 //! - `tx` and `state` — an account ledger with a native coin and stable tokens that can only
-//!   be minted against an independently attested reserve.
+//!   be minted against an independently attested reserve, and swaps of one for the other that
+//!   settle both legs at once or neither.
 //! - `consensus`, `block` and `node` — validator sets, weighted proposer rotation, commits of
 //!   more than two thirds of the stake, and a chain that can be replayed from genesis by
 //!   anybody, with nothing taken on trust.
@@ -64,7 +65,7 @@ pub use consensus::{Commit, ValidatorSet, Vote};
 pub use ed25519::{PublicKey, Signature, SigningKey};
 pub use node::{Chain, Committed, Genesis, Invalid};
 pub use state::{Ledger, Params, Refusal, Token};
-pub use tx::{Action, Address, Asset, COIN, TOKEN_UNIT, Transaction};
+pub use tx::{Action, Address, Asset, COIN, Swap, TOKEN_UNIT, Transaction};
 
 /// Thirty-two bytes of SHA-256: the name of a block, of a transaction, or of a tree of either.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]

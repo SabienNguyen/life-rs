@@ -106,6 +106,74 @@ pub enum Action {
     /// and it is what makes stake worth staking: double-signing is how a chain is forked, so
     /// it is what costs a validator their stake.
     Evidence { first: Box<Vote>, second: Box<Vote> },
+    /// Two parties exchange two assets at once or not at all — delivery against payment. The
+    /// sender gives `give` and gets `get` from `counterparty`, who has agreed to exactly these
+    /// terms by signing them (`Swap::terms`): the chain, the sender, both amounts, and its own
+    /// nonce, which the swap spends — so the counterparty's word, like a transaction, can be
+    /// used once, on one chain, by the one party it was given to.
+    Swap(Box<Swap>),
+}
+
+/// The terms of an exchange and the counterparty's signature on them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Swap {
+    pub counterparty: PublicKey,
+    /// The counterparty's nonce when it agreed; the swap is refused once that has moved on.
+    pub counterparty_nonce: u64,
+    /// What the sender hands over, and what it receives.
+    pub give: (Asset, u128),
+    pub get: (Asset, u128),
+    pub consent: Signature,
+}
+
+impl Swap {
+    /// What the counterparty signs to agree: every term of the exchange, and with whom.
+    pub fn terms(
+        chain: Digest,
+        sender: Address,
+        counterparty_nonce: u64,
+        give: (Asset, u128),
+        get: (Asset, u128),
+    ) -> Vec<u8> {
+        let mut w = Writer::tagged("life-rs/chain/swap/1");
+        w.fixed(&chain.0).fixed(&sender.0).u64(counterparty_nonce);
+        encode_asset(&mut w, give.0);
+        w.u128(give.1);
+        encode_asset(&mut w, get.0);
+        w.u128(get.1);
+        w.finish()
+    }
+
+    /// The counterparty's side, signed: agreeing to give `get` for `give` with `sender`.
+    pub fn agreed(
+        counterparty: &SigningKey,
+        chain: Digest,
+        sender: Address,
+        counterparty_nonce: u64,
+        give: (Asset, u128),
+        get: (Asset, u128),
+    ) -> Swap {
+        Swap {
+            counterparty: counterparty.public(),
+            counterparty_nonce,
+            give,
+            get,
+            consent: counterparty.sign(&Swap::terms(chain, sender, counterparty_nonce, give, get)),
+        }
+    }
+
+    /// Whether the counterparty really agreed to this, with this sender, on this chain.
+    pub fn consent_holds(&self, chain: Digest, sender: Address) -> bool {
+        let terms = Swap::terms(chain, sender, self.counterparty_nonce, self.give, self.get);
+        self.counterparty.verify(&terms, &self.consent)
+    }
+}
+
+fn encode_asset(w: &mut Writer, asset: Asset) {
+    match asset {
+        Asset::Coin => w.u8(0),
+        Asset::Token(id) => w.u8(1).u32(id),
+    };
 }
 
 impl Action {
@@ -120,6 +188,7 @@ impl Action {
             Action::Bond { .. } => "bond",
             Action::Unbond { .. } => "unbond",
             Action::Evidence { .. } => "evidence",
+            Action::Swap(_) => "swap",
         }
     }
 
@@ -127,10 +196,7 @@ impl Action {
         match self {
             Action::Pay { to, asset, amount } => {
                 w.u8(0).fixed(&to.0);
-                match asset {
-                    Asset::Coin => w.u8(0),
-                    Asset::Token(id) => w.u8(1).u32(*id),
-                };
+                encode_asset(w, *asset);
                 w.u128(*amount);
             }
             Action::Issue {
@@ -157,6 +223,15 @@ impl Action {
             }
             Action::Evidence { first, second } => {
                 w.u8(7).var(&first.encode()).var(&second.encode());
+            }
+            Action::Swap(swap) => {
+                w.u8(8)
+                    .fixed(&swap.counterparty.0)
+                    .u64(swap.counterparty_nonce);
+                encode_asset(w, swap.give.0);
+                w.u128(swap.give.1);
+                encode_asset(w, swap.get.0);
+                w.u128(swap.get.1).fixed(&swap.consent.0);
             }
         }
     }
@@ -221,8 +296,16 @@ impl Transaction {
         Address::of(&self.signer)
     }
 
+    /// Whether everybody the transaction speaks for signed it: the sender always, and for a
+    /// swap the counterparty too. Neither depends on the ledger, so a node checks both once.
     pub fn signature_holds(&self) -> bool {
-        self.signer.verify(&self.body(), &self.signature)
+        if !self.signer.verify(&self.body(), &self.signature) {
+            return false;
+        }
+        match &self.action {
+            Action::Swap(swap) => swap.consent_holds(self.chain, self.sender()),
+            _ => true,
+        }
     }
 }
 

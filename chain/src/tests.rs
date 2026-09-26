@@ -244,6 +244,110 @@ fn a_stable_token_is_only_minted_against_an_attested_reserve() {
     ));
 }
 
+/// Coin for tokens, both legs or neither: a seller's coin and a buyer's tokens change hands in
+/// one transaction both of them signed, and the buyer's agreement cannot be used twice, by
+/// anybody else, on another chain, or for more than the buyer holds.
+#[test]
+fn a_swap_is_both_legs_or_neither() {
+    let mut world = found_with(&[25, 25, 25, 25]);
+    let (seller, attestor, buyer) = (world.people[0].clone(), world.people[1].clone(), world.people[2].clone());
+    let (seller_at, buyer_at) = (Address::of(&seller.public()), Address::of(&buyer.public()));
+    let id = world.chain.id;
+    let fee = world.chain.params().min_fee;
+    let submit = |world: &mut Fixture, key: &SigningKey, action: Action| {
+        let nonce = world.chain.next_nonce(&Address::of(&key.public()));
+        world
+            .chain
+            .submit(Transaction::signed(key, id, nonce, fee, action))
+    };
+    // A token, and a buyer who holds a hundred of it and no coin at all.
+    world.pay(0, Address::of(&attestor.public()), Asset::Coin, 10 * COIN).unwrap();
+    submit(
+        &mut world,
+        &seller,
+        Action::Issue {
+            symbol: "TIL".into(),
+            peg: "tilmark".into(),
+            attestor: Address::of(&attestor.public()),
+        },
+    )
+    .unwrap();
+    submit(&mut world, &attestor, Action::Attest { token: 0, reserves: 100 * TOKEN_UNIT }).unwrap();
+    submit(
+        &mut world,
+        &seller,
+        Action::Mint {
+            token: 0,
+            to: buyer_at,
+            amount: 100 * TOKEN_UNIT,
+        },
+    )
+    .unwrap();
+    world.everybody();
+    assert_eq!(world.chain.balance(&buyer_at, Asset::Coin), 0);
+
+    // The seller sells three coin for thirty tokens; the buyer agrees to exactly that. The
+    // seller signs the transaction and pays its fee, so a buyer with no coin can still buy.
+    let (coin, tokens) = ((Asset::Coin, 3 * COIN), (Asset::Token(0), 30 * TOKEN_UNIT));
+    let agreed = Swap::agreed(&buyer, id, seller_at, 0, coin, tokens);
+    submit(&mut world, &seller, Action::Swap(Box::new(agreed.clone()))).unwrap();
+    world.everybody();
+    assert_eq!(world.chain.balance(&buyer_at, Asset::Coin), 3 * COIN);
+    assert_eq!(world.chain.balance(&buyer_at, Asset::Token(0)), 70 * TOKEN_UNIT);
+    assert_eq!(world.chain.balance(&seller_at, Asset::Token(0)), 30 * TOKEN_UNIT);
+    assert_eq!(world.chain.next_nonce(&buyer_at), 1, "agreeing spent the buyer's nonce");
+
+    // The same agreement again is stale.
+    assert_eq!(
+        submit(&mut world, &seller, Action::Swap(Box::new(agreed.clone()))),
+        Err(Refusal::StaleConsent { expected: 1, got: 0 })
+    );
+    // Nobody else can use the buyer's word, and nor can the seller on another chain.
+    let thief = world.people[3].clone();
+    world.pay(0, Address::of(&thief.public()), Asset::Coin, COIN).unwrap();
+    world.everybody();
+    let fresh = Swap::agreed(&buyer, id, seller_at, 1, coin, tokens);
+    assert_eq!(
+        submit(&mut world, &thief, Action::Swap(Box::new(fresh.clone()))),
+        Err(Refusal::BadSignature)
+    );
+    let elsewhere = Transaction::signed(&seller, Digest::of(b"another chain"), 0, fee, Action::Swap(Box::new(fresh)));
+    assert!(!elsewhere.signature_holds());
+    // Changing a term after the buyer signed it breaks the agreement.
+    let mut greedy = Swap::agreed(&buyer, id, seller_at, 1, coin, tokens);
+    greedy.get.1 = 60 * TOKEN_UNIT;
+    assert_eq!(
+        submit(&mut world, &seller, Action::Swap(Box::new(greedy))),
+        Err(Refusal::BadSignature)
+    );
+    // And a buyer who agrees to more than it holds moves nothing at all.
+    let before = (
+        world.chain.pending_balance(&seller_at, Asset::Coin),
+        world.chain.pending_balance(&buyer_at, Asset::Coin),
+    );
+    let too_much = Swap::agreed(&buyer, id, seller_at, 1, coin, (Asset::Token(0), 700 * TOKEN_UNIT));
+    assert_eq!(
+        submit(&mut world, &seller, Action::Swap(Box::new(too_much))),
+        Err(Refusal::CounterpartyCannotAfford)
+    );
+    assert_eq!(
+        before,
+        (
+            world.chain.pending_balance(&seller_at, Asset::Coin),
+            world.chain.pending_balance(&buyer_at, Asset::Coin),
+        )
+    );
+    // Nobody swaps with themselves, or an asset for itself.
+    let with_myself = Swap::agreed(&seller, id, seller_at, world.chain.next_nonce(&seller_at), coin, tokens);
+    assert_eq!(
+        submit(&mut world, &seller, Action::Swap(Box::new(with_myself))),
+        Err(Refusal::NoExchange)
+    );
+    world.everybody();
+    assert_eq!(world.chain.ledger.broken_law(), None);
+    assert_eq!(world.chain.verify(), Ok(()));
+}
+
 /// Change one byte of one old block and replaying from genesis finds it, at that block.
 #[test]
 fn history_cannot_be_rewritten_quietly() {

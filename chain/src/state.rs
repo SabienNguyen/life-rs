@@ -185,6 +185,13 @@ pub enum Refusal {
     BadEvidence,
     AlreadyPunished,
     TooLate,
+    /// A swap with oneself, or of an asset for itself.
+    NoExchange,
+    /// The counterparty's agreement was given at a nonce its account has moved past, or has
+    /// not reached.
+    StaleConsent { expected: u64, got: u64 },
+    /// The counterparty cannot deliver its side.
+    CounterpartyCannotAfford,
 }
 
 /// Everything, as of the last block.
@@ -385,6 +392,39 @@ impl Ledger {
             Action::Evidence { first, second } => {
                 self.judge(first, second)?;
             }
+            Action::Swap(swap) => {
+                let other = Address::of(&swap.counterparty);
+                if other == sender || swap.give.0 == swap.get.0 {
+                    return Err(Refusal::NoExchange);
+                }
+                if swap.give.1 == 0 || swap.get.1 == 0 {
+                    return Err(Refusal::NothingToMove);
+                }
+                for (asset, _) in [swap.give, swap.get] {
+                    if let Asset::Token(id) = asset
+                        && self.tokens.get(id as usize).is_none()
+                    {
+                        return Err(Refusal::UnknownToken);
+                    }
+                }
+                let theirs = self.accounts.get(&other).cloned().unwrap_or_default();
+                if theirs.nonce != swap.counterparty_nonce {
+                    return Err(Refusal::StaleConsent {
+                        expected: theirs.nonce,
+                        got: swap.counterparty_nonce,
+                    });
+                }
+                let holds = |account: &Account, asset: Asset, spendable_coin: u128| match asset {
+                    Asset::Coin => spendable_coin,
+                    Asset::Token(id) => account.tokens.get(&id).copied().unwrap_or(0),
+                };
+                if holds(&account, swap.give.0, spendable) < swap.give.1 {
+                    return Err(Refusal::CannotAfford);
+                }
+                if holds(&theirs, swap.get.0, theirs.coin) < swap.get.1 {
+                    return Err(Refusal::CounterpartyCannotAfford);
+                }
+            }
         }
 
         // Everything checks. Now change things.
@@ -457,6 +497,16 @@ impl Ledger {
                 account.bonded -= amount;
                 account.unbonding.push((release, *amount));
             }
+            Action::Swap(swap) => {
+                let other = Address::of(&swap.counterparty);
+                {
+                    let theirs = self.accounts.entry(other).or_default();
+                    theirs.nonce += 1;
+                    theirs.key.get_or_insert(swap.counterparty);
+                }
+                self.move_asset(&sender, &other, swap.give);
+                self.move_asset(&other, &sender, swap.get);
+            }
             Action::Evidence { first, .. } => {
                 let offender = Address::of(&first.validator);
                 self.punished.insert((offender, first.height, first.round));
@@ -478,6 +528,20 @@ impl Ledger {
             }
         }
         Ok(())
+    }
+
+    /// Move an amount of one asset between two accounts that have been checked to hold it.
+    fn move_asset(&mut self, from: &Address, to: &Address, (asset, amount): (Asset, u128)) {
+        match asset {
+            Asset::Coin => {
+                self.accounts.get_mut(from).expect("holder exists").coin -= amount;
+                self.accounts.entry(*to).or_default().coin += amount;
+            }
+            Asset::Token(id) => {
+                self.take_tokens(from, id, amount);
+                *self.accounts.entry(*to).or_default().tokens.entry(id).or_insert(0) += amount;
+            }
+        }
     }
 
     fn take_tokens(&mut self, from: &Address, token: u32, amount: u128) {
