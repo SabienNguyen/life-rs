@@ -216,7 +216,7 @@ tokens against attested reserves
 </td></tr>
 </table>
 
-**844 tests.** Most of them are about a claim rather than a function.
+**845 tests.** Most of them are about a claim rather than a function.
 
 ---
 
@@ -472,13 +472,15 @@ Nothing below is scheduled:
   paying abroad costs 1.7% of the payment now, against 9.0% through houses alone
   replayed from genesis: 2197 blocks, every signature and root checked, in 4.0s — it holds
   followed as a light client, by headers, commits and validator sets alone: to height 2196 in 0.4s, never a transaction
+  joined late, as a new node would: 2,185 headers followed from the genesis, the books as they stood at #2184 — 25 accounts and 1 token — checked against its state root, and the 12 blocks since replayed, in 0.4s; it arrives at the ledger the chain holds, to the byte
 ```
 
 It is a real chain: SHA-256, Ed25519 and Merkle trees written from their standards and checked
 against the RFC vectors and OpenSSL; Byzantine-fault-tolerant proof of stake, with a block
 final once two thirds of the stake has signed it; and a whole history that replays from
 genesis, every signature and root rechecked, before the report says a word about it — and that
-can be followed by its headers alone, as a light client follows a real chain. A validator
+can be followed by its headers alone, as a light client follows a real chain, or joined late
+from anybody's copy of its books, believed only as far as they hash to a header's state root. A validator
 caught signing two blocks at one height, in one round or two, loses a twentieth of its stake and
 that key's seat for good, comes back if at all under a key it keeps for staking, and the others
 bond what keeps every country within its three fifths of the stake. Two final blocks at one

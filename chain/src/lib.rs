@@ -65,6 +65,7 @@ pub mod merkle;
 pub mod node;
 pub mod sha2;
 pub mod state;
+pub mod sync;
 pub mod tx;
 
 pub use block::{Block, Header};
@@ -73,6 +74,7 @@ pub use ed25519::{PublicKey, Signature, SigningKey};
 pub use light::{Fork, LightBlock, follow, follow_from, fork};
 pub use node::{Chain, Committed, Genesis, Invalid};
 pub use state::{Ledger, MAX_SUPPLY, MAX_TOKENS, Params, Refusal, Token};
+pub use sync::join;
 pub use tx::{Action, Address, Asset, COIN, Swap, TOKEN_UNIT, Transaction};
 
 /// Thirty-two bytes of SHA-256: the name of a block, of a transaction, or of a tree of either.

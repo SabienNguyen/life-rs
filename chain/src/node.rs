@@ -110,6 +110,8 @@ pub enum Invalid {
     TooManyRounds,
     /// A commit from a round before the one its block was put forward in.
     SignedBeforeProposed,
+    /// A snapshot of a ledger that does not read as one (`sync::join`).
+    BadSnapshot(Malformed),
 }
 
 /// The most rounds one height may take. A round is one proposer's chance, and a height that
@@ -563,7 +565,7 @@ fn genesis_header(genesis: &Genesis, id: Digest, ledger: &Ledger, rotation: &Val
 
 /// The rule, stated once and used both by a live node and by a replay: what a block must be to
 /// follow `tip`, and what it leads to.
-fn next_state(
+pub(crate) fn next_state(
     ledger: &Ledger,
     rotation: &ValidatorSet,
     tip: &Block,

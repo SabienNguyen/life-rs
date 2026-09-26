@@ -5799,6 +5799,20 @@ The standard is design principle five's: the mechanism is real and the resolutio
   (`chain::light`). Most light clients start not from the genesis but from a header they
   already trust, and `light::follow_from` does that too, checking the trusted header's own
   commit before anything after it.
+- And anybody can join it late, as a new node does, without replaying its history or taking
+  anybody's word for its books (`chain::sync`). They follow the headers from the genesis, take
+  the ledger as it stood at the last of them from whoever offers it — every account, every
+  token and the totals, the leaves the state root is built over — believe it exactly as far as
+  it hashes to that header's state root, and replay in full only the blocks since. What the
+  headers do not commit to is where each validator stands in the rotation, which is derived, so
+  the joiner turns it itself as it follows, exactly as the chain did; one that started from
+  fresh priorities instead refuses the chain's very next block for its proposer, and a test
+  makes sure it does. The world keeps the books each year began with, as any node would have,
+  and the report joins from them: on 0x11 at year 600, 2,185 headers followed, 25 accounts and a
+  token checked against the root and the year's twelve blocks replayed, in 0.4 seconds against
+  four for the replay; and at year 1500, 12,985 headers and 28 accounts in 2.7 seconds against
+  eighteen and a half. What joining costs grows with the headers and what replaying costs with
+  everything, so the gap widens the longer a chain is kept.
 - A chain is also a file, in the same canonical encoding: its genesis and every block, which is
   everything anybody needs to check it (`chain::file`). Reading is as strict as signing —
   whatever reads writes back to the same bytes — and `--verify-chain` checks a file with nothing
@@ -5813,7 +5827,9 @@ The standard is design principle five's: the mechanism is real and the resolutio
   names; the validators and stake it commits to are the ones whose signatures make up more than
   two thirds; and any account's balance is proved into its state root by a path of hashes. The
   page does all of this in the browser, with the browser's own SHA-256 and Ed25519, and has a
-  button that changes one byte of one account to show the proof failing. It also follows the
+  button that changes one byte of one account to show the proof failing — and then hashes the
+  whole of the books, every account, token and the totals, up to that same root, which is what
+  a node joining late is handed, and fails that too with the byte changed. It also follows the
   last forty-eight headers as a light client would, from the first of them: each must name the
   header before, the commit that made it final and the set it handed over to, and what every
   validator signed the page works out from the header itself before the browser checks the
@@ -5832,13 +5848,15 @@ every node lives in one process and hears every message at once, so a validator 
 answering this round or it is not. That is where a partition would go.
 
 The primitives are checked against FIPS 180-4's and RFC 8032's vectors and against eight more
-signatures produced by OpenSSL, and the chain's forty-eight tests are claims: nothing is spent
+signatures produced by OpenSSL, and the chain's forty-nine tests are claims: nothing is spent
 twice; a swap moves both legs or neither; a changed amount fails the transaction root, patched
 to match fails the signature, and patched again fails the commit; the chain keeps going with a
 quarter of the stake absent and stops with half; a block holding a bad transaction is never
 signed; a block somebody signed is the block its height commits; a fork made across two rounds
-names the half of the stake that made it, and either side's chain burns them for it; a balance
-can be proved to somebody holding only a header; and whatever anybody sends,
+names the half of the stake that made it, and either side's chain burns them for it; a node that
+joins late from the headers and somebody's books arrives at the chain's ledger to the byte, and
+books a coin out or a block early are refused; a balance can be proved to somebody holding only
+a header; and whatever anybody sends,
 in whatever order — sixty blocks of transactions drawn at random, half of them sensible and half
 not — the conservation laws hold after every block and the chain replays to what it holds.
 

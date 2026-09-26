@@ -165,6 +165,10 @@ pub struct Network {
     working: BTreeMap<usize, f64>,
     /// Each house's share of the business here, averaged over the years (`STANDING_MEMORY`).
     pub standing: BTreeMap<usize, f64>,
+    /// The books as they stood when this year began, with the height they are for: what any
+    /// node could hand one joining late, which would check them against that height's header
+    /// and replay the year from them (`chain::join`).
+    pub books: Option<(u64, Vec<Vec<u8>>)>,
 }
 
 impl Network {
@@ -504,6 +508,7 @@ fn consider_founding(nations: &mut Nations) {
             .iter()
             .map(|i| (towns[*i], candidates[*i].volume / founding_volume.max(1e-9)))
             .collect(),
+        books: None,
     });
     nations.history.push(Event::Founded {
         year: nations.year,
@@ -516,6 +521,8 @@ fn keep(nations: &mut Nations, at: usize) {
     let Some(reserve) = nations.reserve else {
         return;
     };
+    let network = &mut nations.networks[at];
+    network.books = Some((network.chain.height(), network.chain.ledger.snapshot()));
     let wage = wage(nations);
     let size = payment_size(nations);
     // What the chain counts in is its token's currency — the one the world invoiced in when the

@@ -5,13 +5,25 @@ use chain::{Action, Address, Asset, COIN, TOKEN_UNIT};
 use nations::{Event, Nations, Network};
 
 /// What checking a chain from its genesis found, and how long it took — replaying every block,
-/// and following its headers as a light client does.
+/// following its headers as a light client does, and joining it late from somebody's books.
 pub struct Checked {
     pub ok: Result<(), String>,
     pub seconds: f64,
     pub blocks: usize,
     pub light: Result<u64, String>,
     pub light_seconds: f64,
+    /// `None` for a chain nobody has kept books of yet.
+    pub joined: Option<Result<Joined, String>>,
+    pub join_seconds: f64,
+}
+
+/// A node that joined late: the height of the books it was handed, what they held, and how many
+/// blocks it replayed after them to reach the chain's ledger.
+pub struct Joined {
+    pub at: u64,
+    pub accounts: usize,
+    pub tokens: usize,
+    pub replayed: usize,
 }
 
 /// The same world run again from its seed with no chain allowed, as far as the world has gone:
@@ -45,15 +57,39 @@ pub fn check(world: &Nations) -> Vec<Checked> {
             let started = std::time::Instant::now();
             let light = chain::light::follow(&network.chain.genesis, &network.chain.light_blocks())
                 .map_err(|(height, why)| format!("block {height}: {why:?}"));
+            let light_seconds = started.elapsed().as_secs_f64();
+            let started = std::time::Instant::now();
+            let joined = network.books.as_ref().map(|(at, books)| join(network, *at, books));
             Checked {
                 ok,
                 seconds,
                 blocks: network.chain.blocks.len(),
                 light,
-                light_seconds: started.elapsed().as_secs_f64(),
+                light_seconds,
+                joined,
+                join_seconds: started.elapsed().as_secs_f64(),
             }
         })
         .collect()
+}
+
+/// Join a chain as a node arriving late would: its headers followed from the genesis to the
+/// height of the books it is handed, the books checked against that header's state root, and
+/// only the blocks since replayed — and whether that arrives where the chain is.
+fn join(network: &Network, at: u64, books: &[Vec<u8>]) -> Result<Joined, String> {
+    let chain = &network.chain;
+    let headers: Vec<chain::LightBlock> = (0..=at).filter_map(|h| chain.light_block(h)).collect();
+    let since = chain.blocks.get(at as usize + 1..).unwrap_or(&[]);
+    match chain::join(&chain.genesis, &headers, books, since) {
+        Ok(ledger) if ledger == chain.ledger => Ok(Joined {
+            at,
+            accounts: ledger.accounts.len(),
+            tokens: ledger.tokens.len(),
+            replayed: since.len(),
+        }),
+        Ok(_) => Err("it arrived at other books than the chain's".to_string()),
+        Err((height, why)) => Err(format!("block {height}: {why:?}")),
+    }
 }
 
 /// A number of people or years of food, the way a person reads one.
@@ -674,6 +710,20 @@ fn ledger(world: &Nations, at: usize, network: &Network, checked: Option<&Checke
             ),
             Err(why) => format!("  followed as a light client: FAILED at {why}"),
         });
+        match &checked.joined {
+            Some(Ok(joined)) => out.push(format!(
+                "  joined late, as a new node would: {} headers followed from the genesis, the books as they stood at #{} — {} accounts and {} {} — checked against its state root, and the {} blocks since replayed, in {:.1}s; it arrives at the ledger the chain holds, to the byte",
+                grouped(joined.at as u128 + 1),
+                joined.at,
+                joined.accounts,
+                joined.tokens,
+                if joined.tokens == 1 { "token" } else { "tokens" },
+                joined.replayed,
+                checked.join_seconds
+            )),
+            Some(Err(why)) => out.push(format!("  joined late: FAILED at {why}")),
+            None => {}
+        }
     }
     out.push(String::new());
     out
@@ -1111,13 +1161,23 @@ fn network_json(world: &Nations, at: usize, network: &Network, checked: Option<&
     );
     let verified = match checked {
         Some(c) => format!(
-            "{{\"ok\":{},\"why\":{},\"seconds\":{},\"blocks\":{},\"light\":{},\"lightSeconds\":{}}}",
+            "{{\"ok\":{},\"why\":{},\"seconds\":{},\"blocks\":{},\"light\":{},\"lightSeconds\":{},\"joined\":{}}}",
             c.ok.is_ok(),
             quoted(c.ok.as_ref().err().map(|s| s.as_str()).unwrap_or("")),
             num(c.seconds),
             c.blocks,
             c.light.is_ok(),
-            num(c.light_seconds)
+            num(c.light_seconds),
+            match &c.joined {
+                Some(Ok(j)) => format!(
+                    "{{\"at\":{},\"accounts\":{},\"replayed\":{},\"seconds\":{}}}",
+                    j.at,
+                    j.accounts,
+                    j.replayed,
+                    num(c.join_seconds)
+                ),
+                _ => "null".to_string(),
+            }
         ),
         None => "null".to_string(),
     };
@@ -1164,6 +1224,11 @@ struct Checkable {
     /// Signed bytes, key, signature.
     votes: Vec<(Vec<u8>, chain::PublicKey, chain::Signature)>,
     accounts: Vec<Proved>,
+    /// The whole of the books the state root is a root of — every account, every token and the
+    /// totals — with how many accounts and tokens that is.
+    books: Vec<Vec<u8>>,
+    book_accounts: usize,
+    book_tokens: usize,
 }
 
 /// One house's account as a leaf of the state tree, and the path from it to the root.
@@ -1212,6 +1277,9 @@ fn checkable(network: &Network) -> Checkable {
                 })
             })
             .collect(),
+        books: chain.ledger.snapshot(),
+        book_accounts: chain.ledger.accounts.len(),
+        book_tokens: chain.ledger.tokens.len(),
     }
 }
 
@@ -1284,6 +1352,12 @@ fn check_it_yourself(network: &Network) -> String {
         )
     }));
     let txs = list(it.txs.iter().map(|bytes| quoted(&chain::hex(bytes))));
+    let books = format!(
+        "{{\"leaves\":{},\"accounts\":{},\"tokens\":{}}}",
+        list(it.books.iter().map(|leaf| quoted(&chain::hex(leaf)))),
+        it.book_accounts,
+        it.book_tokens
+    );
     let signers = list(it.signers.iter().map(|(address, key, power)| {
         format!(
             "{{\"address\":{},\"key\":{},\"power\":{power}}}",
@@ -1292,7 +1366,7 @@ fn check_it_yourself(network: &Network) -> String {
         )
     }));
     format!(
-        "{{\"height\":{},\"header\":{},\"hash\":{},\"stateRoot\":{},\"txRoot\":{},\"validatorsHash\":{},\"signers\":{signers},\"txs\":{txs},\"votes\":{votes},\"accounts\":{accounts}}}",
+        "{{\"height\":{},\"header\":{},\"hash\":{},\"stateRoot\":{},\"txRoot\":{},\"validatorsHash\":{},\"signers\":{signers},\"txs\":{txs},\"votes\":{votes},\"accounts\":{accounts},\"books\":{books}}}",
         it.height,
         quoted(&chain::hex(&it.header)),
         quoted(&it.hash.to_string()),
@@ -1365,12 +1439,20 @@ mod tests {
                 world.towns[a.town].name
             );
         }
+        // And the whole of the books hashes up to that same root: every account, not only the
+        // houses', each token and the totals.
+        let books: Vec<chain::Digest> = it.books.iter().map(|l| chain::merkle::leaf(l)).collect();
+        assert_eq!(chain::merkle::root(&books), it.state_root);
+        assert_eq!(it.books.len(), it.book_accounts + it.book_tokens + 1);
         let page = check_it_yourself(&world.networks[0]);
         assert!(page.contains(&chain::hex(&it.header)));
-        // And the whole chain, by its headers alone, as the report follows it.
+        // And the whole chain, by its headers alone, as the report follows it, and joined late
+        // from the books the year began with.
         let checked = check(&world);
         assert_eq!(checked[0].ok, Ok(()));
         assert_eq!(checked[0].light, Ok(world.networks[0].chain.height()));
+        let joined = checked[0].joined.as_ref().expect("the world kept books").as_ref().unwrap();
+        assert_eq!(joined.replayed as u64, world.networks[0].chain.height() - joined.at);
     }
 
     /// A chain written to a file is checked by somebody holding nothing else, and the same file

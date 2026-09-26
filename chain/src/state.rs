@@ -146,6 +146,52 @@ impl Account {
         w.u8(self.jailed as u8);
         w.finish()
     }
+
+    /// `encode`, backwards: the address a leaf is for, and what it holds there. As strict as
+    /// the rest of the codec — tokens in order and never a zero, each flag nought or one — so
+    /// whatever reads writes back to the same bytes.
+    pub fn decode(bytes: &[u8]) -> Result<(Address, Account), Malformed> {
+        let mut r = Reader::tagged(bytes, "life-rs/chain/account/1")?;
+        let address = Address(r.fixed()?);
+        let nonce = r.u64()?;
+        let coin = r.u128()?;
+        let bonded = r.u128()?;
+        let n = r.count(24)?;
+        let mut unbonding = Vec::with_capacity(n);
+        for _ in 0..n {
+            unbonding.push((r.u64()?, r.u128()?));
+        }
+        let n = r.count(20)?;
+        let mut tokens = BTreeMap::new();
+        for _ in 0..n {
+            let (token, amount) = (r.u32()?, r.u128()?);
+            if amount == 0 || tokens.last_key_value().is_some_and(|(last, _)| *last >= token) {
+                return Err(Malformed::BadValue("tokens held out of order, or none of one"));
+            }
+            tokens.insert(token, amount);
+        }
+        let key = match r.u8()? {
+            0 => None,
+            1 => Some(PublicKey(r.fixed()?)),
+            _ => return Err(Malformed::BadValue("a key neither there nor not")),
+        };
+        let jailed = match r.u8()? {
+            0 => false,
+            1 => true,
+            _ => return Err(Malformed::BadValue("jailed neither yes nor no")),
+        };
+        r.done()?;
+        let account = Account {
+            nonce,
+            coin,
+            bonded,
+            unbonding,
+            tokens,
+            key,
+            jailed,
+        };
+        Ok((address, account))
+    }
 }
 
 /// A stable token: a promise, and the ledger's record of what backs it.
@@ -178,6 +224,24 @@ impl Token {
             .u128(self.minted)
             .u128(self.redeemed)
             .finish()
+    }
+
+    /// `encode`, backwards: a token's id and what the ledger records of it.
+    fn decode(bytes: &[u8]) -> Result<(u32, Token), Malformed> {
+        let mut r = Reader::tagged(bytes, "life-rs/chain/token/1")?;
+        let id = r.u32()?;
+        let token = Token {
+            symbol: r.text()?,
+            peg: r.text()?,
+            issuer: Address(r.fixed()?),
+            attestor: Address(r.fixed()?),
+            supply: r.u128()?,
+            reserves: r.u128()?,
+            minted: r.u128()?,
+            redeemed: r.u128()?,
+        };
+        r.done()?;
+        Ok((id, token))
     }
 
     /// Reserve per unit in circulation. One is fully backed; under one is a promise the issuer
@@ -700,6 +764,76 @@ impl Ledger {
         }
         leaves.push(totals.finish());
         leaves
+    }
+
+    /// The ledger as it is handed on: every leaf the state root is built over, in order — each
+    /// account by address, each token by id, and the totals. With the rules and the id of the
+    /// chain it is on, that is the whole of it, and it is what a node joining late is handed
+    /// instead of the history (`sync::join`).
+    pub fn snapshot(&self) -> Vec<Vec<u8>> {
+        self.leaves()
+    }
+
+    /// `snapshot`, backwards: the ledger some leaves describe, on a chain with these rules. As
+    /// strict as the rest of the codec — accounts in order and each once, tokens numbered from
+    /// nought, the totals last — so whatever reads gives back the same leaves. It believes
+    /// nothing else: whether these are the chain's books at some height is for that height's
+    /// state root to say.
+    pub fn from_snapshot(chain: Digest, params: Params, leaves: &[Vec<u8>]) -> Result<Ledger, Malformed> {
+        let Some((totals, rest)) = leaves.split_last() else {
+            return Err(Malformed::Short);
+        };
+        let mut accounts: BTreeMap<Address, Account> = BTreeMap::new();
+        let mut tokens = Vec::new();
+        for leaf in rest {
+            match Account::decode(leaf) {
+                Ok((address, account)) => {
+                    let after_last = accounts.last_key_value().is_none_or(|(last, _)| *last < address);
+                    if !tokens.is_empty() || !after_last {
+                        return Err(Malformed::BadValue("accounts out of order"));
+                    }
+                    accounts.insert(address, account);
+                }
+                Err(Malformed::WrongTag) => {
+                    let (id, token) = Token::decode(leaf)?;
+                    if id as usize != tokens.len() {
+                        return Err(Malformed::BadValue("tokens out of order"));
+                    }
+                    tokens.push(token);
+                }
+                Err(why) => return Err(why),
+            }
+        }
+        let mut r = Reader::tagged(totals, "life-rs/chain/totals/1")?;
+        let height = r.u64()?;
+        let coin_supply = r.u128()?;
+        let genesis_coin = r.u128()?;
+        let issued = r.u128()?;
+        let slashed = r.u128()?;
+        let fees_paid = r.u128()?;
+        let n = r.count(28)?;
+        let mut punished = BTreeSet::new();
+        for _ in 0..n {
+            let offence = (Address(r.fixed()?), r.u64()?);
+            if punished.last().is_some_and(|last| *last >= offence) {
+                return Err(Malformed::BadValue("offences out of order"));
+            }
+            punished.insert(offence);
+        }
+        r.done()?;
+        Ok(Ledger {
+            chain,
+            params,
+            accounts,
+            tokens,
+            height,
+            coin_supply,
+            genesis_coin,
+            issued,
+            slashed,
+            fees_paid,
+            punished,
+        })
     }
 
     /// Thirty-two bytes that change if anything in the ledger does.

@@ -947,6 +947,69 @@ fn every_kind() -> Fixture {
     world
 }
 
+/// A node that joins late needs neither the history nor anybody's word for the books. It follows
+/// the headers from the genesis, takes the ledger as it stood at the last of them from whoever
+/// offers it, and replays only the blocks since — through a validator joining and rounds lost to
+/// an absent proposer — arriving at the ledger the chain holds, to the byte. Books with one
+/// balance changed, or honestly kept at the height before, are refused at the state root; books
+/// out of order, or short, are not books.
+#[test]
+fn a_node_that_joins_late_needs_the_headers_and_somebodys_books() {
+    use crate::state::Account;
+
+    let mut world = every_kind();
+    let at = world.chain.height();
+    let books = world.chain.ledger.snapshot();
+    let genesis = world.chain.genesis.clone();
+    let (id, params) = (world.chain.id, genesis.params.clone());
+    assert_eq!(Ledger::from_snapshot(id, params.clone(), &books).unwrap().snapshot(), books);
+
+    // After the books were taken: somebody new stakes, and one of the founders goes away.
+    let holder = world.people[2].clone();
+    let nonce = world.chain.next_nonce(&Address::of(&holder.public()));
+    let bond = Transaction::signed(&holder, id, nonce, params.min_fee, Action::Bond { amount: 10 * COIN });
+    world.chain.submit(bond).unwrap();
+    world.keys.insert(Address::of(&holder.public()), holder.clone());
+    world.everybody();
+    let away = Address::of(&world.validators[0].public());
+    for _ in 0..8 {
+        world.time += MONTH;
+        world
+            .chain
+            .step(world.time, &world.keys, &|v, _| *v != away, 8)
+            .expect("the rest are more than two thirds");
+    }
+    let headers: Vec<LightBlock> = (0..=at).map(|h| world.chain.light_block(h).unwrap()).collect();
+    let since = &world.chain.blocks[at as usize + 1..];
+    assert!(since.iter().any(|b| b.header.round > 0), "a round was lost after the books were taken");
+    assert!(world.chain.rotation.find(&holder.public()).is_some());
+
+    let ledger = &world.chain.ledger;
+    assert_eq!(join(&genesis, &headers, &books, since).as_ref(), Ok(ledger));
+    // At the tip, with nothing to replay; and at the genesis, with everything.
+    assert_eq!(join(&genesis, &world.chain.light_blocks(), &ledger.snapshot(), &[]).as_ref(), Ok(ledger));
+    let founding = Ledger::genesis(id, params.clone(), &genesis.allocations).snapshot();
+    assert_eq!(join(&genesis, &headers[..1], &founding, &world.chain.blocks[1..]).as_ref(), Ok(ledger));
+
+    let mut doctored = books.clone();
+    let (address, mut account) = Account::decode(&doctored[0]).unwrap();
+    account.coin += 1;
+    doctored[0] = account.encode(&address);
+    assert_eq!(join(&genesis, &headers, &doctored, since), Err((at, Invalid::WrongStateRoot)));
+    let earlier = Chain::replay(&genesis, &world.chain.blocks[..at as usize]).unwrap().snapshot();
+    assert_eq!(join(&genesis, &headers, &earlier, since), Err((at, Invalid::WrongStateRoot)));
+    let mut shuffled = books.clone();
+    shuffled.swap(0, 1);
+    assert!(matches!(
+        join(&genesis, &headers, &shuffled, since),
+        Err((_, Invalid::BadSnapshot(codec::Malformed::BadValue(_))))
+    ));
+    assert!(matches!(
+        join(&genesis, &headers, &books[..books.len() - 1], since),
+        Err((_, Invalid::BadSnapshot(_)))
+    ));
+}
+
 /// A chain written to a file reads back as itself — the same genesis and the same blocks, one
 /// of every kind of transaction among them — and writes back to the same bytes, because there
 /// is one way to write a chain down. What was read replays to the ledger the chain holds.
