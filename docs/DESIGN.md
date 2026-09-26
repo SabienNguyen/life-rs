@@ -127,6 +127,9 @@ person/      Humans: identity, personality, skills, memory, intent
 society/     Households, kinship, places, environment vectors, settlements
 economy/     Land and labour, subsistence, surplus, trade — the outside of the loop
 settlement/  The join: habitability, where people found towns, and what the ground does
+commerce/    Markets, money, growth and payments between places — mechanisms, no planet (§49)
+nations/     The statistical tier: a town per habitable cell, states, countries, the world (§49)
+chain/       A ledger nobody keeps: SHA-2, Ed25519, Merkle, BFT proof of stake (§49)
 chronicle/   Append-only event log, indices, compaction, biography & history assembly
 observer/    Read-only query API at every scale
 sim/         Systems + scheduler; owns `World`
@@ -3641,9 +3644,11 @@ paragraph somewhere else.
 | Firms, employment, contracts | §27.9 | Untouched |
 | Tools are one thing | §27.9 | **Open**, attempted and reverted — §27.10 |
 | More goods | §27.9 | Untouched |
-| Money, prices, credit, ownership | §27.9 | Partly deliberate — §27.4 argues against prices |
+| Money, prices, credit, ownership | §27.9 | **Built at the statistical tier** by §49 — prices clear markets between towns, money is Menger's, houses lend, and a ledger records who owns what. Still deliberate for persons (§27.4); ownership by persons is open |
+| Regions that relate | §48.2 | **Partly closed** by §49 — towns, states and countries trade, pay and keep a chain together at the statistical tier; they still never act on each other |
 | Law | §26.9 | Untouched |
-| Conquest and the state | §24.4 | Untouched, and named there as the next thing to argue about |
+| Conquest and the state | §24.4 | Untouched, and named there as the next thing to argue about. §49's countries trade and strike coin but are still readings |
+| The tiers meeting | §49.8 | **Open.** The people-level quarters and the nations-tier towns stand on one planet and never touch |
 | Language, religion, ritual, kinship | §24.4 | **Deliberate.** Argued for, not deferred |
 | Concentration counterforce | §30.5 | Partly closed; how much sorting was lost is unmeasured |
 | Grid level, second planet, observer intervention | §23 | Parameters and decisions, not defects |
@@ -3809,8 +3814,9 @@ because *not having them* was a choice, not because having them would be wrong.
 **Prices** are different: §27.4 argues that what a trade is worth is a comparison somebody
 makes rather than a number anybody quotes, and the one attempt at authored prices produced
 fifty-one cooks against forty-seven farmers and cost a third of the population. That is a
-position with a measurement behind it. Money and ownership are not covered by that argument and
-remain open.
+position with a measurement behind it. Money and ownership are not covered by that argument, and
+§49 builds money — and prices — at the scale of nations, where a price *is* what a market of
+millions clears at rather than a number somebody quotes to a neighbour.
 
 ## 32. Taking things, which does not happen
 
@@ -5567,6 +5573,348 @@ in them is doing well enough for their age to have an evening spare.
 
 Which is the honest shape of the result. The trap still closes; what changed is that closing it
 now requires everybody to be poor, rather than the average to be.
+
+## 49. A ledger nobody keeps
+
+The ask was an economy that grows from the local to the global — town, state, country, world —
+until the parties in it would form and keep real blockchains, and use them as the ledger for a
+coin and for stable tokens. §48 had just found the two things standing in the way: regions in
+this world are containers, never parties (§48.2), and a filling world stops inventing (§48.4).
+Both findings are about the people-level `World`, which is five quarters of one region and
+cannot hold a world economy whatever is built into it. §6 always said most of a planet would be
+simulated statistically. This is that tier, for the first time, in three crates:
+
+- `chain` — the ledger, with no dependencies at all: SHA-2, Ed25519 and RFC 6962 Merkle trees
+  written from their standards, an account ledger with a native coin and stable tokens, and
+  Byzantine-fault-tolerant proof of stake.
+- `commerce` — the mechanisms, none of which knows about a planet: four sectors of production,
+  a market that clears on a tree, money by Menger, births and ideas, and payments across
+  distrust.
+- `nations` — the world: a town on every habitable cell of the same planet `World::genesis`
+  founds for the seed, and the chain the towns' houses come to keep between them.
+
+`--nations <years>` tells a run; `--html` turns it into a page — the world's history charted,
+the towns on the planet's land with the latest block's payments drawn between their houses,
+and every chain's accounts, validators and recent blocks down to their hashes; `--json` is the
+data; and `nations/examples/who_builds_a_ledger.rs` is the instrument every number below came
+from.
+
+### 49.1 Four levels, none of them drawn
+
+- **A town** stands on each cell whose habitability reaches 0.22 — deep time's bar for
+  settling new ground — best cells first, never next to another town, at most sixty-four. It is
+  founded at three fifths of what its ground can feed, which is where two thousand years of
+  farming leave anybody. Twenty-five to forty-five towns on the level-3 grid.
+- **A state** is a market area. Every town is drawn to the largest market it can reach,
+  weighted by the square of how near it is; a town drawn to itself is a hub. Reach is 2,500 km
+  at bare technique and grows with the square root of making, so market areas widen and merge
+  as a world learns to move things. It has to be measured against the grid: towns stand two
+  cells apart, and a reach much shorter than that made every town its own state and left the
+  level between a town and a country empty. Nothing names a province.
+- **A country** is read exactly as `World::countries` reads one — the same `culture`
+  machinery, the same reach — and is named for its largest place. So countries are drawn again
+  as the world changes, and a currency keeps the name it was struck under, as real ones do.
+- **The world** is every country's market joined through the largest.
+
+### 49.2 A year
+
+In an order that matters, each step reading last year's values of the ones after it.
+
+**Production.** Four sectors — farming, making, serving, and reckoning, which is new: the
+clerks, counting-houses and schools whose technique decides what checking a ledger costs. The
+ground is `economy::ground_of`'s, the same the people-level world stands on. Returns are
+constant in land and hands, with a town standing for its villages at one to every five square
+kilometres, so a town of farmers is the village economy per hand to the last decimal. Harvests
+vary by a tenth in logs, shared across a state because weather is.
+
+**Spending.** Stone–Geary: everybody eats first, and Engel's law falls out — the richer the
+world, the smaller the share of its income that is food, and the fewer of its people farm.
+
+**The market** clears on the tree, town → state → country → world: autarky prices bottom-up,
+then the band each link's wedge allows top-down. A wedge is carriage — a fifth of a good's
+worth per thousand kilometres over land and a twenty-fifth by sea, both falling with the square
+root of making — plus two per cent of handling, plus, where a link crosses a border, what it
+costs to be paid by somebody you do not quite trust in a money that is not yours. That last is
+the number a chain changes.
+
+**People** drift towards the trades that pay, a tenth of the gap a year; save; lend through
+houses, which is where reckoning earns its keep (half of what is saved sits idle without
+somebody to reckon it); are born in answer to income, then less so as they get richer, the
+demographic transition's hump; and starve when a harvest fails and nothing can be brought in.
+
+**Ideas** come from people with time to think — everybody above subsistence, in proportion to
+how far above, and a fiftieth of everybody whatever, which is §48.7's lesson at this scale: an
+average of zero hides the comfortable. Returns are below one to how many are thinking and each
+idea is harder than the last, Jones's form. A country behind the frontier catches up at up to
+two per cent of the gap a year — a quarter of that with no trade at all, all of it once trade is
+a twentieth of its product, because technique travels by contact.
+
+**Money** is Menger's: a medium is accepted because others accept it, which is bistable. Metal
+tips once about a quarter of a town's income changes hands; grain, which rots, never does on its
+own. A country strikes coin once its market is large enough to pay for a mint; a currency's
+price level follows its money and velocity, smoothed; once most of what people pay with is a
+house's debt rather than metal — deposits three times the coin — the houses manage it to a
+two per cent target. The world comes to invoice in the currency of whichever country trades
+most and is trusted most, with a quarter's hysteresis so it does not flap.
+
+**Payments abroad** are the net trade the market ships, plus trade in varieties — countries'
+wares are not the same wares, so people buy some of each other's whatever the net position,
+Armington with an elasticity of five. Every one of them has to be paid through somebody.
+Trust between two countries' houses grows with the share of their business done together and is
+capped by distance and by whether they are one people; a payment goes directly, or through one
+intermediary both ends trust more, at a fee plus a risk premium for the distrust plus a spread
+for changing money. That comes to about nine per cent of a payment.
+
+**And last**, whether any of that is worth a ledger nobody keeps (§49.4).
+
+### 49.3 What happens
+
+Nine seeds, seven hundred years each:
+
+| seed | towns | countries | first money | first coin | trap opens | people | income | farmers | traded | famines |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 0x11 | 40 | 2 | 68 | 81 | 336 | 5.6B | 163 | 80% → 10% | 3.5% | 4 |
+| 0x21 | 36 | 3 | 73 | 82 | 479 | 10.1B | 54 | 81% → 11% | 9.4% | 14 |
+| 0x221 | 34 | 5 | 69 | 88 | 449 | 8.0B | 63 | 79% → 12% | 5.6% | 16 |
+| 0xbeef | 42 | 3 | 65 | 90 | 511 | 11.4B | 35 | 80% → 12% | 10.1% | 20 |
+| 0x5eed | 25 | 2 | 76 | 90 | 474 | 6.5B | 52 | 81% → 12% | 2.7% | 9 |
+| 0x7 | 45 | 3 | 73 | 90 | 424 | 9.6B | 85 | 81% → 10% | 9.8% | 7 |
+| 0x1234 | 34 | 3 | 68 | 91 | 499 | 10.0B | 41 | 81% → 12% | 9.2% | 11 |
+| 0x2b | 27 | 1 | 73 | 83 | 357 | 4.6B | 152 | 79% → 9% | — | 6 |
+| 0xc0ffee | 36 | 1 | 62 | 79 | 288 | 4.3B | 205 | 81% → 9% | — | 0 |
+
+Income is in multiples of bare subsistence; "trap opens" is the first year the world's income,
+averaged over the last ten, passes twice what it takes to eat. In no world has it come back.
+
+**Money comes centuries before anybody is rich.** Every world trades in metal by year eighty
+and strikes its first coin by ninety-one; none escapes subsistence before year 288. Money comes
+out of trade being thick, not out of wealth, which is where the record has it.
+
+**The trap holds and then opens.** For three to five centuries every gain in technique becomes
+children, and income stays near what it takes to eat while population grows at up to 1.9 per
+cent a year. Then ideas outrun mouths, the demographic transition follows, and by year 700
+population has stopped growing in every world, with farmers down from four in five to one in
+ten.
+
+**Markets end famines.** The same world with nothing able to move between towns — one switch,
+`trade_is_possible` — has twenty famines in its first hundred and fifty years against seven with
+trade, and a tenth fewer people at the end. A bad harvest met from somebody else's good
+one is most of what a market is for, before it is for anything else.
+
+**The richest worlds are the ones with one country.** 0x2b and 0xc0ffee end at 152 and 205 times
+subsistence; the seven worlds with borders at 35 to 163. A border costs nine per cent of every
+payment across it until a chain brings it to two, and a single country never pays it at all. That
+is a finding about borders rather than about chains, and it is not yet taken apart: fewer people
+and earlier escapes are part of it, and how much is borders is unmeasured.
+
+### 49.4 Three questions, asked every year
+
+A chain is what parties who do not trust each other build, so the question each year is whether
+this world's houses are such parties, and whether it would pay them. `commerce::payments` asks it
+as three conditions, and the answer is no until all three hold:
+
+1. **Nobody is a keeper the rest would simply use.** If some house is trusted at 0.75 or more by
+   every other, they keep their books with it — which is what a single country always has, and
+   why a world of one country never builds a chain (`NotYet::OneCountry`).
+2. **At least four of them can keep up.** Byzantine agreement survives `f` faults with `3f + 1`
+   parties, so one fault tolerated needs four. Each must reckon at seven tenths of the best
+   among them, since everybody's payment waits on the slowest checker — and every country's best
+   house is among the founders, so a laggard country makes a chain dearer for everybody and it
+   waits for them.
+3. **It saves three times what it costs.** Checking one Ed25519 signature by hand is about two
+   working years of a clerk — derived, not chosen: some 2,600 multiplications of 77-digit
+   numbers at twelve thousand digit operations each — divided by the cube of reckoning
+   technique. So a chain is unthinkable at the founding of the world and cheap once a people
+   reckons thirty times better, and in between it is exactly as worth founding as the saving on
+   what paying abroad costs says.
+
+In the seven worlds with borders it happens between years 442 and 588, a century or two after
+the trap opens, founded by thirteen to twenty-one houses across every country. The largest
+founder names it — the Stanwick Ledger, the Selcombe Ledger — and every founder stakes in
+proportion to its business abroad, up to a point: no country's houses may hold more than three
+fifths of the stake, short of the two thirds that would finalise a block with nobody abroad
+signing. Nobody joins a ledger one of the others could keep alone, so the largest country takes
+less stake than its business would give it (§49.7).
+
+### 49.5 The chain itself, and why it counts as one
+
+The standard is design principle five's: the mechanism is real and the resolution is coarse.
+
+- Every block names its parent by SHA-256 and commits to the Merkle root of its transactions, to
+  the root of the whole ledger after them, to the commit that finalised its parent, and to the
+  validator sets now and next. Change a byte anywhere and every later block disagrees.
+- Every transaction is signed with Ed25519, with a nonce and a fee, and is refused if the
+  signature does not hold, if it spends what its sender does not have, or if it breaks any
+  rule of the ledger. Decoding is strict and S must be reduced, so there is exactly one valid
+  signature for each key and message and a transaction's id is its hash.
+- A block is final when validators holding more than two thirds of the stake have signed it.
+  The proposer rotates by stake, Tendermint's priority algorithm. A round whose proposer is not
+  at its post fails and the next is tried; a height where more than a third of the stake is
+  absent stops rather than risk a fork.
+- Signing two blocks at one height is the one offence provable from outside: evidence of it
+  costs five per cent of the stake and the seat. Unbonded stake waits twelve blocks so there is
+  time to show it. New coin is issued each block to validators by stake, halving every four
+  years.
+- A stable token can be minted only by its issuer and only against a reserve its attestor —
+  never the issuer — has stated on the ledger. A shortfall can be stated, and then nothing more
+  is minted until it is made good.
+- Two parties can exchange two assets at once or not at all — delivery against payment. One
+  signs the transaction; the other signs the terms, which name the chain, the other party, both
+  amounts and its own nonce, so its agreement can be used once, on one chain, by the one party it
+  was given to, and changing any term after it signed breaks it.
+- Anybody holding only the genesis can replay every block, recheck every signature and recompute
+  every root, and arrive at the same ledger to the byte. `--nations` does this before it says
+  anything about a chain.
+
+**Stake, not work**, and the reason is a simulation's. Proof of work's security is the real cost
+of the hashing, so a simulated world whose miners grow a thousandfold must either hash a thousand
+times more per block or let the difficulty in a header stop being the work done — at which point
+it is a picture of a chain. Two thirds of a committee's signatures cost the same to check inside
+a simulation as outside.
+
+**What is coarse:** a block a month of the world's time, not every few seconds; and no network —
+every node lives in one process and hears every message at once, so a validator is either
+answering this round or it is not. That is where a partition would go.
+
+The primitives are checked against FIPS 180-4's and RFC 8032's vectors and against eight more
+signatures produced by OpenSSL, and the chain's thirty-eight tests are claims: nothing is spent
+twice; a swap moves both legs or neither; a changed amount fails the transaction root, patched
+to match fails the signature, and patched again fails the commit; the chain keeps going with a
+quarter of the stake absent and stops with half; a block holding a bad transaction is never
+signed; a balance can be proved to somebody holding only a header.
+
+### 49.6 Keeping it
+
+Once a world invoices in one currency, that currency's issuer registers a stable token for it —
+WENT for the Wenmouth piece — and the house abroad that trusts it most agrees to vouch for its
+reserve. Then twelve blocks a year, each carrying signed transactions and nothing else:
+
+- the attestor states the reserve, which is everything outstanding plus what houses have just
+  paid the issuer for new tokens;
+- the issuer mints what each house needs to pay what it owes before it is paid;
+- houses pay each other what their merchants owe abroad, in tokens, with a fee in coin;
+- whatever a house holds beyond a tenth of a year of its business, it redeems — and the attestor
+  states the reserve again, so what the chain shows at the end of a month is what there is;
+- houses short of coin for fees buy it from the houses with most to spare, in swaps both sign:
+  tokens for coin at the coin's price, with the seller paying the fee, so a house holding no
+  coin at all can still buy some.
+
+A payer is not a country but a **market house**: every state that makes a twentieth of its
+country's product has its own house on the chain and pays for its own state's trade; smaller
+states pay through the capital's. Two houses settle directly if their share of the trade between
+their countries is at least a fiftieth; otherwise the payer sends it to the largest house on the
+other side, as a small bank pays through a large one. Each pair of houses, each way, has its own
+year of lumpy months, so a month's payments differ in each direction and balance over the year.
+
+Payments move onto the chain at fifteen per cent a year of the gap to the share of the cost it
+saves, and the coin is worth the stake people want against what the chain carries — a fiftieth of
+a year's payments — plus the coin they hold to pay fees with, a quarter of a year's fees.
+
+| seed | founded | founders | validators | height | most stake in one country | paying abroad without | with | on chain | refused | stalls | replayed |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0x11 | 442 | 17 in 2 | 17 | 3108 | 60% | 9.0% | 1.7% | 90% | 0 | 0 | ok in 6.4 s |
+| 0x21 | 576 | 21 in 3 | 21 | 1500 | 49% | 9.4% | 1.9% | 89% | 0 | 0 | ok in 6.7 s |
+| 0x221 | 570 | 19 in 5 | 19 | 1572 | 60% | 9.7% | 1.9% | 89% | 0 | 0 | ok in 12.9 s |
+| 0xbeef | 588 | 15 in 3 | 15 | 1356 | 60% | 9.8% | 2.0% | 89% | 0 | 0 | ok in 8.1 s |
+| 0x5eed | 570 | 13 in 2 | 13 | 1572 | 60% | 9.2% | 1.9% | 89% | 0 | 0 | ok in 4.1 s |
+| 0x7 | 513 | 13 in 3 | 15 | 2256 | 60% | 8.9% | 1.7% | 90% | 0 | 0 | ok in 12.8 s |
+| 0x1234 | 587 | 15 in 3 | 17 | 1368 | 60% | 8.8% | 2.0% | 88% | 0 | 0 | ok in 7.8 s |
+
+Paying abroad falls from about nine per cent to under two. Nine tenths of it moves onto the
+chain, no chain has ever stalled, nothing any world has sent its chain has been refused, and
+every chain replays from its genesis. In six worlds the largest country's houses hold exactly
+the three fifths they are allowed; in 0x21 two countries hold 49 and 48 per cent, so either can
+stop the chain and neither can finalise a block alone. Where a capital comes to do a twentieth
+of a chain's business and can afford the stake it buys a seat, which is how 0x7 and 0x1234 end
+with more validators than founders. A block of a two-country world carries about forty
+transactions; of the five-country world, about two hundred and thirty. The token cycles: on 0x11
+by year 620, 47.5 trillion WENT minted and 46.6 trillion redeemed, and it is backed exactly one
+for one at the end of every block. And the coin trades against it: 8,859 swaps moved 853,331
+coin, against one transfer paid for off the chain — the issuer's first coin, bought before there
+were any tokens to buy it with.
+
+One thing about that "with": payments settle towards the share of the cost they save, so the
+cost of paying abroad comes to rest near twice the chain's own cost rather than at it. That is a
+stand-in for payments not all being alike, and it is a rule, not a mechanism.
+
+### 49.7 What went wrong on the way
+
+Each of these was found by measuring, and each is worth its line because the obvious version of
+the mechanism was the wrong one.
+
+- **Money's threshold was a tenth where the comment said two fifths.** The low, barter state
+  exists only while `pull · carrying² / (4 · saleability · trickle)` exceeds the share of income
+  exchanged; the first version got that algebra wrong. Now metal tips at a quarter and grain
+  never does.
+- **Ideas at fourteen per cent a year.** A rich world invented as though ideas were free. Returns
+  of three quarters to thinkers and each idea harder than the last fixed it.
+- **No trade across any border.** Overland carriage made every other continent unaffordable; the
+  sea is a fifth the price, and with it countries trade.
+- **The trap opened in year one**, on the founding's first good harvest. A reading read off a
+  noisy series is noise; it is now a ten-year average, and not before year twenty.
+- **Nobody ever went hungry**, because harvests did not vary. They do now, by a tenth, and the
+  famine ablation became possible.
+- **Every town its own state**, when market reach was shorter than the distance between towns.
+- **A two-good market sees almost no trade** between two countries with the same ground.
+  Countries' wares as varieties fixed it — which is also what trade economists found.
+- **A laggard country never caught up**, since catching up needed trade and trade needed its
+  goods to be worth buying. Some contact whatever the trade fixed it.
+- **A chain that cost 157 per cent of what it saved** was being founded, because the decision
+  priced checking at one set of houses and the chain was then checked by another. Founding is
+  self-consistent now — the founders' own reckoning prices it, with every country's best house
+  among them.
+- **Reckoning collapsed** — nobody paid clerks for anything — until savings needed
+  intermediating.
+- **Managed money swung prices by a hundred per cent a year**, chasing last year's growth. It is
+  smoothed, and managed only once deposits outweigh coin three times over.
+- **A coin priced on the fees actually paid** priced itself at nothing in a year nothing was paid,
+  and then its fees came to more coin than existed. It is priced on expected use.
+- **Sixty-four bits** of base units of an inflating currency fit for a decade and overflow within
+  a century. Every amount on the ledger is 128-bit.
+- **Two identical payments each way every month.** Net trade here is barter-balanced, so a
+  country pair's year split in twelve came out as mirrored transfers that read like a wash trade,
+  and only capitals ever paid. Now every sizeable state's house pays for its own trade, with its
+  own lumpy months.
+- **A launch that could not pay for itself.** When checking is dear a month's fees are about a
+  sixth of all the coin, and founders kept a tenth liquid; with every founder paying its own fees
+  nobody had any to sell, and one chain refused 964 transactions in its first two years.
+  `payments::held_for_fees` — the part of the coin's value that fee-paying makes up — is now
+  what founders hold liquid, about as much again as their stake, and refusals went to zero.
+- **A stale reserve.** Redemptions after the month's attestation left the token reading
+  over-backed; the attestor now speaks again after them.
+- **Coin paid for off the ledger.** Houses bought their fee coin with a transfer from the seller
+  and nothing coming back — the payment for it happened somewhere the chain could not see, on a
+  ledger that exists to be the one place such things are seen. The chain has an atomic swap now,
+  and a house buys coin with the tokens it is minted for the purpose.
+- **A ledger one country kept.** Stake in proportion to business put 74 to 90 per cent of it
+  with one country's houses in six worlds of seven — enough to finalise blocks with nobody abroad
+  signing, which is a ledger one party keeps with extra steps. Every rule was being checked and
+  every signature was real, and the chain was still not what it said it was. Founders' stakes
+  are now capped at three fifths per country, the excess going to the others in proportion, and
+  a capital that buys a seat later is held to the same.
+- **Sixty-five microseconds a signature.** With forty transactions and seventeen votes a block,
+  checking dominated both running and replaying. The same few dozen keys sign everything, so a
+  key seen twice now keeps a table of its multiples — one to eight times every power of 256, the
+  reference implementation's layout for the base point — and verifies in about 27 µs. What is
+  kept changes how fast a signature is checked, never whether it holds.
+
+### 49.8 What this does not do
+
+- **Regions trade and pay; they do not act.** No war, no treaty, no tribute, and a country is
+  still a reading of culture and reach. §48.2's verdict changes at this tier from "containers" to
+  "trading partners", not to "parties".
+- **The two tiers do not meet.** The five quarters of the people-level world stand on the same
+  planet, and nothing connects them to the towns here — no promotion or demotion in §6.1's sense,
+  and nobody in a quarter knows the price of grain in the town on their cell.
+- **Nobody attacks a chain.** Slashing, evidence and jailing are built and tested in `chain`, and
+  no validator in any world has ever signed twice. Stalls come only from hunger at a validator's
+  town or bad luck. An issuer is honest by construction and an attestor never lies.
+- **One chain per world.** Nothing competes with the first, and there are no bridges.
+- **Trade balances.** Bilateral trade is balanced by construction — no capital flows, no
+  current-account deficits — and the lumpy months only move payments within a year.
+- **Houses are towns.** No firms, no accounts of persons, no exchanges and no order book: coin
+  changes hands at the price the model sets for it, between the houses with most to spare and the
+  ones that need it. The swap is real; the market that would find its price is not.
 
 ## 37. Leaving, built and taken out again
 

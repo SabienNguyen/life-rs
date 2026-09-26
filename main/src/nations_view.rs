@@ -699,8 +699,17 @@ fn network_json(world: &Nations, at: usize, network: &Network, checked: Option<&
     let start = chain.blocks.len().saturating_sub(BLOCKS_IN_FULL);
     let full = list(chain.blocks[start..].iter().map(|b| {
         let txs = list(b.txs.iter().map(|tx| {
+            // Where a token payment went, and how much, for drawing it on the map.
+            let (to, amount) = match &tx.action {
+                Action::Pay {
+                    to,
+                    asset: Asset::Token(_),
+                    amount,
+                } => (address_town(to), num(*amount as f64 / TOKEN_UNIT as f64)),
+                _ => ("null".to_string(), "0".to_string()),
+            };
             format!(
-                "{{\"id\":{},\"from\":{},\"nonce\":{},\"fee\":{},\"what\":{},\"text\":{}}}",
+                "{{\"id\":{},\"from\":{},\"to\":{to},\"amount\":{amount},\"nonce\":{},\"fee\":{},\"what\":{},\"text\":{}}}",
                 quoted(&tx.id().short()),
                 address_town(&tx.sender()),
                 tx.nonce,

@@ -119,6 +119,8 @@ cargo run -p main -- --years 120 --dossier            # end on one person, in de
 cargo run -p main -- --years 120 --balance            # inheritance vs circumstance
 cargo run -p main -- --years 200 --atlas > atlas.html # turn a globe, click down to a life
 cargo run -p main -- --ages 500                       # half a gigayear, with people on it
+cargo run -p main -- --seed 0x11 --nations 600        # towns to world economy, and a blockchain
+cargo run -p main -- --seed 0x11 --nations 600 --html > ledgers.html  # explore it
 ```
 
 Every world is reproducible from its seed and genuinely different from every other one.
@@ -182,9 +184,34 @@ end to end · a town's history ·
 a balance harness
 
 </td></tr>
+<tr><td>
+
+**Nations**
+
+A town per habitable cell ·
+market-area states · countries ·
+one world market · famines
+
+</td><td>
+
+**Money**
+
+Menger's money · coinage ·
+currencies and a reserve ·
+banking · the trap, and out
+
+</td><td>
+
+**A ledger nobody keeps**
+
+SHA-2 · Ed25519 · Merkle ·
+BFT proof of stake · stable
+tokens against attested reserves
+
+</td></tr>
 </table>
 
-**709 tests.** Most of them are about a claim rather than a function.
+**826 tests.** Most of them are about a claim rather than a function.
 
 ---
 
@@ -381,6 +408,42 @@ separate ways the chain refused to start.
 
 ---
 
+## Markets, money, and a ledger nobody keeps
+
+The people-level world is five quarters of one region. Everywhere else is the statistical
+tier: a town on every habitable cell of the same planet, and four levels none of which is
+drawn — a town; a state, which is a market area; a country, read the way the people-level
+world reads one; and the world.
+
+```bash
+cargo run -p main -- --seed 0x11 --nations 600
+```
+
+Nothing below is scheduled:
+
+- **Money comes first.** Metal is in use by year eighty and coins by ninety — because trade
+  got thick, not because anybody got rich.
+- **The trap holds, then opens.** For three to five centuries every gain becomes children.
+  Then ideas outrun mouths, the demographic transition follows, and farmers fall from four in
+  five to one in ten.
+- **Markets end famines.** The same world with nothing able to move between towns starves
+  three times as often.
+- **Then a chain.** When houses in different countries have no keeper they all trust, at least
+  four of them can check a ledger fast enough, and checking costs a third of what their
+  distrust does, they found one none of them keeps. Every state's market house pays for its
+  own trade on it; a stable token is minted only against a reserve somebody else vouches for;
+  coin trades against it in swaps both sides sign; and no country holds the two thirds of the
+  stake that would let it finalise a block alone. Paying abroad falls from nine per cent of a
+  payment to under two.
+
+It is a real chain: SHA-256, Ed25519 and Merkle trees written from their standards and checked
+against the RFC vectors and OpenSSL; Byzantine-fault-tolerant proof of stake, with a block final
+once two thirds of the stake has signed it; and a whole history that replays from genesis, every
+signature and root rechecked, before the report says a word about it. A world of one country
+never builds one — it has a house everybody can pay through.
+
+---
+
 ## Discovery
 
 Every world used to be permanently medieval, because technique had a hard ceiling. Now
@@ -500,6 +563,8 @@ life evolution ecology       genomes at population scale, food webs, deep time
 genetics person              one genome, one mind
 society bonds culture        households and neighbourhoods; who knows whom; what a people does differently
 work economy                 goods made of goods, trades, technique
+commerce nations             markets, money and growth between places; the world at the scale of nations
+chain                        a ledger nobody keeps: SHA-2, Ed25519, Merkle, proof of stake
 sim                          the World that owns all of it
 observer main                asking it questions, and drawing the answers
 ```

@@ -133,6 +133,7 @@ footer { color: var(--muted); font-size: 13px; text-align: center; padding: 10px
     <h2>Towns, states and countries</h2>
     <svg id="map" viewBox="0 0 720 360" role="img" aria-label="the towns of the world on a map"></svg>
     <div class="legend" id="maplegend"></div>
+    <label class="legend" id="flowswitch" style="display:none;cursor:pointer;flex-wrap:nowrap;align-items:flex-start;gap:6px"><input type="checkbox" id="flows" checked style="margin:3px 0 0;flex:none">the latest block's payments between houses, each a line from payer to payee</label>
   </section>
 
   <section>
@@ -350,6 +351,27 @@ function drawMap() {
         stroke: countryColour(town.country), "stroke-width": 1.2, opacity: dim ? 0.15 : 0.6 }, svg);
     });
   });
+  // The latest block's token payments, payer to payee, bowed so the two ways between a pair
+  // of houses are two lines, and as wide as the square root of what they carried.
+  const chain = WORLD.chains[0];
+  const latest = chain && chain.recent.length ? chain.recent[chain.recent.length - 1] : null;
+  if (latest && $("flows").checked) {
+    const pays = latest.txs.filter(function (t) { return t.what === "pay" && t.to !== null && t.from !== null && t.amount > 0; });
+    const largest = Math.max.apply(null, pays.map(function (t) { return t.amount; })) || 1;
+    const flows = el("g", { fill: "none" }, svg);
+    pays.forEach(function (t) {
+      const a = WORLD.towns[t.from], b = WORLD.towns[t.to];
+      if (Math.abs(wrap(a.lon) - wrap(b.lon)) > 180) return;
+      const x1 = px(a.lon), y1 = py(a.lat), x2 = px(b.lon), y2 = py(b.lat);
+      const mx = (x1 + x2) / 2 - (y2 - y1) * 0.18, my = (y1 + y2) / 2 + (x2 - x1) * 0.18;
+      const dim = pickedCountry !== null && pickedCountry !== a.country && pickedCountry !== b.country;
+      const line = el("path", { d: "M" + x1.toFixed(1) + " " + y1.toFixed(1) + " Q" + mx.toFixed(1) + " " + my.toFixed(1) + " " + x2.toFixed(1) + " " + y2.toFixed(1),
+        stroke: countryColour(a.country), "stroke-width": (0.6 + 4.5 * Math.sqrt(t.amount / largest)).toFixed(2),
+        opacity: dim ? 0.08 : 0.42, "stroke-linecap": "round" }, flows);
+      const label = el("title", {}, line);
+      label.textContent = t.text;
+    });
+  }
   WORLD.towns.forEach(function (t, i) {
     const r = 2.5 + 6.5 * Math.sqrt(t.people / most);
     const dim = pickedCountry !== null && pickedCountry !== t.country;
@@ -377,6 +399,11 @@ function drawMap() {
   }).join("") + (validators.size ? '<span><i style="border:1px dashed var(--gold);height:10px;width:10px;border-radius:50%;background:none"></i>validators</span>' : "") +
     "<span>ringed: a state's hub · lines: each town to its hub · size: people</span>";
 }
+(function () {
+  if (!WORLD.chains.length) return;
+  $("flowswitch").style.display = "flex";
+  $("flows").addEventListener("change", drawMap);
+})();
 function tip(ev, html) {
   const box = $("tip");
   box.innerHTML = html;
