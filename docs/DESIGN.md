@@ -5816,7 +5816,7 @@ The standard is design principle five's: the mechanism is real and the resolutio
 - A chain is also a file, in the same canonical encoding: its genesis and every block, which is
   everything anybody needs to check it (`chain::file`). Reading is as strict as signing —
   whatever reads writes back to the same bytes — and `--verify-chain` checks a file with nothing
-  else: no world and no seed. 0x11's six centuries are a 22 MB file that replays in four
+  else: no world and no seed. 0x11's six centuries are a 23 MB file that replays in four
   seconds; a test flips one bit at two hundred places through a written chain, and each time the
   file either does not read or does not replay. Nor can anything in a file make its checker
   overflow or spin: a genesis that could make more coin than `MAX_SUPPLY`, or burn more than a
@@ -5836,7 +5836,7 @@ The standard is design principle five's: the mechanism is real and the resolutio
   last forty-eight headers as a light client would, from the first of them: each must name the
   header before, the commit that made it final and the set it handed over to, and what every
   validator signed the page works out from the header itself before the browser checks the
-  signature — on 0x11 at year 600, 332 signatures in under a fifth of a second. Change one bit
+  signature — on 0x11 at year 600, 378 signatures in under a fifth of a second. Change one bit
   of one of them and the following stops, at that header or the next, whose link to the commit
   before no longer holds.
 
@@ -5890,29 +5890,30 @@ Payments move onto the chain at fifteen per cent a year of the gap to the share 
 saves, and the coin is worth the stake people want against what the chain carries — a fiftieth of
 a year's payments — plus the coin they hold to pay fees with, a quarter of a year's fees.
 
-| seed | founded | founders | validators | height | most stake in one country | paying abroad without | with | on chain | refused | stalls | jailed | replayed |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 0x11 | 418 | 6 in 2 | 7 | 3396 | 60% | 9.0% | 1.7% | 90% | 0 | 0 | 2 | ok in 6.9 s |
-| 0x21 | 565 | 21 in 3 | 14 | 1632 | 53% | 9.4% | 1.8% | 90% | 0 | 0 | 1 | ok in 7.7 s |
-| 0x221 | 538 | 14 in 5 | 14 | 1956 | 44% | 9.6% | 1.8% | 90% | 0 | 0 | 1 | ok in 16.3 s |
-| 0xbeef | 596 | 21 in 3 | 16 | 1260 | 48% | 9.8% | 2.0% | 89% | 0 | 0 | 0 | ok in 8.0 s |
-| 0x5eed | 556 | 10 in 2 | 10 | 1740 | 60% | 9.2% | 1.9% | 89% | 0 | 0 | 0 | ok in 7.4 s |
-| 0x7 | 517 | 21 in 3 | 14 | 2208 | 49% | 9.1% | 1.8% | 90% | 0 | 0 | 0 | ok in 14.2 s |
-| 0x1234 | 587 | 21 in 3 | 15 | 1368 | 48% | 8.8% | 1.9% | 88% | 0 | 0 | 0 | ok in 10.1 s |
+| seed | founded | founders | validators | height | most stake in one country | in one house | paying abroad without | with | on chain | refused | stalls | jailed | replayed |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0x11 | 418 | 6 in 2 | 9 | 3396 | 56% | 29% | 9.0% | 1.7% | 90% | 0 | 0 | 2 | ok in 6.4 s |
+| 0x21 | 565 | 21 in 3 | 14 | 1632 | 53% | 16% | 9.4% | 1.8% | 90% | 0 | 0 | 1 | ok in 6.9 s |
+| 0x221 | 538 | 14 in 5 | 14 | 1956 | 44% | 18% | 9.6% | 1.8% | 90% | 0 | 0 | 1 | ok in 15.2 s |
+| 0xbeef | 596 | 21 in 3 | 16 | 1260 | 48% | 13% | 9.8% | 2.0% | 89% | 0 | 0 | 0 | ok in 7.1 s |
+| 0x5eed | 556 | 10 in 2 | 14 | 1740 | 60% | 27% | 9.2% | 1.9% | 89% | 0 | 0 | 0 | ok in 4.8 s |
+| 0x7 | 517 | 21 in 3 | 14 | 2208 | 49% | 17% | 9.1% | 1.8% | 90% | 0 | 0 | 0 | ok in 12.0 s |
+| 0x1234 | 587 | 21 in 3 | 15 | 1368 | 48% | 13% | 8.8% | 1.9% | 88% | 0 | 0 | 0 | ok in 7.2 s |
 
 Paying abroad falls from about nine per cent to under two. Nine tenths of it moves onto the chain,
 no chain has ever stalled, nothing any world has sent its chain has been refused, and every chain
 replays from its genesis. No country's houses hold more of the stake than the three fifths they
-are allowed — in 0x11 and 0x5eed exactly that, in four worlds under half. And the validators come
-and go with the business: a house whose share of what the chain carries has averaged a twentieth
-over the years takes a seat, and one whose share has averaged under a hundredth gives its stake
-back, so long as four validators remain and no country is left over its cap. 0x221 has had six
-houses join and five leave since its founding; 0x11's six founders are seven validators, three
-houses having joined and two left, and two caught signing a block twice and back under keys they
-keep for staking (§49.6.2). A block of a two-country world carries about thirty transactions; of
-the five-country world, about two hundred. The token cycles: on 0x11 by year 620, 59.3 trillion
-WENT minted and 58.1 trillion redeemed, and it is backed exactly one for one at the end of every
-block. And the coin trades against it: 13,172 swaps moved 503,287 coin, against eight transfers
+are allowed — in 0x5eed exactly that, in four worlds under half — and no house more than the three
+tenths it is (§49.6.3). And the validators come and go with the business: a house whose share of
+what the chain carries has averaged a twentieth over the years takes a seat, and one whose share
+has averaged under a hundredth gives its stake back, so long as four validators remain and neither
+a country nor another house is left over its share. 0x221 has had six houses join and five leave
+since its founding; 0x11's six founders are nine validators, four houses having joined and one
+left, and two caught signing a block twice and back under keys they keep for staking (§49.6.2). A
+block of a two-country world carries about thirty transactions; of the five-country world, about
+two hundred. The token cycles: on 0x11 by year 620, 58.4 trillion WENT minted and 57.3 trillion
+redeemed, and it is backed exactly one for one at the end of every block. And the coin trades
+against it: 14,640 swaps moved 849,766 coin, against twelve transfers from one house to another
 paid for over the counter, the first of them the issuer's first coin, bought before there were any
 tokens to buy it with.
 
@@ -5996,30 +5997,68 @@ the price of one nobody keeps, as it was at the founding, which waited for the s
 The house just caught is placed like any other, and is often the best placed — on 0x11 it was
 Wickport itself, under its new key, that bonded what brought the smaller country back to its three
 fifths, the same year. Only if nobody can buy the coin does the country over its share give some up.
+The same mending holds each house to three tenths of the stake (§49.6.3).
 
 Across thirty worlds with chains — the seven of §49.6's table to year 700, and twenty-three more
-to year 800 — thirty-eight validators were caught, none in ten of the worlds and at most four in
-any; forty-nine more chains, among sixty-four further seeds run to year 700, caught forty-two. In
-all seventy-nine nothing any world sent its chain was refused, nothing stalled, no chain ended
-with fewer than five validators or with a country holding more than its three fifths, and every
-chain replays from its genesis. Sixty-four seeds more, 0x72 to 0xb1, run for a thousand years,
-found forty-nine chains that caught ninety-three validators between them, six in the busiest, and
-the same held: nothing refused, nothing stalled, no chain under six validators or with a country
-over three fifths, every chain replayed. Nor does a country pass its share for a moment on the
-way: read block by block, at no height of seven of those chains — 0x11, 0x21, 0x221, 0x27, 0x2c,
-0x4e and 0x5f — does one country hold more than three fifths of the stake that signs, because the
-evidence and the bonding that mends what it does go into the same block. A test jails the worst
+to year 800 — forty validators were caught, none in eight of the worlds and at most four in any;
+forty-nine more chains, among sixty-four further seeds run to year 700, caught forty-six. In all
+seventy-nine nothing any world sent its chain was refused, nothing stalled, no chain ended with
+fewer than the four validators the rules allow or with a country holding more than its three
+fifths, and every chain replays from its genesis. Sixty-four seeds more, 0x72 to 0xb1, run for a
+thousand years, found forty-nine chains that caught ninety-seven validators between them, six in
+the busiest, and the same held: nothing refused, nothing stalled, no chain under four validators
+or with a country over three fifths, every chain replayed. Nor does a country pass its share for
+a moment on the way: read block by block, at no height of any of those hundred and twenty-eight
+chains does one country hold more than three fifths of the stake that signs, because the evidence
+and the bonding that mends what it does go into the same block. A test jails the worst
 case by hand — the smaller country's largest validator on 0x11, which left the larger holding the
 whole of the stake — and holds the chain, two years on, to a twentieth burned, the old key's stake
 taken back, the house seated again under a new one, at least four validators, three fifths,
 nothing refused or stalled, and a history that replays and can be followed by its headers.
 
-Run on to year 1,500, four of those chains keep six to eight validators — 0x221's fourteen of
-year 700 are eight — with four to six houses caught along the way, and hold: nothing refused,
+Run on to year 1,500, four of those chains keep five to eight validators — 0x221's fourteen of
+year 700 are eight — with three to seven houses caught along the way, and hold: nothing refused,
 nothing stalled, no country past its three fifths, every chain replayed. A house leaves when its
 own payments dwindle and few grow large enough to take a seat, so the sets thin; a house caught
 no longer takes a seat away with it. Nothing in this model gives a chain a reason to keep more
 validators than that (§49.8).
+
+### 49.6.3 Nor one house
+
+Holding a country to three fifths keeps it from finalising a block alone; it never kept one house
+from stopping the chain. A third of the stake away leaves every height short of two thirds (§49.8),
+and at year 800 a single house held that much in five of the 23 worlds — 0x27's sixty per cent,
+all of its country's. So a house is held to three tenths, as a country is to three fifths, and at
+the same four places. At the founding each founder's stake is its business scaled by one factor
+for all, held to three tenths, with a country's houses scaled back together to its three fifths.
+A house taking a seat takes it within room under both. A validator does not leave if that would
+put another house over its share — as it does not if that would put a country over — so a house
+seated to keep another small stays while it is needed for that. And every month, the best-placed
+house with room under both bonds what brings a house over its share back to it, taking a seat to
+do so if it must; failing that, the house gives up what it can.
+
+The two cannot always both hold, and the country's wins. A country whose houses are too few to
+hold its share at three tenths each has them hold more: 0x27's and 0x28's smaller countries have
+one state each, and so one house, which holds two fifths while its neighbour holds three. No
+country can finalise a block alone there, and the report says that one house could stop the
+chain. 0x11's smaller country founded its chain with one house too, which held its two fifths
+until a second house of that country took a seat in the chain's first month and shared them.
+
+Measured on the sweeps of §49.6.2, run again with it: of the seventy-nine chains to years 700
+and 800, no house held more than three tenths at any height from the second in all but eight, and
+in each of those eight — 0x27 and 0x28, and 0x37, 0x38, 0x4e, 0x59, 0x5f and 0x6d — the smaller
+country has one house, which holds its two fifths. Of the forty-nine run for a thousand years the
+same held in all but five, each of them a country with one house; and run on to year 1,500, 0x11,
+0x221 and 0x2c keep every house to three tenths, and 0x27 every house but the one its smaller
+country has.
+
+What it cost is what holding a country to its share costs, and less of it. Chains keep more
+validators — 0xb's seven are ten, 0x55's thirteen sixteen — though where one house must hold its
+country's share, fewer: 0x37's seven are four, the fewest there may be. And in a few worlds the
+house that takes up the stake checks more slowly, and paying abroad costs a little more: 0x64's
+payments abroad cost 2.8 per cent of themselves rather than 2.6, and 0x39's 1.8 rather than 1.7,
+though 0x4e's cost 1.7 rather than 1.8. In the rest paying abroad and the chain's share of it read
+the same to the tenth.
 
 ### 49.7 What went wrong on the way
 
@@ -6149,6 +6188,14 @@ the mechanism was the wrong one.
   validators different blocks in one round could bind them to two, neither of which could then
   gather two thirds, and stop the height for good. It could not fork it; and here every node hears
   every message at once, so nobody can show different validators different things.
+- **Seated and let go.** The first rule holding a house to three tenths let an idle validator
+  leave whatever that did to the others' shares, trusting the next month's mending to take up what
+  it held. On 0x28, whose smaller country's one house must hold two fifths, the larger country's
+  idle validators left, the mending seated others of that country to keep the lone house small,
+  and they left in turn for want of business of their own: three seats taken and given up in
+  twenty-two years — §31.1's oscillation again, between two rules each reading something else. A
+  validator now stays while its leaving would put another house over its share, as it already did
+  for a country's.
 - **A country left with nobody to stake.** Sixty-four more seeds found two worlds, 0x4e and
   0x5f, ending with one country holding all of the stake. In each the smaller country's one house
   on the chain had been caught, and a jailed account can never bond again, so there was nobody
@@ -6184,13 +6231,13 @@ the mechanism was the wrong one.
   third or more, and goes on with the block the others had signed once they are back. In all 23
   worlds of the sweep at year 800 the largest country holds more than a third — 40 to 60 per
   cent, as in a world of two countries one must — and in 21 two countries each do, so in every
-  one a single country's houses staying away would stop its chain. In five a single house could:
-  0x27's holds 60 per cent, all of its country's, and 0xb's 54. None has: a validator is away
-  only when its town starves, or for a round by chance, and the report and the page say who
-  could. A cap on one house's share, as
-  there is on one country's, would be the next rule, at what that one costs — stake moved to
-  houses that check more slowly — and where the two could not both hold, the country's would
-  have to win.
+  one a single country's houses staying away would stop its chain. Before houses were held to
+  three tenths (§49.6.3), in five a single house could too — 0x27's held 60 per cent, all of its
+  country's — and now only where a country has one house to hold its share with. None has: a
+  validator is away only when its town starves, or for a round by chance, and the report and the
+  page say who could. What the chain cannot be kept from is a country stopping it: with two
+  countries one of them always holds a third, and more countries, not more rules, are what would
+  change that.
 - **One chain per world.** Nothing competes with the first, and there are no bridges.
 - **Trade balances.** Bilateral trade is balanced by construction — no capital flows, no
   current-account deficits — and the lumpy months only move payments within a year.

@@ -85,6 +85,13 @@ const SEAT_AT: f64 = 0.05;
 /// takes less stake than its business would give it, and every block needs somebody abroad.
 pub const ONE_COUNTRY_AT_MOST: f64 = 0.6;
 
+/// The most of a chain's stake any one house may hold: short of the third that would let it stop
+/// the chain by staying away, as `ONE_COUNTRY_AT_MOST` is short of the two thirds that would let a
+/// country finalise alone. Where the two cannot both hold — a country whose one house able to
+/// validate would have to hold more, or its neighbour past its own share — the country's wins: a
+/// ledger one country could keep is worse than one a house could stop.
+pub const ONE_HOUSE_AT_MOST: f64 = 0.3;
+
 /// How much of a house's standing on a chain one year's business sets: its share of what the
 /// chain carries, averaged over about five years. Read afresh each year, a small state that
 /// merged into its neighbour and split off again took a seat and gave it up thirteen times in
@@ -319,6 +326,88 @@ fn house_trust(nations: &Nations, trust: &[Vec<f64>], a: usize, b: usize) -> f64
     payments::trust(payments::trust_ceiling(true, nations.distance_km(a, b)), 1.0)
 }
 
+/// Founders' stakes, in coin, with no house holding more than `ONE_HOUSE_AT_MOST` of the whole
+/// and no country's houses more than `ONE_COUNTRY_AT_MOST`. Every house's stake is its business
+/// scaled by one factor, held to its three tenths, and a country's houses are scaled back together
+/// as far as it takes to hold theirs to three fifths; the factor is whatever makes the stakes add
+/// up to the whole again. Where no factor can — a country with too few founders to hold its share
+/// at three tenths each, while the other could not take the rest without passing three fifths —
+/// the country's share is the one that holds: what is left goes to the countries with room under
+/// theirs, and their houses hold more than three tenths. `founders` is each founder's country and
+/// the stake its business would have given it.
+pub(crate) fn nobody_keeps_it(founders: &[(usize, f64)]) -> Vec<f64> {
+    let wanted: Vec<f64> = founders.iter().map(|(_, s)| s.max(0.0)).collect();
+    let whole: f64 = wanted.iter().sum();
+    let countries: Vec<usize> = founders
+        .iter()
+        .map(|(c, _)| *c)
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    if whole <= 0.0 || countries.len() < 2 || wanted.iter().any(|w| *w <= 0.0) {
+        return no_country_keeps_it(founders);
+    }
+    let (house, country) = (ONE_HOUSE_AT_MOST * whole, ONE_COUNTRY_AT_MOST * whole);
+    let members = |c: usize| (0..founders.len()).filter(move |i| founders[*i].0 == c);
+    // The largest x in [0, top] at which `fits(x)` still holds, for `fits` that holds up to some
+    // point and not beyond.
+    let largest = |top: f64, fits: &dyn Fn(f64) -> bool| {
+        let (mut lo, mut hi) = (0.0, top);
+        for _ in 0..100 {
+            let mid = 0.5 * (lo + hi);
+            if fits(mid) {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        lo
+    };
+    // Past this, every house is at its three tenths whatever it wants.
+    let top = house / wanted.iter().copied().fold(f64::INFINITY, f64::min);
+    let at = |scale: f64| -> Vec<f64> {
+        let mut stakes: Vec<f64> = wanted.iter().map(|w| (w * scale).min(house)).collect();
+        for &c in &countries {
+            let held: f64 = members(c).map(|i| stakes[i]).sum();
+            if held > country {
+                let theirs = |s: f64| members(c).map(|i| (wanted[i] * s).min(house)).sum::<f64>();
+                let back = largest(scale, &|s| theirs(s) <= country);
+                for i in members(c) {
+                    stakes[i] = (wanted[i] * back).min(house);
+                }
+            }
+        }
+        stakes
+    };
+    let scale = largest(top, &|s| at(s).iter().sum::<f64>() <= whole);
+    let mut stakes = at(scale);
+    let left = whole - stakes.iter().sum::<f64>();
+    if left > 1e-9 * whole {
+        // The countries with room under three fifths take the rest, in proportion to what they
+        // want, none past its share; within each, its houses in proportion to theirs.
+        let room: Vec<f64> = countries
+            .iter()
+            .map(|c| (country - members(*c).map(|i| stakes[i]).sum::<f64>()).max(0.0))
+            .collect();
+        let want: Vec<f64> = countries.iter().map(|c| members(*c).map(|i| wanted[i]).sum()).collect();
+        let open: Vec<usize> = (0..countries.len()).filter(|k| room[*k] > 0.0).collect();
+        let weight: f64 = open.iter().map(|k| want[*k]).sum();
+        let fill = |x: f64| -> f64 { open.iter().map(|k| (x * want[*k] / weight).min(room[*k])).sum() };
+        // At this much every open country is given at least what is left or all its room, and
+        // their rooms add up to more than is left, since three fifths of the whole twice over is.
+        let most = left * weight / open.iter().map(|k| want[*k]).fold(f64::INFINITY, f64::min);
+        let x = largest(most, &|x| fill(x) <= left);
+        for &k in &open {
+            let c = countries[k];
+            let extra = (x * want[k] / weight).min(room[k]);
+            for i in members(c) {
+                stakes[i] += extra * wanted[i] / want[k];
+            }
+        }
+    }
+    stakes
+}
+
 /// Founders' stakes, in coin, with no country's houses holding more than `ONE_COUNTRY_AT_MOST`
 /// of the whole: a country over it has its houses' stakes scaled down to it, and what it gives
 /// up goes to the others in proportion to what they hold, until none is over. `founders` is
@@ -439,7 +528,7 @@ fn consider_founding(nations: &mut Nations) {
     let keys: Vec<SigningKey> = founders.iter().map(|t| key_for(nations, network, *t)).collect();
     let founding_volume: f64 = founding.founders.iter().map(|i| candidates[*i].volume).sum();
     let spare = GENESIS_COINS - FOUNDING_STAKE * founders.len() as u128;
-    let stakes = no_country_keeps_it(
+    let stakes = nobody_keeps_it(
         &founding
             .founders
             .iter()
@@ -928,8 +1017,9 @@ fn fund_keeping(
 }
 
 /// A house whose business on a chain has grown large enough takes a seat among its validators:
-/// it buys stake from those who have it and bonds it — within what keeps its country's houses
-/// short of `ONE_COUNTRY_AT_MOST` of the stake, and only if it checks as fast as the others.
+/// it buys stake from those who have it and bonds it — within what keeps it short of
+/// `ONE_HOUSE_AT_MOST` of the stake and its country's houses short of `ONE_COUNTRY_AT_MOST`, and
+/// only if it checks as fast as the others.
 fn take_seats(nations: &mut Nations, at: usize) {
     let most = nations.networks[at].chain.params().max_validators;
     let standing = nations.networks[at].standing.clone();
@@ -948,8 +1038,7 @@ fn take_seats(nations: &mut Nations, at: usize) {
             continue;
         }
         let wanted = (GENESIS_COINS as f64 * share).max(20.0);
-        let (ours, all) = pending_country_power(nations, at, nations.towns[town].country);
-        let room = (ONE_COUNTRY_AT_MOST * all as f64 - ours as f64) / (1.0 - ONE_COUNTRY_AT_MOST);
+        let room = room(nations, at, town);
         if room < 20.0 {
             continue;
         }
@@ -1246,41 +1335,52 @@ fn tend_stakes(nations: &mut Nations, at: usize) {
 }
 
 /// A chain that has lost a validator to jail may be left with one country's houses holding more
-/// than `ONE_COUNTRY_AT_MOST` of the stake, or with fewer than four validators. Then the houses
-/// best placed to mend it bond what it takes, whatever their standing, until neither is so:
-/// while a country is over its share, the best-placed house of another country — which may
-/// validate already — bonds what brings it back; while there are fewer than four, the
-/// best-placed house not validating whose country has room under its share takes a seat. What
-/// nobody can buy the coin for, the country over its share gives up: its largest validator
-/// unbonds the rest. With nothing to mend, as in almost every month, it does nothing.
+/// than `ONE_COUNTRY_AT_MOST` of the stake, one house holding more than `ONE_HOUSE_AT_MOST`, or
+/// with fewer than four validators. Then the houses best placed to mend it bond what it takes,
+/// whatever their standing, until none is so: while a country is over its share, the best-placed
+/// house of another country — which may validate already — bonds what brings it back; while a
+/// house is over its own, the best-placed other house with room under both shares does; while
+/// there are fewer than four, the best-placed house not validating with room takes a seat. What
+/// nobody can buy the coin for, whoever is over gives up: a country's largest validator unbonds
+/// the rest, and a house as much as it can without leaving another country over its share, since
+/// the country's is the one that must hold. With nothing to mend, as in almost every month, it
+/// does nothing.
 fn mend(nations: &mut Nations, at: usize) {
     let most = nations.networks[at].chain.params().max_validators;
     let min_bond = nations.networks[at].chain.params().min_bond.max(COIN) / COIN;
+    let has_room = |nations: &Nations, t: usize| room(nations, at, t) >= min_bond as f64;
     for _ in 0..most {
         if let Some((country, ours, all)) = over_its_share(nations, at) {
-            // What the others must add for this country to hold its three fifths again.
+            // What the others must add for this country to hold its three fifths again: from a
+            // house with room for it if there is one, and from anybody abroad if not.
             let needed = (ours as f64 / ONE_COUNTRY_AT_MOST - all as f64).ceil() as u128 + 1;
-            let Some(town) = best_placed(nations, at, |t| nations.towns[t].country != country, true) else {
+            let abroad = |t: usize| nations.towns[t].country != country;
+            let town = best_placed(nations, at, |t| abroad(t) && has_room(nations, t), true)
+                .or_else(|| best_placed(nations, at, abroad, true));
+            let Some(town) = town else {
                 break;
             };
-            let seated = pending_towns(&nations.networks[at]).contains(&town);
-            if !bond(nations, at, town, needed.max(min_bond) * COIN, true) {
+            let within = room(nations, at, town).max(0.0) as u128;
+            let amount = if within >= min_bond { needed.min(within) } else { needed };
+            if !seat(nations, at, town, amount.max(min_bond)) {
                 break;
             }
-            // Bonding what it could buy may still leave it short of a seat.
-            if !seated && pending_towns(&nations.networks[at]).contains(&town) {
-                record_seat(nations, at, town);
+        } else if let Some((over, ours, all)) = house_over(nations, at) {
+            // What the others must add for this house to hold under a third again.
+            let needed = (ours as f64 / ONE_HOUSE_AT_MOST - all as f64).ceil() as u128 + 1;
+            let Some(town) = best_placed(nations, at, |t| t != over && has_room(nations, t), true) else {
+                break;
+            };
+            let within = room(nations, at, town).max(0.0) as u128;
+            if !seat(nations, at, town, needed.min(within).max(min_bond)) {
+                break;
             }
         } else if nations.networks[at].chain.pending_validators().len() < payments::FEWEST_FOUNDERS.min(most) {
-            let room = |t: usize| {
-                let (ours, all) = pending_country_power(nations, at, nations.towns[t].country);
-                (ONE_COUNTRY_AT_MOST * all as f64 - ours as f64) / (1.0 - ONE_COUNTRY_AT_MOST)
-            };
-            let Some(town) = best_placed(nations, at, |t| room(t) >= 20.0, false) else {
+            let Some(town) = best_placed(nations, at, |t| room(nations, at, t) >= 20.0, false) else {
                 break;
             };
             let share = nations.networks[at].standing.get(&town).copied().unwrap_or(0.0);
-            let wanted = (GENESIS_COINS as f64 * share).max(20.0).min(room(town)) as u128;
+            let wanted = (GENESIS_COINS as f64 * share).max(20.0).min(room(nations, at, town)) as u128;
             if !bond(nations, at, town, wanted.max(min_bond) * COIN, false) {
                 break;
             }
@@ -1290,33 +1390,73 @@ fn mend(nations: &mut Nations, at: usize) {
         }
     }
     // With nobody else holding stake, giving some up would change nothing.
-    let Some((country, ours, all)) = over_its_share(nations, at).filter(|(_, ours, all)| ours < all) else {
+    if let Some((country, ours, all)) = over_its_share(nations, at).filter(|(_, ours, all)| ours < all) {
+        let excess = ((ours as f64 - ONE_COUNTRY_AT_MOST * all as f64) / (1.0 - ONE_COUNTRY_AT_MOST)).ceil() as u128;
+        let network = &nations.networks[at];
+        let largest = network
+            .chain
+            .pending_validators()
+            .into_iter()
+            .filter(|(address, _, _)| {
+                network
+                    .town_of(address)
+                    .is_some_and(|t| nations.towns[t].country == country)
+            })
+            .max_by(|a, b| a.2.cmp(&b.2).then(b.0.cmp(&a.0)));
+        if let Some((address, _, power)) = largest {
+            give_up(nations, at, address, excess.min((power as u128).saturating_sub(min_bond)));
+        }
         return;
-    };
-    let excess = ((ours as f64 - ONE_COUNTRY_AT_MOST * all as f64) / (1.0 - ONE_COUNTRY_AT_MOST)).ceil() as u128;
+    }
+    if let Some((town, ours, all)) = house_over(nations, at).filter(|(_, ours, all)| ours < all) {
+        // As much as brings it under its share, and no more than leaves every other country
+        // within its own of what remains.
+        let mut excess = (ours as f64 - ONE_HOUSE_AT_MOST * all as f64) / (1.0 - ONE_HOUSE_AT_MOST);
+        for c in (0..nations.countries.len()).filter(|c| *c != nations.towns[town].country) {
+            let (theirs, _) = pending_country_power(nations, at, c);
+            excess = excess.min(all as f64 - theirs as f64 / ONE_COUNTRY_AT_MOST);
+        }
+        let network = &nations.networks[at];
+        let validating = network
+            .chain
+            .pending_validators()
+            .into_iter()
+            .filter(|(address, _, _)| network.town_of(address) == Some(town))
+            .max_by(|a, b| a.2.cmp(&b.2).then(b.0.cmp(&a.0)));
+        if let Some((address, _, power)) = validating
+            && excess >= 1.0
+        {
+            give_up(nations, at, address, (excess.ceil() as u128).min((power as u128).saturating_sub(min_bond)));
+        }
+    }
+}
+
+/// A house bonds `coins` whole coins, as much of them as it can buy, to mend a chain; whether it
+/// bonded anything. One that was not validating and now will has taken a seat, which is written
+/// down.
+fn seat(nations: &mut Nations, at: usize, town: usize, coins: u128) -> bool {
+    let seated = pending_towns(&nations.networks[at]).contains(&town);
+    if !bond(nations, at, town, coins * COIN, true) {
+        return false;
+    }
+    // Bonding what it could buy may still leave it short of a seat.
+    if !seated && pending_towns(&nations.networks[at]).contains(&town) {
+        record_seat(nations, at, town);
+    }
+    true
+}
+
+/// The stake at an address unbonds `coins` whole coins, signed by the key it is bonded under —
+/// which is not the house's own if that was jailed.
+fn give_up(nations: &mut Nations, at: usize, address: Address, coins: u128) {
     let network = &nations.networks[at];
-    let largest = network
-        .chain
-        .pending_validators()
-        .into_iter()
-        .filter(|(address, _, _)| {
-            network
-                .town_of(address)
-                .is_some_and(|t| nations.towns[t].country == country)
-        })
-        .max_by(|a, b| a.2.cmp(&b.2).then(b.0.cmp(&a.0)));
-    let Some((address, _, power)) = largest else {
-        return;
-    };
-    // Signed by the key the stake is bonded under, which is not the house's own if that was
-    // jailed.
     let Some(town) = network.town_of(&address) else {
         return;
     };
     let Some(key) = network.keys_of(town).find(|k| Address::of(&k.public()) == address).cloned() else {
         return;
     };
-    let amount = excess.min((power as u128).saturating_sub(min_bond)) * COIN;
+    let amount = coins * COIN;
     let network = &mut nations.networks[at];
     let min_fee = network.chain.params().min_fee;
     if amount == 0 || network.chain.pending_balance(&address, Asset::Coin) < min_fee {
@@ -1381,8 +1521,11 @@ fn best_placed(
 }
 
 /// A validator whose standing has fallen below `LEAVE_BELOW` takes its stake back — unless the
-/// chain would be left with fewer than four validators, or with one country's houses holding
-/// more of the stake than `ONE_COUNTRY_AT_MOST`.
+/// chain would be left with fewer than four validators, with one country's houses holding more
+/// of the stake than `ONE_COUNTRY_AT_MOST`, or with another house holding more than
+/// `ONE_HOUSE_AT_MOST`. A house seated to keep another from being able to stop the chain stays
+/// while it is needed for that: let go as soon as its own business dwindled, it would be seated
+/// again by the next month's mending, and gone again a few years on.
 fn leave_idle(nations: &mut Nations, at: usize) {
     let network = &nations.networks[at];
     let idle: Vec<usize> = network
@@ -1407,7 +1550,12 @@ fn leave_idle(nations: &mut Nations, at: usize) {
             let (ours, _) = pending_country_power(nations, at, c);
             let ours = if nations.towns[town].country == c { ours - leaving } else { ours };
             ours as f64 > ONE_COUNTRY_AT_MOST * left as f64
-        });
+        }) || {
+            let (houses, _) = pending_house_power(nations, at);
+            houses
+                .iter()
+                .any(|(t, ours)| *t != town && *ours as f64 > ONE_HOUSE_AT_MOST * left as f64)
+        };
         if too_much {
             continue;
         }
@@ -1520,6 +1668,43 @@ fn pending_country_power(nations: &Nations, at: usize, country: usize) -> (u64, 
         .map(|(_, _, power)| power)
         .sum();
     (ours, pending.iter().map(|(_, _, power)| power).sum())
+}
+
+/// Each house's voting power on a chain once everything sent so far has gone through, and
+/// everybody's.
+fn pending_house_power(nations: &Nations, at: usize) -> (BTreeMap<usize, u64>, u64) {
+    let network = &nations.networks[at];
+    let pending = network.chain.pending_validators();
+    let mut houses = BTreeMap::new();
+    for (address, _, power) in &pending {
+        if let Some(town) = network.town_of(address) {
+            *houses.entry(town).or_insert(0) += power;
+        }
+    }
+    (houses, pending.iter().map(|(_, _, power)| power).sum())
+}
+
+/// The house holding more than `ONE_HOUSE_AT_MOST` of the stake once everything sent so far has
+/// gone through — the most, if more than one does — with its power and everybody's. Power is
+/// whole coins, so a thousandth over is not what this is for.
+fn house_over(nations: &Nations, at: usize) -> Option<(usize, u64, u64)> {
+    let (houses, all) = pending_house_power(nations, at);
+    houses
+        .into_iter()
+        .filter(|(_, ours)| *ours as f64 > (ONE_HOUSE_AT_MOST + 1e-3) * all as f64)
+        .max_by(|a, b| a.1.cmp(&b.1).then(b.0.cmp(&a.0)))
+        .map(|(town, ours)| (town, ours, all))
+}
+
+/// The most coin a house could bond, in whole coins, and leave both itself and its country
+/// within their shares of the stake.
+fn room(nations: &Nations, at: usize, town: usize) -> f64 {
+    let (houses, all) = pending_house_power(nations, at);
+    let ours = houses.get(&town).copied().unwrap_or(0);
+    let (country, _) = pending_country_power(nations, at, nations.towns[town].country);
+    let house = (ONE_HOUSE_AT_MOST * all as f64 - ours as f64) / (1.0 - ONE_HOUSE_AT_MOST);
+    let country = (ONE_COUNTRY_AT_MOST * all as f64 - country as f64) / (1.0 - ONE_COUNTRY_AT_MOST);
+    house.min(country)
 }
 
 /// The largest share of a chain's voting power the validators of any one country hold.

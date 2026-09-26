@@ -271,6 +271,39 @@ fn most_one_country_ever_held(world: &Nations) -> (f64, u64) {
         .fold((0.0, 0), |best, now| if now.0 > best.0 { now } else { best })
 }
 
+/// Nor can one house stop it. No house holds the third of the stake that would let it leave a
+/// height short of two thirds by staying away — held to three tenths, as a country is to three
+/// fifths — from the block after the founders' first month. Before that the country's share is the
+/// one that holds: 0x11's smaller country had one founder, who had to hold its two fifths until a
+/// second house of that country took a seat in the chain's first month and shared them.
+#[test]
+fn no_house_can_stop_the_chain_on_its_own() {
+    let world = chained();
+    let (most, at) = most_one_house_ever_held(world, 2);
+    assert!(most <= network::ONE_HOUSE_AT_MOST + 1e-3, "{most:.3} at height {at}");
+    assert!(most < 1.0 / 3.0);
+    let (founding, _) = most_one_house_ever_held(world, 0);
+    assert!(founding > 1.0 / 3.0, "the founding is where the country's share wins");
+}
+
+/// The largest share of a signing set any one house held, at any height of a world's first chain
+/// from `from` on, and the height.
+fn most_one_house_ever_held(world: &Nations, from: u64) -> (f64, u64) {
+    let network = &world.networks[0];
+    (from..=network.chain.height())
+        .map(|height| {
+            let set = network.chain.light_block(height).expect("a block").validators;
+            let total: u64 = set.members.iter().map(|v| v.power).sum();
+            let mut held = std::collections::BTreeMap::new();
+            for v in &set.members {
+                let town = network.town_of(&v.address).expect("every validator is a house");
+                *held.entry(town).or_insert(0u64) += v.power;
+            }
+            (held.values().copied().max().unwrap_or(0) as f64 / total.max(1) as f64, height)
+        })
+        .fold((0.0, 0), |best, now| if now.0 > best.0 { now } else { best })
+}
+
 /// What the cap is for, tried rather than counted. The country whose houses hold the most stake
 /// cuts a block of its own at the next height — the real tip moved on, with a ledger that suits
 /// it better — and every one of its validators signs it: not final, because its stake is short of
@@ -480,6 +513,22 @@ fn stake_over_the_cap_goes_to_the_others() {
     assert!((stakes[2] / stakes[3] - 1.5).abs() < 1e-9, "the others gain in proportion");
     let fair = [(0, 50.0), (1, 50.0)];
     assert_eq!(network::no_country_keeps_it(&fair), vec![50.0, 50.0]);
+}
+
+/// And at a founding each house is held to three tenths as well, what it gives up going to the
+/// others in proportion — unless a country's one founder would then have to hold less than its
+/// country must, in which case it holds what its country must and no more: the country's share is
+/// the one that holds.
+#[test]
+fn a_founder_is_held_to_three_tenths_where_its_country_allows() {
+    let stakes = network::nobody_keeps_it(&[(0, 50.0), (0, 10.0), (1, 25.0), (1, 15.0)]);
+    let total: f64 = stakes.iter().sum();
+    assert!((total - 100.0).abs() < 1e-6, "no stake is lost: {total}");
+    assert!(stakes.iter().all(|s| *s <= 30.0 + 1e-6), "{stakes:?}");
+    assert!(stakes[0] + stakes[1] <= 60.0 + 1e-6);
+    let alone = network::nobody_keeps_it(&[(0, 50.0), (1, 30.0), (1, 20.0)]);
+    assert!((alone[0] - 40.0).abs() < 1e-6, "its country must hold two fifths: {alone:?}");
+    assert!((alone[1] + alone[2] - 60.0).abs() < 1e-6);
 }
 
 /// Everything the world has done on its chain can be checked by somebody holding nothing but

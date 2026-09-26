@@ -567,10 +567,17 @@ fn ledger(world: &Nations, at: usize, network: &Network, checked: Option<&Checke
         if let Some(biggest) = members.iter().max_by_key(|v| (v.power, std::cmp::Reverse(v.address)))
             && 3 * biggest.power as u128 >= total
         {
+            // Held to three tenths wherever its country's share allows: over it, it is the only
+            // house its country has to hold that share with.
+            let alone = network.town_of(&biggest.address).is_some_and(|town| {
+                let country = world.towns[town].country;
+                network.houses().filter(|t| world.towns[*t].country == country).count() == 1
+            });
             out.push(format!(
-                "  one house, {}'s, holds {} of the stake by itself — enough to stop the chain alone by staying away",
+                "  one house, {}'s, holds {} of the stake by itself — enough to stop the chain alone by staying away{}",
                 holder(world, network, &biggest.address),
-                percent(biggest.power as f64 / total.max(1) as f64)
+                percent(biggest.power as f64 / total.max(1) as f64),
+                if alone { ", being the only house its country has to hold its share" } else { "" }
             ));
         }
     }

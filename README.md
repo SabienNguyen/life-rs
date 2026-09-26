@@ -216,7 +216,7 @@ tokens against attested reserves
 </td></tr>
 </table>
 
-**847 tests.** Most of them are about a claim rather than a function.
+**849 tests.** Most of them are about a claim rather than a function.
 
 ---
 
@@ -453,8 +453,9 @@ Nothing below is scheduled:
   four of them can check a ledger fast enough, and checking costs a third of what their
   distrust does, they found one none of them keeps. Every state's market house pays for its
   own trade on it; a stable token is minted only against a reserve somebody else vouches for;
-  coin trades against it in swaps both sides sign; and no country holds the two thirds of the
-  stake that would let it finalise a block alone. Paying abroad falls from nine per cent of a
+  coin trades against it in swaps both sides sign; no country holds the two thirds of the
+  stake that would let it finalise a block alone, and no house the third that would let it stop
+  one — unless it is the only house its country has. Paying abroad falls from nine per cent of a
   payment to under two, trade across borders rises by a fifth to a quarter, and — counting what
   buying from more than one country is worth — a head lives on up to two per cent more, and in
   the smallest country three to nine.
@@ -462,15 +463,15 @@ Nothing below is scheduled:
 ```
 ── what happened ──
   year  418  6 houses in 2 countries found the Wickport Ledger: Wickport, Stanwick, Haltor, Marlscar, Twyfell, Wenmouth
-  year  567  Wickport's house signs block 1790 of the Wickport Ledger twice — its second clerk, not having seen the block, signs for none — and Stanwick shows the chain both: 172 coin of its stake is burned and that key never validates again
+  year  567  Wickport's house signs block 1790 of the Wickport Ledger twice — its second clerk, not having seen the block, signs for none — and Stanwick shows the chain both: 150 coin of its stake is burned and that key never validates again
   year  567  Wickport takes a seat among the Wickport Ledger's validators again, under a key it keeps for staking
 
 ── the Wickport Ledger ──
   founded in year 418 by Wickport, Stanwick, Haltor, Marlscar, Twyfell, Wenmouth
-  height 2196 · 7 validators · 56 rounds lost · 0 stalls · 0 transactions refused
-  WENT: 660,056,056,304 in circulation, 660,056,056,304 held in reserve and attested by Stanwick — backed 1.0000
-  paying abroad costs 1.7% of the payment now, against 9.0% through houses alone
-  replayed from genesis: 2197 blocks, every signature and root checked, in 4.0s — it holds
+  height 2196 · 8 validators · 25 rounds lost · 0 stalls · 0 transactions refused
+  WENT: 649,203,382,840 in circulation, 649,203,382,840 held in reserve and attested by Stanwick — backed 1.0000
+  paying abroad costs 1.8% of the payment now, against 9.0% through houses alone
+  replayed from genesis: 2197 blocks, every signature and root checked, in 4.1s — it holds
   followed as a light client, by headers, commits and validator sets alone: to height 2196 in 0.4s, never a transaction
   joined late, as a new node would: 2,185 headers followed from the genesis, the books as they stood at #2184 — 25 accounts and 1 token — checked against its state root, and the 12 blocks since replayed, in 0.4s; it arrives at the ledger the chain holds, to the byte
 ```
@@ -484,26 +485,26 @@ from anybody's copy of its books, believed only as far as they hash to a header'
 balance or a payment can be proved to somebody holding nothing but a header. A validator caught
 signing two blocks at one height, in one round or two, loses a twentieth of its stake and that
 key's seat for good, comes back if at all under a key it keeps for staking, and the others bond
-what keeps every country within its three fifths of the stake: short of the two thirds that
-would finalise a block, though not of the third that could stop one, and the report says who
-could. Two final blocks at one height would take more than a third of the stake signing both,
+what keeps every country within three fifths of the stake and every house within three tenths:
+no country can finalise a block alone, and no house can stop the chain alone — though a country
+could, by staying away, and the report says who could. Two final blocks at one height would take more than a third of the stake signing both,
 and a light client shown both names every one of them. With `--html` the page shows all of it,
 checks the latest block and the whole of its books in your own browser with the browser's own
 SHA-256 and Ed25519, and follows the last forty-eight by their headers alone, as a light client
 would. A world of one country never builds one — it has a house everybody can pay through.
 
 A chain is also a file. `--export-chain wickport.chain` writes a world's chain down — its
-genesis and every block, 22 MB for 0x11's six centuries — and `--verify-chain wickport.chain`
+genesis and every block, 23 MB for 0x11's six centuries — and `--verify-chain wickport.chain`
 checks one holding nothing else: read strictly, then every block replayed from its genesis.
 Change one bit of it anywhere and it does not check.
 
 ```
-chain file wickport.chain: 22.1 MB
-  the Wickport Ledger: genesis d78fb6b57ee0…, 2197 blocks, the last at height 2196, year 600 month 12
+chain file wickport.chain: 23.4 MB
+  the Wickport Ledger: genesis 3e200ddf0569…, 2197 blocks, the last at height 2196, year 600 month 12
   replayed from its genesis: every signature and root checked, in 4.0s — it holds
-  coin: 23,494 in existence (18,917 at genesis, 4,749 issued since, 172 burned); 7 validators, 25 accounts
-  WENT: 660,056,056,304 in circulation, 660,056,056,304 held in reserve as its attestor last said
-  it carries 49,008 token payments, 14,148 mints, 12,364 swaps of coin for tokens, 5,885 redemptions, 4,328 attestations, 31 coin transfers, 4 stakes bonded, 3 stakes unbonded, 1 piece of evidence, 1 token issued
+  coin: 23,517 in existence (18,917 at genesis, 4,749 issued since, 150 burned); 8 validators, 25 accounts
+  WENT: 649,203,382,840 in circulation, 649,203,382,840 held in reserve as its attestor last said
+  it carries 48,816 token payments, 14,014 mints, 13,472 swaps of coin for tokens, 7,618 redemptions, 4,371 attestations, 47 coin transfers, 5 stakes bonded, 2 stakes unbonded, 1 piece of evidence, 1 token issued
 ```
 
 ---

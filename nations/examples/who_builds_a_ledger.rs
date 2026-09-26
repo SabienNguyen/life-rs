@@ -4,9 +4,10 @@
 //! none of whom the rest would trust with the books, find that checking one costs less than
 //! the distrust it saves. So whether and when it happens is a measurement, and this is the
 //! instrument: one line per world on when money came, when growth did, when a chain was
-//! founded and by whom, what paying abroad cost with it and without it, and how many of its
-//! validators were caught signing twice — and then the chain replayed from its genesis, to say
-//! that what was kept can still be checked.
+//! founded and by whom, the most of its stake one country's houses and one house hold — at the
+//! end, and at any height from the second — what paying abroad cost with it and without it, and
+//! how many of its validators were caught signing twice — and then the chain replayed from its
+//! genesis, to say that what was kept can still be checked.
 //!
 //! `SEEDS` is a comma-separated list of hex seeds, `YEARS` how long to run each.
 
@@ -28,9 +29,9 @@ fn main() {
         .unwrap_or(700);
 
     println!(
-        "{:>9} {:>5} {:>4} {:>6} {:>5} {:>7} {:>13} {:>5} {:>6} {:>6} {:>7} {:>7} {:>6} {:>7} {:>6} {:>6}  replayed",
+        "{:>9} {:>5} {:>4} {:>6} {:>5} {:>7} {:>13} {:>5} {:>6} {:>6} {:>6} {:>7} {:>7} {:>7} {:>6} {:>7} {:>6} {:>6}  replayed",
         "seed", "towns", "ctry", "money", "trap", "founded", "founders", "vals", "height",
-        "stake", "houses", "now", "chain", "refused", "stalls", "jailed"
+        "stake", "house", "ever", "houses", "now", "chain", "refused", "stalls", "jailed"
     );
     for seed in seeds {
         let started = Instant::now();
@@ -67,6 +68,27 @@ fn main() {
                 let stake = nations::network::largest_country_share(&world, 0)
                     .map(|(_, share)| format!("{:.0}%", 100.0 * share))
                     .unwrap_or_default();
+                // And of any one house; then the most of either at any height from the second,
+                // the first whose signers a founding's mending can have changed.
+                let held = |set: &chain::ValidatorSet| -> (f64, f64) {
+                    let total = set.total_power().max(1) as f64;
+                    let mut countries = vec![0u64; world.countries.len()];
+                    let mut houses = std::collections::BTreeMap::new();
+                    for v in &set.members {
+                        if let Some(town) = network.town_of(&v.address) {
+                            countries[world.towns[town].country] += v.power;
+                            *houses.entry(town).or_insert(0u64) += v.power;
+                        }
+                    }
+                    let most = |n: Option<u64>| n.unwrap_or(0) as f64 / total;
+                    (most(countries.into_iter().max()), most(houses.into_values().max()))
+                };
+                let house = format!("{:.0}%", 100.0 * held(&network.chain.rotation).1);
+                let ever = (2..=network.chain.height())
+                    .filter_map(|h| network.chain.light_block(h))
+                    .map(|b| held(&b.validators))
+                    .fold((0.0f64, 0.0f64), |a, b| (a.0.max(b.0), a.1.max(b.1)));
+                let ever = format!("{:.0}/{:.0}", 100.0 * ever.0, 100.0 * ever.1);
                 let checking = Instant::now();
                 let verdict = match network.chain.verify() {
                     Ok(()) => format!("ok in {:.1}s", checking.elapsed().as_secs_f64()),
@@ -78,7 +100,7 @@ fn main() {
                     .filter(|e| matches!(e, Event::Slashed { .. }))
                     .count();
                 println!(
-                    "{:>9} {:>5} {:>4} {:>6} {:>5} {:>7} {:>13} {:>5} {:>6} {:>6} {:>7} {:>7} {:>5.0}% {:>7} {:>6} {:>6}  {verdict} ({ran:.1}s to run)",
+                    "{:>9} {:>5} {:>4} {:>6} {:>5} {:>7} {:>13} {:>5} {:>6} {:>6} {:>6} {:>7} {:>7} {:>7} {:>5.0}% {:>7} {:>6} {:>6}  {verdict} ({ran:.1}s to run)",
                     format!("{seed:#x}"),
                     world.towns.len(),
                     world.countries.len(),
@@ -89,6 +111,8 @@ fn main() {
                     network.validators().len(),
                     network.chain.height(),
                     stake,
+                    house,
+                    ever,
                     houses,
                     now,
                     100.0 * share,
@@ -98,12 +122,14 @@ fn main() {
                 );
             }
             None => println!(
-                "{:>9} {:>5} {:>4} {:>6} {:>5} {:>7} {:>13} {:>5} {:>6} {:>6} {:>7} {:>7} {:>6} {:>7} {:>6} {:>6}  no chain: {:?} ({ran:.1}s to run)",
+                "{:>9} {:>5} {:>4} {:>6} {:>5} {:>7} {:>13} {:>5} {:>6} {:>6} {:>6} {:>7} {:>7} {:>7} {:>6} {:>7} {:>6} {:>6}  no chain: {:?} ({ran:.1}s to run)",
                 format!("{seed:#x}"),
                 world.towns.len(),
                 world.countries.len(),
                 money,
                 trap,
+                "—",
+                "—",
                 "—",
                 "—",
                 "—",
