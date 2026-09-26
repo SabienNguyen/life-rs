@@ -1,0 +1,10 @@
+[package]
+name = "commerce"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+economy = { path = "../economy" }
+sim-core = { path = "../sim-core" }
+society = { path = "../society" }

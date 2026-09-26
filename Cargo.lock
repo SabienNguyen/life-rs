@@ -42,6 +42,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "commerce"
+version = "0.1.0"
+dependencies = [
+ "economy",
+ "sim-core",
+ "society",
+]
+
+[[package]]
 name = "cosmos"
 version = "0.1.0"
 dependencies = [

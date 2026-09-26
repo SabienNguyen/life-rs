@@ -4,6 +4,7 @@ members = [
     "bonds",
     "chain",
     "climate",
+    "commerce",
     "cosmos",
     "culture",
     "ecology",
